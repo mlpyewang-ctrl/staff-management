@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { createLeaveApplication, getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
+import { createLeaveApplication, getLeaveApplications, getLeaveBalances, updateLeaveApplication } from '@/server/actions/leave'
 
 const statusMap: Record<string, string> = {
   PENDING: '待审批',
@@ -40,6 +40,7 @@ export default function LeavePage() {
   const [balances, setBalances] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
+  const [editingApp, setEditingApp] = useState<any | null>(null)
 
   const fetchApplications = async () => {
     const data = await getLeaveApplications(
@@ -78,6 +79,29 @@ export default function LeavePage() {
     } else if (result.success) {
       setMessage({ type: 'success', text: result.success })
       setShowForm(false)
+      fetchApplications()
+      fetchBalances()
+    }
+
+    setLoading(false)
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingApp) return
+    setLoading(true)
+    setMessage({ type: '', text: '' })
+
+    const formData = new FormData(e.target as HTMLFormElement)
+    formData.set('id', editingApp.id)
+
+    const result = await updateLeaveApplication(formData)
+
+    if (result.error) {
+      setMessage({ type: 'error', text: result.error })
+    } else if (result.success) {
+      setMessage({ type: 'success', text: result.success })
+      setEditingApp(null)
       fetchApplications()
       fetchBalances()
     }
@@ -130,7 +154,7 @@ export default function LeavePage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="type">假期类型</Label>
                   <Select id="type" name="type" required>
@@ -159,6 +183,15 @@ export default function LeavePage() {
                       className="flex-1"
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="destination">前往地点</Label>
+                  <Input
+                    id="destination"
+                    name="destination"
+                    type="text"
+                    placeholder="请输入请假前往地点（可选）"
+                  />
                 </div>
               </div>
               <div className="space-y-2">
@@ -203,8 +236,10 @@ export default function LeavePage() {
                 <TableHead>结束日期</TableHead>
                 <TableHead>天数</TableHead>
                 <TableHead>事由</TableHead>
+                <TableHead>前往地点</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>备注</TableHead>
+                {session?.user?.role === 'EMPLOYEE' && <TableHead>操作</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -235,6 +270,17 @@ export default function LeavePage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{app.remark || '-'}</TableCell>
+                    {session?.user?.role === 'EMPLOYEE' && (
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingApp(app)}
+                        >
+                          编辑
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -242,6 +288,88 @@ export default function LeavePage() {
           </Table>
         </CardContent>
       </Card>
+      
+      {editingApp && (
+        <Card>
+          <CardHeader>
+            <CardTitle>编辑请假申请</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-type">假期类型</Label>
+                  <Select id="edit-type" name="type" defaultValue={editingApp.type} required>
+                    <option value="ANNUAL">年假</option>
+                    <option value="SICK">病假</option>
+                    <option value="PERSONAL">事假</option>
+                    <option value="MARRIAGE">婚假</option>
+                    <option value="MATERNITY">产假</option>
+                    <option value="PATERNITY">陪产假</option>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>请假时间</Label>
+                  <div className="flex space-x-2">
+                    <Input
+                      name="startDate"
+                      type="date"
+                      required
+                      className="flex-1"
+                      defaultValue={new Date(editingApp.startDate).toISOString().slice(0, 10)}
+                    />
+                    <span className="text-gray-400">至</span>
+                    <Input
+                      name="endDate"
+                      type="date"
+                      required
+                      className="flex-1"
+                      defaultValue={new Date(editingApp.endDate).toISOString().slice(0, 10)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-destination">前往地点</Label>
+                  <Input
+                    id="edit-destination"
+                    name="destination"
+                    type="text"
+                    defaultValue={editingApp.destination || ''}
+                    placeholder="请输入请假前往地点（可选）"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-reason">请假事由</Label>
+                <Textarea
+                  id="edit-reason"
+                  name="reason"
+                  rows={4}
+                  defaultValue={editingApp.reason}
+                  required
+                />
+              </div>
+              {message.text && (
+                <div className={`text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                  {message.text}
+                </div>
+              )}
+              <div className="flex space-x-2">
+                <Button type="submit" disabled={loading}>
+                  {loading ? '保存中...' : '保存修改'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingApp(null)}
+                >
+                  取消
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

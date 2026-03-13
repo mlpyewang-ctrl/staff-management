@@ -11,6 +11,7 @@ export async function createOvertimeApplication(formData: FormData) {
       date: formData.get('date'),
       startTime: formData.get('startTime'),
       endTime: formData.get('endTime'),
+      type: formData.get('type'),
       reason: formData.get('reason'),
     })
 
@@ -35,6 +36,7 @@ export async function createOvertimeApplication(formData: FormData) {
         startTime: startDateTime,
         endTime: endDateTime,
         hours,
+        type: validatedData.type,
         reason: validatedData.reason,
         status: 'PENDING',
       },
@@ -47,6 +49,52 @@ export async function createOvertimeApplication(formData: FormData) {
       return { error: error.message }
     }
     return { error: '提交失败，请稍后重试' }
+  }
+}
+
+export async function updateOvertimeApplication(formData: FormData) {
+  try {
+    const id = formData.get('id') as string
+    if (!id) {
+      return { error: '缺少加班申请 ID' }
+    }
+
+    const validatedData = overtimeSchema.parse({
+      date: formData.get('date'),
+      startTime: formData.get('startTime'),
+      endTime: formData.get('endTime'),
+      type: formData.get('type'),
+      reason: formData.get('reason'),
+    })
+
+    // 计算加班时长
+    const startDateTime = new Date(`${validatedData.date} ${validatedData.startTime}`)
+    const endDateTime = new Date(`${validatedData.date} ${validatedData.endTime}`)
+    const hours = calculateHours(startDateTime, endDateTime)
+
+    if (hours <= 0) {
+      return { error: '结束时间必须晚于开始时间' }
+    }
+
+    await prisma.overtimeApplication.update({
+      where: { id },
+      data: {
+        date: startDateTime,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        hours,
+        type: validatedData.type,
+        reason: validatedData.reason,
+      },
+    })
+
+    revalidatePath('/dashboard/overtime')
+    return { success: '加班申请已更新' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '更新失败，请稍后重试' }
   }
 }
 

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { createPerformanceReview, getPerformanceReviews } from '@/server/actions/performance'
+import { createPerformanceReview, getPerformanceReviews, updatePerformanceReview } from '@/server/actions/performance'
 
 export default function PerformancePage() {
   const { data: session } = useSession()
@@ -17,6 +17,7 @@ export default function PerformancePage() {
   const [reviews, setReviews] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
+  const [editingReview, setEditingReview] = useState<any | null>(null)
   const [scores, setScores] = useState({
     quality: 3,
     efficiency: 3,
@@ -66,6 +67,33 @@ export default function PerformancePage() {
     setLoading(false)
   }
 
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingReview) return
+    setLoading(true)
+    setMessage({ type: '', text: '' })
+
+    const formData = new FormData(e.target as HTMLFormElement)
+    formData.set('id', editingReview.id)
+    formData.set('quality', scores.quality.toString())
+    formData.set('efficiency', scores.efficiency.toString())
+    formData.set('attitude', scores.attitude.toString())
+    formData.set('skill', scores.skill.toString())
+    formData.set('teamwork', scores.teamwork.toString())
+
+    const result = await updatePerformanceReview(formData)
+
+    if (result.error) {
+      setMessage({ type: 'error', text: result.error })
+    } else if (result.success) {
+      setMessage({ type: 'success', text: result.success })
+      setEditingReview(null)
+      fetchReviews()
+    }
+
+    setLoading(false)
+  }
+
   const totalScore = (
     scores.quality + scores.efficiency + scores.attitude + scores.skill + scores.teamwork
   ) / 5
@@ -92,11 +120,12 @@ export default function PerformancePage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="period">绩效期间</Label>
+                <Label htmlFor="period">绩效期间（例如 2024-Q1）</Label>
                 <Input
                   id="period"
                   name="period"
-                  type="month"
+                  type="text"
+                  placeholder="例如 2024-Q1 或 2024-01"
                   required
                 />
               </div>
@@ -195,6 +224,15 @@ export default function PerformancePage() {
                   rows={3}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="selfComment">绩效自评</Label>
+                <Textarea
+                  id="selfComment"
+                  name="selfComment"
+                  placeholder="请填写自我评价（可选）..."
+                  rows={3}
+                />
+              </div>
 
               {message.text && (
                 <div className={`text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
@@ -231,6 +269,10 @@ export default function PerformancePage() {
                 <TableHead>团队协作</TableHead>
                 <TableHead>平均分</TableHead>
                 <TableHead>评价</TableHead>
+                <TableHead>自评</TableHead>
+                {(session?.user?.role === 'EMPLOYEE' || session?.user?.role === 'MANAGER') && (
+                  <TableHead>操作</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -258,6 +300,27 @@ export default function PerformancePage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{review.comment || '-'}</TableCell>
+                    <TableCell className="max-w-xs truncate">{review.selfComment || '-'}</TableCell>
+                    {(session?.user?.role === 'EMPLOYEE' || session?.user?.role === 'MANAGER') && (
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingReview(review)
+                            setScores({
+                              quality: review.quality,
+                              efficiency: review.efficiency,
+                              attitude: review.attitude,
+                              skill: review.skill,
+                              teamwork: review.teamwork,
+                            })
+                          }}
+                        >
+                          编辑
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -265,7 +328,124 @@ export default function PerformancePage() {
           </Table>
         </CardContent>
       </Card>
+
+      {editingReview && (
+        <Card>
+          <CardHeader>
+            <CardTitle>编辑绩效记录</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-period">绩效期间（例如 2024-Q1）</Label>
+                <Input
+                  id="edit-period"
+                  name="period"
+                  type="text"
+                  defaultValue={editingReview.period}
+                  required
+                />
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>工作质量 ({scores.quality}分)</Label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={scores.quality}
+                      onChange={(e) => setScores({ ...scores, quality: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>工作效率 ({scores.efficiency}分)</Label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={scores.efficiency}
+                      onChange={(e) => setScores({ ...scores, efficiency: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>工作态度 ({scores.attitude}分)</Label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={scores.attitude}
+                      onChange={(e) => setScores({ ...scores, attitude: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>专业技能 ({scores.skill}分)</Label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={scores.skill}
+                      onChange={(e) => setScores({ ...scores, skill: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>团队协作 ({scores.teamwork}分)</Label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={scores.teamwork}
+                      onChange={(e) => setScores({ ...scores, teamwork: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-comment">评价说明</Label>
+                <Textarea
+                  id="edit-comment"
+                  name="comment"
+                  rows={3}
+                  defaultValue={editingReview.comment || ''}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-selfComment">绩效自评</Label>
+                <Textarea
+                  id="edit-selfComment"
+                  name="selfComment"
+                  rows={3}
+                  defaultValue={editingReview.selfComment || ''}
+                />
+              </div>
+              {message.text && (
+                <div className={`text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                  {message.text}
+                </div>
+              )}
+              <div className="flex space-x-2">
+                <Button type="submit" disabled={loading}>
+                  {loading ? '保存中...' : '保存修改'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingReview(null)}
+                >
+                  取消
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
-

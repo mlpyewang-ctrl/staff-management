@@ -11,6 +11,7 @@ export async function createLeaveApplication(formData: FormData) {
       type: formData.get('type'),
       startDate: formData.get('startDate'),
       endDate: formData.get('endDate'),
+      destination: formData.get('destination'),
       reason: formData.get('reason'),
     })
 
@@ -29,7 +30,9 @@ export async function createLeaveApplication(formData: FormData) {
 
     const startDateTime = new Date(validatedData.startDate)
     const endDateTime = new Date(validatedData.endDate)
-    const days = calculateDays(startDateTime, endDateTime)
+    const rawDays = calculateDays(startDateTime, endDateTime)
+    // 请假天数按 0.5 天为粒度向上取整
+    const days = Math.ceil(rawDays * 2) / 2
 
     // 根据假期类型检查余额
     let currentBalance = 0
@@ -53,6 +56,7 @@ export async function createLeaveApplication(formData: FormData) {
         endDate: endDateTime,
         days,
         reason: validatedData.reason,
+        destination: validatedData.destination,
         status: 'PENDING',
       },
     })
@@ -64,6 +68,55 @@ export async function createLeaveApplication(formData: FormData) {
       return { error: error.message }
     }
     return { error: '提交失败，请稍后重试' }
+  }
+}
+
+export async function updateLeaveApplication(formData: FormData) {
+  try {
+    const id = formData.get('id') as string
+    if (!id) {
+      return { error: '缺少请假申请 ID' }
+    }
+
+    const validatedData = leaveSchema.parse({
+      type: formData.get('type'),
+      startDate: formData.get('startDate'),
+      endDate: formData.get('endDate'),
+      destination: formData.get('destination'),
+      reason: formData.get('reason'),
+    })
+
+    const application = await prisma.leaveApplication.findUnique({
+      where: { id },
+    })
+    if (!application) {
+      return { error: '请假申请不存在' }
+    }
+
+    const startDateTime = new Date(validatedData.startDate)
+    const endDateTime = new Date(validatedData.endDate)
+    const rawDays = calculateDays(startDateTime, endDateTime)
+    const days = Math.ceil(rawDays * 2) / 2
+
+    await prisma.leaveApplication.update({
+      where: { id },
+      data: {
+        type: validatedData.type,
+        startDate: startDateTime,
+        endDate: endDateTime,
+        days,
+        reason: validatedData.reason,
+        destination: validatedData.destination,
+      },
+    })
+
+    revalidatePath('/dashboard/leave')
+    return { success: '请假申请已更新' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '更新失败，请稍后重试' }
   }
 }
 

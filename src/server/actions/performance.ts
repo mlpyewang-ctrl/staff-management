@@ -14,6 +14,7 @@ export async function createPerformanceReview(formData: FormData) {
       skill: parseInt(formData.get('skill') as string),
       teamwork: parseInt(formData.get('teamwork') as string),
       comment: formData.get('comment'),
+      selfComment: formData.get('selfComment'),
     })
 
     const userId = formData.get('userId') as string
@@ -55,6 +56,7 @@ export async function createPerformanceReview(formData: FormData) {
         teamwork: validatedData.teamwork,
         totalScore,
         comment: validatedData.comment,
+        selfComment: validatedData.selfComment,
         reviewerId: reviewerId || null,
       },
     })
@@ -66,6 +68,57 @@ export async function createPerformanceReview(formData: FormData) {
       return { error: error.message }
     }
     return { error: '提交失败，请稍后重试' }
+  }
+}
+
+export async function updatePerformanceReview(formData: FormData) {
+  try {
+    const id = formData.get('id') as string
+    if (!id) {
+      return { error: '缺少绩效记录 ID' }
+    }
+
+    const validatedData = performanceSchema.parse({
+      period: formData.get('period'),
+      quality: parseInt(formData.get('quality') as string),
+      efficiency: parseInt(formData.get('efficiency') as string),
+      attitude: parseInt(formData.get('attitude') as string),
+      skill: parseInt(formData.get('skill') as string),
+      teamwork: parseInt(formData.get('teamwork') as string),
+      comment: formData.get('comment'),
+      selfComment: formData.get('selfComment'),
+    })
+
+    const totalScore = (
+      validatedData.quality +
+      validatedData.efficiency +
+      validatedData.attitude +
+      validatedData.skill +
+      validatedData.teamwork
+    ) / 5
+
+    await prisma.performanceReview.update({
+      where: { id },
+      data: {
+        period: validatedData.period,
+        quality: validatedData.quality,
+        efficiency: validatedData.efficiency,
+        attitude: validatedData.attitude,
+        skill: validatedData.skill,
+        teamwork: validatedData.teamwork,
+        totalScore,
+        comment: validatedData.comment,
+        selfComment: validatedData.selfComment,
+      },
+    })
+
+    revalidatePath('/dashboard/performance')
+    return { success: '绩效已更新' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '更新失败，请稍后重试' }
   }
 }
 

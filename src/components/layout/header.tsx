@@ -11,6 +11,7 @@ const navigation = [
   { name: '请假管理', href: '/dashboard/leave' },
   { name: '绩效管理', href: '/dashboard/performance' },
   { name: '审批中心', href: '/dashboard/approvals' },
+  { name: '个人信息', href: '/dashboard/profile' },
 ]
 
 export function Header() {

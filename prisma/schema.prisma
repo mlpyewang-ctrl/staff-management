@@ -16,6 +16,14 @@ model User {
   name      String
   password  String
   role      String   @default("EMPLOYEE") // ADMIN, MANAGER, EMPLOYEE
+  // 个人信息扩展
+  idCard     String?
+  phone      String?
+  salary     Float?
+  level      String?
+  departmentId String?
+  startDate  DateTime?
+
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id])
   createdAt DateTime @default(now())
@@ -27,6 +35,8 @@ model User {
   reviewedPerformance  PerformanceReview[] @relation("Reviewee")
   approvals            Approval[]
   leaveBalance         LeaveBalance?
+
+  department Department? @relation(fields: [departmentId], references: [id])
   
   @@map("users")
 }
@@ -42,6 +52,7 @@ model Company {
   updatedAt DateTime @updatedAt
   
   users     User[]
+  departments Department[]
   
   @@map("companies")
 }
@@ -54,6 +65,7 @@ model OvertimeApplication {
   startTime  DateTime // 开始时间
   endTime    DateTime // 结束时间
   hours      Float    // 加班时长 (小时)
+  type       String   @default("WORKDAY") // WORKDAY, WEEKEND, HOLIDAY
   reason     String   // 加班事由
   status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
   approverId String?
@@ -76,6 +88,7 @@ model LeaveApplication {
   endDate    DateTime // 结束日期
   days       Float    // 请假天数
   reason     String   // 请假事由
+  destination String? // 请假前往地点
   status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
   approverId String?
   approvedAt DateTime?
@@ -114,12 +127,41 @@ model PerformanceReview {
   teamwork   Int      // 团队协作 (1-5 分)
   totalScore Float    // 总分
   comment    String?  // 评价说明
+  selfComment String? // 自评
   reviewerId String?
   reviewer   User?    @relation("Reviewer", fields: [reviewerId], references: [id])
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
   @@map("performance_reviews")
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  approvalFlows ApprovalFlow[]
+
+  @@map("departments")
+}
+
+model ApprovalFlow {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  name         String
+  config       String     // 审批步骤配置（JSON 字符串）
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("approval_flows")
 }
 
 model Approval {

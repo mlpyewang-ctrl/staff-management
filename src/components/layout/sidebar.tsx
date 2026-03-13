@@ -9,6 +9,9 @@ const navigation = [
   { name: '请假管理', href: '/dashboard/leave', icon: '📅' },
   { name: '绩效管理', href: '/dashboard/performance', icon: '📈' },
   { name: '审批中心', href: '/dashboard/approvals', icon: '✅' },
+  { name: '部门管理', href: '/dashboard/departments', icon: '🏢', adminOnly: true },
+  { name: '审批流程', href: '/dashboard/approval-flows', icon: '🔁', adminOnly: true },
+  { name: '个人信息', href: '/dashboard/profile', icon: '👤' },
 ]
 
 export function Sidebar() {

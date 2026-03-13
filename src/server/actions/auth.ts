@@ -28,7 +28,7 @@ export async function registerUser(formData: FormData) {
     const hashedPassword = await bcrypt.hash(validatedData.password, 10)
 
     // 创建用户
-    await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         email: validatedData.email,
         password: hashedPassword,
@@ -38,11 +38,11 @@ export async function registerUser(formData: FormData) {
       },
     })
 
-    // 如果是员工，创建假期余额
+    // 如果是员工，创建当年的默认假期余额
     if (validatedData.role === 'EMPLOYEE') {
       await prisma.leaveBalance.create({
         data: {
-          userId: '', // 会在创建后更新
+          userId: user.id,
           year: new Date().getFullYear(),
         },
       })
