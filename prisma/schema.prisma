@@ -1,0 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("EMPLOYEE") // ADMIN, MANAGER, EMPLOYEE
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  overtimeApplications OvertimeApplication[]
+  leaveApplications    LeaveApplication[]
+  performanceReviews   PerformanceReview[] @relation("Reviewer")
+  reviewedPerformance  PerformanceReview[] @relation("Reviewee")
+  approvals            Approval[]
+  leaveBalance         LeaveBalance?
+  
+  @@map("users")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  address   String?
+  contact   String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  users     User[]
+  
+  @@map("companies")
+}
+
+model OvertimeApplication {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date       DateTime // 加班日期
+  startTime  DateTime // 开始时间
+  endTime    DateTime // 结束时间
+  hours      Float    // 加班时长 (小时)
+  reason     String   // 加班事由
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approverId String?
+  approvedAt DateTime?
+  remark     String?  // 审批意见
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  approvals  Approval[]
+  
+  @@map("overtime_applications")
+}
+
+model LeaveApplication {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String   // ANNUAL, SICK, PERSONAL, MARRIAGE, MATERNITY, PATERNITY
+  startDate  DateTime // 开始日期
+  endDate    DateTime // 结束日期
+  days       Float    // 请假天数
+  reason     String   // 请假事由
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approverId String?
+  approvedAt DateTime?
+  remark     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  approvals  Approval[]
+  
+  @@map("leave_applications")
+}
+
+model LeaveBalance {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year      Int      // 年份
+  annual    Float    @default(5)   // 年假余额
+  sick      Float    @default(10)  // 病假余额
+  personal  Float    @default(5)   // 事假余额
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("leave_balances")
+}
+
+model PerformanceReview {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation("Reviewee", fields: [userId], references: [id], onDelete: Cascade)
+  period     String   // 绩效期间 (如：2024-01)
+  quality    Int      // 工作质量 (1-5 分)
+  efficiency Int      // 工作效率 (1-5 分)
+  attitude   Int      // 工作态度 (1-5 分)
+  skill      Int      // 专业技能 (1-5 分)
+  teamwork   Int      // 团队协作 (1-5 分)
+  totalScore Float    // 总分
+  comment    String?  // 评价说明
+  reviewerId String?
+  reviewer   User?    @relation("Reviewer", fields: [reviewerId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@map("performance_reviews")
+}
+
+model Approval {
+  id              String   @id @default(cuid())
+  applicationId   String
+  applicationType String   // OVERTIME, LEAVE
+  applicantId     String   // 申请人 ID
+  approverId      String   // 审批人 ID
+  approver        User     @relation(fields: [approverId], references: [id])
+  status          String   // PENDING, APPROVED, REJECTED
+  remark          String?
+  createdAt       DateTime @default(now())
+  
+  overtimeApplication OvertimeApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  leaveApplication    LeaveApplication?    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  @@map("approvals")
+}
