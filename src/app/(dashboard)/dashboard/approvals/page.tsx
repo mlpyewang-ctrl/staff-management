@@ -6,7 +6,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { getPendingApprovals, approveApplication } from '@/server/actions/approval'
 
 const statusVariant: Record<string, 'warning' | 'success' | 'danger'> = {
@@ -289,3 +288,4 @@ function Label({ children, className, ...props }: any) {
     </label>
   )
 }
+
