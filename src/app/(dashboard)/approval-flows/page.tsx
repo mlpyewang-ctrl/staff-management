@@ -24,6 +24,28 @@ export default function ApprovalFlowsPage() {
       const [depts, fs] = await Promise.all([getDepartments(), getApprovalFlows()])
       setDepartments(depts)
       setFlows(fs)
+
+      // #region agent log
+      fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '21ada3',
+        },
+        body: JSON.stringify({
+          sessionId: '21ada3',
+          runId: 'nav-debug',
+          hypothesisId: 'H-pages',
+          location: 'src/app/(dashboard)/approval-flows/page.tsx:26',
+          message: 'approval flows page loaded',
+          data: {
+            deptCount: depts.length,
+            flowCount: fs.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
     }
     load()
   }, [])

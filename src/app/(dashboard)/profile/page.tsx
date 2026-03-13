@@ -25,6 +25,28 @@ export default function ProfilePage() {
       ])
       setProfile(p)
       setDepartments(depts)
+
+      // #region agent log
+      fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '21ada3',
+        },
+        body: JSON.stringify({
+          sessionId: '21ada3',
+          runId: 'nav-debug',
+          hypothesisId: 'H-pages',
+          location: 'src/app/(dashboard)/profile/page.tsx:27',
+          message: 'profile page loaded',
+          data: {
+            hasProfile: !!p,
+            deptCount: depts.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
     }
     load()
   }, [session])

@@ -37,6 +37,28 @@ export default function OvertimePage() {
       session?.user?.role
     )
     setApplications(data)
+
+    // #region agent log
+    fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '21ada3',
+      },
+      body: JSON.stringify({
+        sessionId: '21ada3',
+        runId: 'nav-debug',
+        hypothesisId: 'H-buttons',
+        location: 'src/app/(dashboard)/dashboard/overtime/page.tsx:39',
+        message: 'overtime page loaded',
+        data: {
+          role: session?.user?.role ?? null,
+          appCount: data.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion agent log
   }
 
   useEffect(() => {

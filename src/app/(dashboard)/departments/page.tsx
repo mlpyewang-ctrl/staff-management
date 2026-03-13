@@ -20,6 +20,27 @@ export default function DepartmentsPage() {
     const load = async () => {
       const depts = await getDepartments()
       setDepartments(depts)
+
+      // #region agent log
+      fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '21ada3',
+        },
+        body: JSON.stringify({
+          sessionId: '21ada3',
+          runId: 'nav-debug',
+          hypothesisId: 'H-pages',
+          location: 'src/app/(dashboard)/departments/page.tsx:24',
+          message: 'departments page loaded',
+          data: {
+            deptCount: depts.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
     }
     load()
   }, [])

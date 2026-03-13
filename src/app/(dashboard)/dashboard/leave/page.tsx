@@ -61,6 +61,27 @@ export default function LeavePage() {
     if (session) {
       fetchApplications()
       fetchBalances()
+
+      // #region agent log
+      fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '21ada3',
+        },
+        body: JSON.stringify({
+          sessionId: '21ada3',
+          runId: 'nav-debug',
+          hypothesisId: 'H-buttons',
+          location: 'src/app/(dashboard)/dashboard/leave/page.tsx:63',
+          message: 'leave page loaded',
+          data: {
+            role: session.user?.role ?? null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
     }
   }, [session])
 

@@ -11,6 +11,30 @@ export async function middleware(req: any) {
   const isDashboardPage = nextUrl.pathname.startsWith('/dashboard')
   const isApiAuth = nextUrl.pathname.startsWith('/api/auth')
 
+  // #region agent log
+  fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': '21ada3',
+    },
+    body: JSON.stringify({
+      sessionId: '21ada3',
+      runId: 'nav-debug',
+      hypothesisId: 'H-routing',
+      location: 'src/middleware.ts:15',
+      message: 'middleware route check',
+      data: {
+        pathname: nextUrl.pathname,
+        isAuthPage,
+        isDashboardPage,
+        isApiAuth,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {})
+  // #endregion agent log
+
   // API 路由不需要中间件处理
   if (isApiAuth) {
     return NextResponse.next()
