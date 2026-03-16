@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { getDepartments, createDepartment, updateDepartment } from '@/server/actions/department'
 
-export default function DepartmentsPage() {
+export default function DepartmentsDashboardPage() {
   const { data: session } = useSession()
   const [departments, setDepartments] = useState<any[]>([])
   const [editingDept, setEditingDept] = useState<any | null>(null)

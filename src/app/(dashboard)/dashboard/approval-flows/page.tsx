@@ -6,12 +6,11 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { getDepartments } from '@/server/actions/department'
 import { getApprovalFlows, saveApprovalFlow } from '@/server/actions/approvalFlow'
 
-export default function ApprovalFlowsPage() {
+export default function ApprovalFlowsDashboardPage() {
   const { data: session } = useSession()
   const [departments, setDepartments] = useState<any[]>([])
   const [flows, setFlows] = useState<any[]>([])

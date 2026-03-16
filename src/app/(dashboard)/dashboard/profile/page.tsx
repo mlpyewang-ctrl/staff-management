@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { getUserProfile, updateUserProfile } from '@/server/actions/user'
 import { getDepartments } from '@/server/actions/department'
 
-export default function ProfilePage() {
+export default function ProfileDashboardPage() {
   const { data: session } = useSession()
   const [profile, setProfile] = useState<any | null>(null)
   const [departments, setDepartments] = useState<any[]>([])
