@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
+import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,11 +26,12 @@ const statusVariant: Record<string, 'warning' | 'success' | 'danger'> = {
 
 export default function OvertimePage() {
   const { data: session } = useSession()
-  const [showForm, setShowForm] = useState(false)
   const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
-  const [editingApp, setEditingApp] = useState<any | null>(null)
+
+  const canCreate = !!session?.user?.id
+  const canEdit = !!session?.user?.id
 
   const fetchApplications = async () => {
     const data = await getOvertimeApplications(
@@ -64,51 +66,31 @@ export default function OvertimePage() {
   useEffect(() => {
     if (session) {
       fetchApplications()
+
+      // #region agent log
+      fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '00641c',
+        },
+        body: JSON.stringify({
+          sessionId: '00641c',
+          runId: 'pre-fix',
+          hypothesisId: 'B2',
+          location: 'src/app/(dashboard)/dashboard/overtime/page.tsx:useEffect',
+          message: 'Overtime page session ready',
+          data: {
+            role: session?.user?.role ?? null,
+            canCreate,
+            canEdit,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
     }
   }, [session])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setMessage({ type: '', text: '' })
-
-    const formData = new FormData(e.target as HTMLFormElement)
-    formData.set('userId', session?.user?.id || '')
-
-    const result = await createOvertimeApplication(formData)
-
-    if (result.error) {
-      setMessage({ type: 'error', text: result.error })
-    } else if (result.success) {
-      setMessage({ type: 'success', text: result.success })
-      setShowForm(false)
-      fetchApplications()
-    }
-
-    setLoading(false)
-  }
-
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingApp) return
-    setLoading(true)
-    setMessage({ type: '', text: '' })
-
-    const formData = new FormData(e.target as HTMLFormElement)
-    formData.set('id', editingApp.id)
-
-    const result = await updateOvertimeApplication(formData)
-
-    if (result.error) {
-      setMessage({ type: 'error', text: result.error })
-    } else if (result.success) {
-      setMessage({ type: 'success', text: result.success })
-      setEditingApp(null)
-      fetchApplications()
-    }
-
-    setLoading(false)
-  }
 
   return (
     <div className="space-y-6">
@@ -117,90 +99,12 @@ export default function OvertimePage() {
           <h1 className="text-2xl font-bold text-gray-900">加班申请管理</h1>
           <p className="text-gray-600 mt-1">提交和查看加班申请记录</p>
         </div>
-        {session?.user?.role === 'EMPLOYEE' && (
-          <Button onClick={() => setShowForm(!showForm)}>
-            {showForm ? '返回列表' : '提交申请'}
+        {canCreate && (
+          <Button asChild>
+            <Link href="/dashboard/overtime/new">新增</Link>
           </Button>
         )}
       </div>
-
-      {showForm && session?.user?.role === 'EMPLOYEE' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>提交加班申请</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date">加班日期</Label>
-                  <Input
-                    id="date"
-                    name="date"
-                    type="date"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>时间范围</Label>
-                  <div className="flex space-x-2">
-                    <Input
-                      name="startTime"
-                      type="time"
-                      required
-                      className="flex-1"
-                    />
-                    <span className="text-gray-400">至</span>
-                    <Input
-                      name="endTime"
-                      type="time"
-                      required
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="type">加班类型</Label>
-                  <select
-                    id="type"
-                    name="type"
-                    className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                    defaultValue="WORKDAY"
-                    required
-                  >
-                    <option value="WORKDAY">工作日</option>
-                    <option value="WEEKEND">周末</option>
-                    <option value="HOLIDAY">节假日</option>
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reason">加班事由</Label>
-                <Textarea
-                  id="reason"
-                  name="reason"
-                  placeholder="请详细描述加班工作内容..."
-                  rows={4}
-                  required
-                />
-              </div>
-              {message.text && (
-                <div className={`text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
-                  {message.text}
-                </div>
-              )}
-              <div className="flex space-x-2">
-                <Button type="submit" disabled={loading}>
-                  {loading ? '提交中...' : '提交申请'}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
-                  取消
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>
@@ -218,7 +122,7 @@ export default function OvertimePage() {
               <TableHead>类型</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>备注</TableHead>
-              {session?.user?.role === 'EMPLOYEE' && <TableHead>操作</TableHead>}
+              {canEdit && <TableHead>操作</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -250,14 +154,10 @@ export default function OvertimePage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{app.remark || '-'}</TableCell>
-                    {session?.user?.role === 'EMPLOYEE' && (
+                    {canEdit && (
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingApp(app)}
-                        >
-                          编辑
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/dashboard/overtime/${app.id}`}>编辑</Link>
                         </Button>
                       </TableCell>
                     )}
@@ -268,91 +168,6 @@ export default function OvertimePage() {
           </Table>
         </CardContent>
       </Card>
-
-      {editingApp && (
-        <Card>
-          <CardHeader>
-            <CardTitle>编辑加班申请</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-date">加班日期</Label>
-                  <Input
-                    id="edit-date"
-                    name="date"
-                    type="date"
-                    defaultValue={new Date(editingApp.date).toISOString().slice(0, 10)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>时间范围</Label>
-                  <div className="flex space-x-2">
-                    <Input
-                      name="startTime"
-                      type="time"
-                      required
-                      className="flex-1"
-                      defaultValue={new Date(editingApp.startTime).toTimeString().slice(0, 5)}
-                    />
-                    <span className="text-gray-400">至</span>
-                    <Input
-                      name="endTime"
-                      type="time"
-                      required
-                      className="flex-1"
-                      defaultValue={new Date(editingApp.endTime).toTimeString().slice(0, 5)}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-type">加班类型</Label>
-                  <select
-                    id="edit-type"
-                    name="type"
-                    className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                    defaultValue={editingApp.type || 'WORKDAY'}
-                    required
-                  >
-                    <option value="WORKDAY">工作日</option>
-                    <option value="WEEKEND">周末</option>
-                    <option value="HOLIDAY">节假日</option>
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-reason">加班事由</Label>
-                <Textarea
-                  id="edit-reason"
-                  name="reason"
-                  rows={4}
-                  defaultValue={editingApp.reason}
-                  required
-                />
-              </div>
-              {message.text && (
-                <div className={`text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
-                  {message.text}
-                </div>
-              )}
-              <div className="flex space-x-2">
-                <Button type="submit" disabled={loading}>
-                  {loading ? '保存中...' : '保存修改'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditingApp(null)}
-                >
-                  取消
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

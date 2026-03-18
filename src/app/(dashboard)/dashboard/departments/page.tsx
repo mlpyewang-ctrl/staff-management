@@ -24,6 +24,28 @@ export default function DepartmentsDashboardPage() {
     load()
   }, [])
 
+  // #region agent log
+  fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': '00641c',
+    },
+    body: JSON.stringify({
+      sessionId: '00641c',
+      runId: 'pre-fix',
+      hypothesisId: 'B5',
+      location: 'src/app/(dashboard)/dashboard/departments/page.tsx:render',
+      message: 'Departments page render',
+      data: {
+        role: session?.user?.role ?? null,
+        isAdmin: session?.user?.role === 'ADMIN',
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {})
+  // #endregion
+
   if (session?.user?.role !== 'ADMIN') {
     return (
       <div className="space-y-4">

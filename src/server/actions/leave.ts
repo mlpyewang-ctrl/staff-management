@@ -20,7 +20,31 @@ export async function createLeaveApplication(formData: FormData) {
       return { error: '用户未登录' }
     }
 
-    // 检查假期余额
+    const action = (formData.get('action') as string) === 'submit' ? 'submit' : 'save'
+
+    // #region agent log
+    fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '00641c',
+      },
+      body: JSON.stringify({
+        sessionId: '00641c',
+        runId: 'pre-fix',
+        hypothesisId: 'S2',
+        location: 'src/server/actions/leave.ts:createLeaveApplication',
+        message: 'Create leave',
+        data: {
+          action,
+          userIdPresent: !!userId,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion
+
+    // 检查假期余额（仅提交时强校验）
     const balance = await prisma.leaveBalance.findFirst({
       where: {
         userId,
@@ -44,11 +68,17 @@ export async function createLeaveApplication(formData: FormData) {
       currentBalance = balance.personal
     }
 
-    if (days > currentBalance && validatedData.type !== 'MARRIAGE' && validatedData.type !== 'MATERNITY' && validatedData.type !== 'PATERNITY') {
+    if (
+      action === 'submit' &&
+      days > currentBalance &&
+      validatedData.type !== 'MARRIAGE' &&
+      validatedData.type !== 'MATERNITY' &&
+      validatedData.type !== 'PATERNITY'
+    ) {
       return { error: `假期余额不足，剩余${currentBalance}天` }
     }
 
-    await prisma.leaveApplication.create({
+    const created = await prisma.leaveApplication.create({
       data: {
         userId,
         type: validatedData.type,
@@ -57,17 +87,43 @@ export async function createLeaveApplication(formData: FormData) {
         days,
         reason: validatedData.reason,
         destination: validatedData.destination,
-        status: 'PENDING',
+        status: action === 'submit' ? 'PENDING' : 'DRAFT',
       },
     })
 
     revalidatePath('/dashboard/leave')
-    return { success: '请假申请已提交' }
+    return {
+      success: action === 'submit' ? '请假申请已提交' : '请假草稿已保存',
+      id: created.id,
+      status: created.status,
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
     }
     return { error: '提交失败，请稍后重试' }
+  }
+}
+
+export async function getLeaveApplication(id: string) {
+  try {
+    const app = await prisma.leaveApplication.findUnique({ where: { id } })
+    return app
+  } catch (error) {
+    console.error('获取请假申请详情失败:', error)
+    return null
+  }
+}
+
+export async function deleteLeaveApplication(id: string) {
+  try {
+    if (!id) return { error: '缺少请假申请 ID' }
+    await prisma.leaveApplication.delete({ where: { id } })
+    revalidatePath('/dashboard/leave')
+    return { success: '请假申请已删除' }
+  } catch (error) {
+    if (error instanceof Error) return { error: error.message }
+    return { error: '删除失败，请稍后重试' }
   }
 }
 
@@ -107,11 +163,12 @@ export async function updateLeaveApplication(formData: FormData) {
         days,
         reason: validatedData.reason,
         destination: validatedData.destination,
+        status: (formData.get('action') as string) === 'submit' ? 'PENDING' : undefined,
       },
     })
 
     revalidatePath('/dashboard/leave')
-    return { success: '请假申请已更新' }
+    return { success: (formData.get('action') as string) === 'submit' ? '请假申请已提交' : '请假申请已保存' }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -185,5 +242,66 @@ export async function getLeaveBalances(userId: string) {
   } catch (error) {
     console.error('获取假期余额失败:', error)
     return null
+  }
+}
+
+export async function getLeaveStats(userId?: string, departmentId?: string) {
+  try {
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+
+    const where: any = {
+      status: 'APPROVED',
+      startDate: {
+        lte: lastDayOfMonth,
+      },
+      endDate: {
+        gte: firstDayOfMonth,
+      },
+    }
+
+    if (userId) {
+      where.userId = userId
+    }
+
+    if (departmentId) {
+      where.user = {
+        departmentId: departmentId,
+      }
+    }
+
+    const applications = await prisma.leaveApplication.findMany({
+      where,
+      select: {
+        days: true,
+        startDate: true,
+        endDate: true,
+      },
+    })
+
+    let totalDays = 0
+    for (const app of applications) {
+      // Calculate the overlap between the leave period and current month
+      const leaveStart = new Date(app.startDate)
+      const leaveEnd = new Date(app.endDate)
+
+      const effectiveStart = leaveStart < firstDayOfMonth ? firstDayOfMonth : leaveStart
+      const effectiveEnd = leaveEnd > lastDayOfMonth ? lastDayOfMonth : leaveEnd
+
+      // Calculate days in the overlap period
+      const msPerDay = 24 * 60 * 60 * 1000
+      const overlapDays = Math.ceil((effectiveEnd.getTime() - effectiveStart.getTime()) / msPerDay) + 1
+
+      // Proportionally allocate the leave days
+      const totalLeaveDays = (leaveEnd.getTime() - leaveStart.getTime()) / msPerDay + 1
+      const ratio = overlapDays / totalLeaveDays
+      totalDays += app.days * ratio
+    }
+
+    return Math.round(totalDays * 2) / 2 // Round to nearest 0.5
+  } catch (error) {
+    console.error('获取请假统计失败:', error)
+    return 0
   }
 }

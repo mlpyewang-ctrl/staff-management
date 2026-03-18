@@ -22,13 +22,14 @@ model User {
   salary     Float?
   level      String?
   departmentId String?
+  positionId  String?
   startDate  DateTime?
 
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   overtimeApplications OvertimeApplication[]
   leaveApplications    LeaveApplication[]
   performanceReviews   PerformanceReview[] @relation("Reviewer")
@@ -37,7 +38,8 @@ model User {
   leaveBalance         LeaveBalance?
 
   department Department? @relation(fields: [departmentId], references: [id])
-  
+  position   Position?   @relation(fields: [positionId], references: [id])
+
   @@map("users")
 }
 
@@ -67,7 +69,7 @@ model OvertimeApplication {
   hours      Float    // 加班时长 (小时)
   type       String   @default("WORKDAY") // WORKDAY, WEEKEND, HOLIDAY
   reason     String   // 加班事由
-  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  status     String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
   approverId String?
   approvedAt DateTime?
   remark     String?  // 审批意见
@@ -89,7 +91,7 @@ model LeaveApplication {
   days       Float    // 请假天数
   reason     String   // 请假事由
   destination String? // 请假前往地点
-  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  status     String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
   approverId String?
   approvedAt DateTime?
   remark     String?
@@ -130,8 +132,11 @@ model PerformanceReview {
   selfComment String? // 自评
   reviewerId String?
   reviewer   User?    @relation("Reviewer", fields: [reviewerId], references: [id])
+  status     String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  
+  approvals  Approval[]
   
   @@map("performance_reviews")
 }
@@ -167,7 +172,7 @@ model ApprovalFlow {
 model Approval {
   id              String   @id @default(cuid())
   applicationId   String
-  applicationType String   // OVERTIME, LEAVE
+  applicationType String   // OVERTIME, LEAVE, PERFORMANCE
   applicantId     String   // 申请人 ID
   approverId      String   // 审批人 ID
   approver        User     @relation(fields: [approverId], references: [id])
@@ -177,6 +182,20 @@ model Approval {
   
   overtimeApplication OvertimeApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   leaveApplication    LeaveApplication?    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  performanceReview   PerformanceReview?   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   
   @@map("approvals")
+}
+
+model Position {
+  id        String   @id @default(cuid())
+  name      String   @unique    // 岗位名称
+  salary    Float               // 基础薪资
+  level     String?             // 职级
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+
+  @@map("positions")
 }

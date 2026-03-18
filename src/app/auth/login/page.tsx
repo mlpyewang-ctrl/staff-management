@@ -29,8 +29,6 @@ export default function LoginPage() {
         callbackUrl: '/dashboard',
       })
 
-      console.log('Login result:', result)
-
       if (result?.error) {
         setError(result.error)
       } else if (result?.url) {

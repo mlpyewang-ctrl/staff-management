@@ -8,23 +8,27 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { getUserProfile, updateUserProfile } from '@/server/actions/user'
 import { getDepartments } from '@/server/actions/department'
+import { getPositions } from '@/server/actions/position'
 
 export default function ProfileDashboardPage() {
   const { data: session } = useSession()
   const [profile, setProfile] = useState<any | null>(null)
   const [departments, setDepartments] = useState<any[]>([])
+  const [positions, setPositions] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{ type: 'error' | 'success' | '' ; text: string }>({ type: '', text: '' })
+  const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
 
   useEffect(() => {
     const load = async () => {
       if (!session?.user?.id) return
-      const [p, depts] = await Promise.all([
+      const [p, depts, pos] = await Promise.all([
         getUserProfile(session.user.id),
         getDepartments(),
+        getPositions(),
       ])
       setProfile(p)
       setDepartments(depts)
+      setPositions(pos)
     }
     load()
   }, [session])
@@ -42,6 +46,8 @@ export default function ProfileDashboardPage() {
       setMessage({ type: 'error', text: result.error })
     } else if (result.success) {
       setMessage({ type: 'success', text: result.success })
+      const p = await getUserProfile(session.user.id)
+      setProfile(p)
     }
 
     setLoading(false)
@@ -128,28 +134,50 @@ export default function ProfileDashboardPage() {
                   ))}
                 </select>
               </div>
-              {(session.user.role === 'ADMIN' || session.user.role === 'MANAGER') && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="salary">薪资</Label>
-                    <Input
-                      id="salary"
-                      name="salary"
-                      type="number"
-                      step="0.01"
-                      defaultValue={profile?.salary ?? ''}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="level">职级</Label>
-                    <Input
-                      id="level"
-                      name="level"
-                      defaultValue={profile?.level || ''}
-                    />
-                  </div>
-                </>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="positionId">岗位</Label>
+                <select
+                  id="positionId"
+                  name="positionId"
+                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  defaultValue={profile?.positionId || ''}
+                >
+                  <option value="">未分配</option>
+                  {positions.map((pos) => (
+                    <option key={pos.id} value={pos.id}>
+                      {pos.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="salaryDisplay">薪资</Label>
+                <Input
+                  id="salaryDisplay"
+                  type="text"
+                  value={
+                    profile?.position
+                      ? `${profile.position.salary?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}（岗位薪资）`
+                      : profile?.salary
+                      ? profile.salary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
+                      : '未设置'
+                  }
+                  disabled
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="levelDisplay">职级</Label>
+                <Input
+                  id="levelDisplay"
+                  type="text"
+                  value={
+                    profile?.position
+                      ? `${profile.position.level || '未设置'}（岗位职级）`
+                      : profile?.level || '未设置'
+                  }
+                  disabled
+                />
+              </div>
             </div>
 
             {message.text && (
@@ -167,4 +195,3 @@ export default function ProfileDashboardPage() {
     </div>
   )
 }
-

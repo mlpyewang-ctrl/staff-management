@@ -5,18 +5,24 @@ import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 
-const navigation = [
-  { name: '仪表盘', href: '/dashboard' },
-  { name: '加班申请', href: '/dashboard/overtime' },
-  { name: '请假管理', href: '/dashboard/leave' },
-  { name: '绩效管理', href: '/dashboard/performance' },
-  { name: '审批中心', href: '/dashboard/approvals' },
-  { name: '个人信息', href: '/dashboard/profile' },
-]
-
 export function Header() {
   const pathname = usePathname()
   const { data: session } = useSession()
+
+  const isAdmin = session?.user?.role === 'ADMIN'
+  const isManager = session?.user?.role === 'MANAGER'
+  const canApprove = isAdmin || isManager
+
+  const navigation = [
+    { name: '仪表盘', href: '/dashboard' },
+    { name: '加班申请', href: '/dashboard/overtime' },
+    { name: '请假管理', href: '/dashboard/leave' },
+    { name: '绩效管理', href: '/dashboard/performance' },
+    ...(canApprove ? [{ name: '审批中心', href: '/dashboard/approvals' }] : []),
+    ...(isAdmin ? [{ name: '部门管理', href: '/dashboard/departments' }] : []),
+    ...(isAdmin ? [{ name: '岗位管理', href: '/dashboard/positions' }] : []),
+    { name: '个人信息', href: '/dashboard/profile' },
+  ]
 
   return (
     <header className="bg-white shadow-sm border-b">

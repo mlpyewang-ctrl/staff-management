@@ -10,7 +10,7 @@ export const registerSchema = z.object({
   password: z.string().min(6, '密码至少需要 6 个字符'),
   name: z.string().min(2, '姓名至少需要 2 个字符'),
   role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE']),
-  companyId: z.string().optional(),
+  companyId: z.string().nullish(),
 })
 
 export const overtimeSchema = z.object({
@@ -61,5 +61,14 @@ export const userProfileSchema = z.object({
     .refine((v) => v === undefined || !Number.isNaN(v), '薪资必须是数字'),
   level: z.string().optional(),
   departmentId: z.string().optional(),
+  positionId: z.string().optional(),
   startDate: z.string().optional(),
+})
+
+export const positionSchema = z.object({
+  name: z.string().min(2, '岗位名称至少需要 2 个字符'),
+  salary: z
+    .string()
+    .refine((v) => !isNaN(Number(v)) && Number(v) >= 0, '请输入有效的薪资数额'),
+  level: z.string().optional(),
 })

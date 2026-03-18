@@ -29,7 +29,31 @@ export async function createOvertimeApplication(formData: FormData) {
       return { error: '结束时间必须晚于开始时间' }
     }
 
-    await prisma.overtimeApplication.create({
+    const action = (formData.get('action') as string) === 'submit' ? 'submit' : 'save'
+
+    // #region agent log
+    fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '00641c',
+      },
+      body: JSON.stringify({
+        sessionId: '00641c',
+        runId: 'pre-fix',
+        hypothesisId: 'S1',
+        location: 'src/server/actions/overtime.ts:createOvertimeApplication',
+        message: 'Create overtime',
+        data: {
+          action,
+          userIdPresent: !!userId,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion
+
+    const created = await prisma.overtimeApplication.create({
       data: {
         userId,
         date: startDateTime,
@@ -38,17 +62,33 @@ export async function createOvertimeApplication(formData: FormData) {
         hours,
         type: validatedData.type,
         reason: validatedData.reason,
-        status: 'PENDING',
+        status: action === 'submit' ? 'PENDING' : 'DRAFT',
       },
     })
 
     revalidatePath('/dashboard/overtime')
-    return { success: '加班申请已提交' }
+    return {
+      success: action === 'submit' ? '加班申请已提交' : '加班草稿已保存',
+      id: created.id,
+      status: created.status,
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
     }
     return { error: '提交失败，请稍后重试' }
+  }
+}
+
+export async function deleteOvertimeApplication(id: string) {
+  try {
+    if (!id) return { error: '缺少加班申请 ID' }
+    await prisma.overtimeApplication.delete({ where: { id } })
+    revalidatePath('/dashboard/overtime')
+    return { success: '加班申请已删除' }
+  } catch (error) {
+    if (error instanceof Error) return { error: error.message }
+    return { error: '删除失败，请稍后重试' }
   }
 }
 
@@ -85,11 +125,12 @@ export async function updateOvertimeApplication(formData: FormData) {
         hours,
         type: validatedData.type,
         reason: validatedData.reason,
+        status: (formData.get('action') as string) === 'submit' ? 'PENDING' : undefined,
       },
     })
 
     revalidatePath('/dashboard/overtime')
-    return { success: '加班申请已更新' }
+    return { success: (formData.get('action') as string) === 'submit' ? '加班申请已提交' : '加班申请已保存' }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -154,5 +195,43 @@ export async function getOvertimeApplication(id: string) {
   } catch (error) {
     console.error('获取加班申请详情失败:', error)
     return null
+  }
+}
+
+export async function getOvertimeStats(userId?: string, departmentId?: string) {
+  try {
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+
+    const where: any = {
+      status: 'APPROVED',
+      date: {
+        gte: firstDayOfMonth,
+        lte: lastDayOfMonth,
+      },
+    }
+
+    if (userId) {
+      where.userId = userId
+    }
+
+    if (departmentId) {
+      where.user = {
+        departmentId: departmentId,
+      }
+    }
+
+    const result = await prisma.overtimeApplication.aggregate({
+      where,
+      _sum: {
+        hours: true,
+      },
+    })
+
+    return result._sum.hours || 0
+  } catch (error) {
+    console.error('获取加班统计失败:', error)
+    return 0
   }
 }
