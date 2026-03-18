@@ -31,8 +31,8 @@ export default function LoginPage() {
 
       if (result?.error) {
         setError(result.error)
-      } else if (result?.url) {
-        window.location.href = result.url
+      } else if (result?.ok) {
+        window.location.href = '/dashboard'
       }
     } catch (err) {
       console.error('Login error:', err)
@@ -91,7 +91,7 @@ export default function LoginPage() {
             </Link>
           </div>
           <div className="mt-2 text-center text-xs text-gray-500">
-            测试账号：admin@example.com / admin123
+            测试账号：admin@zltech.com / password123
           </div>
         </CardContent>
       </Card>
