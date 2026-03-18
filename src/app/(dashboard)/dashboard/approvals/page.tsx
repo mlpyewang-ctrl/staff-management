@@ -16,7 +16,7 @@ const statusVariant: Record<string, 'warning' | 'success' | 'danger'> = {
 
 export default function ApprovalsPage() {
   const { data: session } = useSession()
-  const [pendingApps, setPendingApps] = useState({ overtime: [], leave: [] })
+  const [pendingApps, setPendingApps] = useState<{ overtime: any[]; leave: any[] }>({ overtime: [], leave: [] })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
   const [remark, setRemark] = useState('')
@@ -38,34 +38,6 @@ export default function ApprovalsPage() {
 
     setLoading(true)
     setMessage({ type: '', text: '' })
-
-    // #region agent log
-    fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '7d0b3e',
-      },
-      body: JSON.stringify({
-        sessionId: '7d0b3e',
-        runId: 'pre-fix',
-        hypothesisId: 'H0',
-        location: 'src/app/(dashboard)/dashboard/approvals/page.tsx:handleApprove',
-        message: 'Click approve/reject',
-        data: {
-          status,
-          selectedApp: {
-            id: selectedApp?.id,
-            type: selectedApp?.type,
-          },
-          approverIdPresent: !!session?.user?.id,
-          role: session?.user?.role,
-          remarkLen: remark?.length ?? 0,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
 
     const formData = new FormData()
     formData.set('applicationId', selectedApp.id)

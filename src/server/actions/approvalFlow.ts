@@ -75,7 +75,7 @@ export async function saveApprovalFlow(formData: FormData) {
     }
 
     if (conflictTypes.length > 0) {
-      const conflictLabels = [...new Set(conflictTypes)].map(
+      const conflictLabels = Array.from(new Set(conflictTypes)).map(
         t => APPLICATION_TYPE_LABELS[t as ApplicationType] || t
       )
       return { error: `该部门已存在 ${conflictLabels.join('、')} 的审批流程` }

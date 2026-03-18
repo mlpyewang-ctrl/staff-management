@@ -122,18 +122,61 @@ npm run db:studio
 ```
 staff-management/
 ├── prisma/
-│   ├── schema.prisma      # 数据库模型定义
-│   └── seed.ts            # 测试数据脚本
+│   ├── schema.prisma          # 数据库模型定义
+│   ├── seed.ts                # 测试数据脚本
+│   └── dev.db                 # SQLite 数据库文件（开发用）
+├── scripts/
+│   └── init-db.js             # 数据库初始化脚本
 ├── src/
 │   ├── app/
-│   │   ├── (dashboard)/   # 需要登录的页面
-│   │   ├── api/           # API 路由
-│   │   └── auth/          # 登录/注册页面
-│   ├── components/        # React 组件
-│   └── lib/               # 工具函数
-├── docker-compose.yml     # Docker 配置
-├── .env                   # 环境变量
-└── package.json
+│   │   ├── (dashboard)/       # 需要登录的页面（路由组）
+│   │   │   ├── dashboard/     # 所有功能页面
+│   │   │   │   ├── approval-flows/   # 审批流程配置
+│   │   │   │   ├── approvals/        # 审批中心
+│   │   │   │   ├── departments/      # 部门管理
+│   │   │   │   ├── leave/            # 请假管理
+│   │   │   │   ├── overtime/         # 加班申请
+│   │   │   │   ├── performance/      # 绩效管理
+│   │   │   │   ├── positions/        # 岗位管理
+│   │   │   │   └── profile/          # 个人信息
+│   │   │   └── layout.tsx    # Dashboard 布局
+│   │   ├── api/              # API 路由
+│   │   │   └── auth/[...nextauth]/  # NextAuth 认证
+│   │   ├── auth/             # 登录/注册页面
+│   │   ├── globals.css       # 全局样式
+│   │   ├── layout.tsx        # 根布局
+│   │   └── page.tsx          # 首页
+│   ├── components/
+│   │   ├── layout/           # 布局组件（header, sidebar）
+│   │   ├── providers.tsx     # Context Providers
+│   │   └── ui/               # UI 基础组件
+│   ├── lib/
+│   │   ├── __tests__/        # 工具函数测试
+│   │   ├── approval-constants.ts  # 审批相关常量
+│   │   ├── prisma.ts         # Prisma 客户端
+│   │   ├── utils.ts          # 工具函数
+│   │   └── validations.ts    # Zod 验证规则
+│   ├── server/actions/       # Server Actions（后端逻辑）
+│   │   ├── __tests__/        # Server Actions 测试
+│   │   ├── approval.ts       # 审批操作
+│   │   ├── approvalFlow.ts   # 审批流程
+│   │   ├── auth.ts           # 认证
+│   │   ├── department.ts     # 部门管理
+│   │   ├── leave.ts          # 请假管理
+│   │   ├── overtime.ts       # 加班管理
+│   │   ├── performance.ts    # 绩效管理
+│   │   ├── position.ts       # 岗位管理
+│   │   └── user.ts           # 用户管理
+│   ├── test/                 # 测试配置
+│   │   └── setup.ts          # 测试环境设置
+│   ├── types/
+│   │   └── index.ts          # TypeScript 类型定义
+│   └── middleware.ts         # Next.js 中间件（认证）
+├── vitest.config.ts          # Vitest 配置
+├── docker-compose.yml        # Docker 配置
+├── .env                      # 环境变量
+├── package.json
+└── README.md
 ```
 
 ## 常用命令
@@ -146,8 +189,29 @@ staff-management/
 | `npm run db:push` | 同步数据库结构 |
 | `npm run db:seed` | 初始化测试数据 |
 | `npm run db:studio` | 打开 Prisma Studio |
+| `npm run test` | 运行测试 |
+| `npm run test:watch` | 监听模式运行测试 |
+| `npm run test:coverage` | 运行测试并生成覆盖率报告 |
 | `docker-compose up -d` | 启动数据库容器 |
 | `docker-compose down` | 停止数据库容器 |
+
+## 测试
+
+项目使用 Vitest 作为测试框架，包含以下测试：
+
+- **验证规则测试** (`src/lib/__tests__/validations.test.ts`)：测试所有 Zod 验证规则
+- **Server Actions 测试** (`src/server/actions/__tests__/auth.test.ts`)：测试认证相关 Server Actions
+
+```bash
+# 运行所有测试
+npm run test
+
+# 监听模式
+npm run test:watch
+
+# 生成覆盖率报告
+npm run test:coverage
+```
 
 ## 环境变量
 
