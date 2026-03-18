@@ -76,8 +76,6 @@ model OvertimeApplication {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
-  approvals  Approval[]
-  
   @@map("overtime_applications")
 }
 
@@ -97,8 +95,6 @@ model LeaveApplication {
   remark     String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  
-  approvals  Approval[]
   
   @@map("leave_applications")
 }
@@ -135,8 +131,6 @@ model PerformanceReview {
   status     String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  
-  approvals  Approval[]
   
   @@map("performance_reviews")
 }
@@ -179,10 +173,6 @@ model Approval {
   status          String   // PENDING, APPROVED, REJECTED
   remark          String?
   createdAt       DateTime @default(now())
-  
-  overtimeApplication OvertimeApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  leaveApplication    LeaveApplication?    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  performanceReview   PerformanceReview?   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   
   @@map("approvals")
 }
