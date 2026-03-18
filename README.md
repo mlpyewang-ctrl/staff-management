@@ -235,3 +235,6 @@ NEXTAUTH_URL="http://localhost:3000"
 - 每个用户的假期余额
 - 每个部门的审批流程配置
 - 示例加班申请、请假申请、绩效考核记录
+
+## stop 服务
+docker-compose down
