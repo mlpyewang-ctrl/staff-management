@@ -155,6 +155,7 @@ model ApprovalFlow {
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   name         String
+  types        String     // 申请类型（JSON数组）：["OVERTIME", "LEAVE", "PERFORMANCE"]
   config       String     // 审批步骤配置（JSON 字符串）
   isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { getDepartments } from '@/server/actions/department'
 import { getApprovalFlows, saveApprovalFlow } from '@/server/actions/approvalFlow'
+import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS, ApplicationType } from '@/lib/approval-constants'
 
 export default function ApprovalFlowsDashboardPage() {
   const { data: session } = useSession()
@@ -16,7 +17,8 @@ export default function ApprovalFlowsDashboardPage() {
   const [flows, setFlows] = useState<any[]>([])
   const [editingFlow, setEditingFlow] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{ type: 'error' | 'success' | '' ; text: string }>({ type: '', text: '' })
+  const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
+  const [selectedTypes, setSelectedTypes] = useState<ApplicationType[]>([])
 
   useEffect(() => {
     const load = async () => {
@@ -27,12 +29,34 @@ export default function ApprovalFlowsDashboardPage() {
     load()
   }, [])
 
+  // 当编辑流程时，设置已选类型
+  useEffect(() => {
+    if (editingFlow?.types) {
+      try {
+        const types = JSON.parse(editingFlow.types)
+        setSelectedTypes(types)
+      } catch {
+        setSelectedTypes([])
+      }
+    } else {
+      setSelectedTypes([])
+    }
+  }, [editingFlow])
+
   if (session?.user?.role !== 'ADMIN') {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold text-gray-900">审批流程配置</h1>
         <p className="text-gray-600">仅管理员可以访问此页面。</p>
       </div>
+    )
+  }
+
+  const handleTypeToggle = (type: ApplicationType) => {
+    setSelectedTypes(prev =>
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
     )
   }
 
@@ -46,6 +70,8 @@ export default function ApprovalFlowsDashboardPage() {
     if (editingFlow) {
       formData.set('id', editingFlow.id)
     }
+    // 添加类型数据
+    formData.set('types', JSON.stringify(selectedTypes))
 
     const result = await saveApprovalFlow(formData)
     if (result.error) {
@@ -55,10 +81,21 @@ export default function ApprovalFlowsDashboardPage() {
       const fs = await getApprovalFlows()
       setFlows(fs)
       setEditingFlow(null)
+      setSelectedTypes([])
       form.reset()
     }
 
     setLoading(false)
+  }
+
+  // 解析流程的类型用于显示
+  const getFlowTypes = (flow: any): string => {
+    try {
+      const types: string[] = JSON.parse(flow.types)
+      return types.map(t => APPLICATION_TYPE_LABELS[t as ApplicationType] || t).join('、') || '-'
+    } catch {
+      return '-'
+    }
   }
 
   return (
@@ -106,6 +143,33 @@ export default function ApprovalFlowsDashboardPage() {
             </div>
 
             <div className="space-y-2">
+              <Label>申请类型（可多选）</Label>
+              <div className="flex flex-wrap gap-3">
+                {APPLICATION_TYPES.map((type) => (
+                  <label
+                    key={type}
+                    className={`inline-flex items-center px-4 py-2 rounded-md border cursor-pointer transition-colors ${
+                      selectedTypes.includes(type)
+                        ? 'bg-blue-50 border-blue-500 text-blue-700'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={selectedTypes.includes(type)}
+                      onChange={() => handleTypeToggle(type)}
+                    />
+                    {APPLICATION_TYPE_LABELS[type]}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                同一部门下，每种类型只能属于一个审批流程
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="config">审批配置（JSON）</Label>
               <textarea
                 id="config"
@@ -138,7 +202,10 @@ export default function ApprovalFlowsDashboardPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setEditingFlow(null)}
+                  onClick={() => {
+                    setEditingFlow(null)
+                    setSelectedTypes([])
+                  }}
                 >
                   取消编辑
                 </Button>
@@ -158,6 +225,7 @@ export default function ApprovalFlowsDashboardPage() {
               <TableRow>
                 <TableHead>部门</TableHead>
                 <TableHead>流程名称</TableHead>
+                <TableHead>申请类型</TableHead>
                 <TableHead>配置摘要</TableHead>
                 <TableHead>操作</TableHead>
               </TableRow>
@@ -165,7 +233,7 @@ export default function ApprovalFlowsDashboardPage() {
             <TableBody>
               {flows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={5} className="text-center text-gray-500 py-8">
                     暂无审批流程
                   </TableCell>
                 </TableRow>
@@ -174,6 +242,7 @@ export default function ApprovalFlowsDashboardPage() {
                   <TableRow key={flow.id}>
                     <TableCell>{flow.department?.name || '-'}</TableCell>
                     <TableCell>{flow.name}</TableCell>
+                    <TableCell>{getFlowTypes(flow)}</TableCell>
                     <TableCell className="max-w-xs truncate">
                       {flow.config}
                     </TableCell>
@@ -196,4 +265,3 @@ export default function ApprovalFlowsDashboardPage() {
     </div>
   )
 }
-
