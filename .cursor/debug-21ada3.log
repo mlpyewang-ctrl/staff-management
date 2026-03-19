@@ -1,0 +1,4 @@
+{"sessionId":"21ada3","runId":"nav-debug","hypothesisId":"H-buttons","location":"src/app/(dashboard)/dashboard/performance/page.tsx:40","message":"performance page loaded","data":{"role":"ADMIN"},"timestamp":1773889000270}
+{"sessionId":"21ada3","runId":"nav-debug","hypothesisId":"H-buttons","location":"src/app/(dashboard)/dashboard/performance/page.tsx:40","message":"performance page loaded","data":{"role":"ADMIN"},"timestamp":1773889000271}
+{"sessionId":"21ada3","runId":"nav-debug","hypothesisId":"H-buttons","location":"src/app/(dashboard)/dashboard/leave/page.tsx:63","message":"leave page loaded","data":{"role":"ADMIN"},"timestamp":1773889009945}
+{"sessionId":"21ada3","runId":"nav-debug","hypothesisId":"H-buttons","location":"src/app/(dashboard)/dashboard/leave/page.tsx:63","message":"leave page loaded","data":{"role":"ADMIN"},"timestamp":1773889009946}

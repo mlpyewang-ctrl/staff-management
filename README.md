@@ -213,16 +213,105 @@ npm run test:watch
 npm run test:coverage
 ```
 
-## 环境变量
+## 环境变量配置
+
+### 开发环境
+
+1. 复制 `.env.example` 为 `.env`：
+
+```bash
+cp .env.example .env
+```
+
+2. 生成 `NEXTAUTH_SECRET`：
+
+```bash
+# macOS / Linux
+openssl rand -base64 32
+
+# Windows (PowerShell)
+# 方法一：如果有 openssl
+openssl rand -base64 32
+
+# 方法二：使用 Node.js
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+3. 将生成的密钥填入 `.env` 文件的 `NEXTAUTH_SECRET`。
+
+### 生产环境
+
+在生产环境中，需要配置以下环境变量：
+
+| 变量名 | 说明 | 示例 |
+|--------|------|------|
+| `DATABASE_URL` | PostgreSQL 连接字符串 | `postgresql://user:password@host:5432/dbname` |
+| `NEXTAUTH_SECRET` | JWT 加密密钥（**必须**随机生成） | 长度至少 32 字符的随机字符串 |
+| `NEXTAUTH_URL` | 应用访问地址 | `https://your-domain.com` |
+
+#### 生成 NEXTAUTH_SECRET
+
+**重要**：生产环境必须使用强随机密钥，不要使用示例中的值！
+
+```bash
+# 推荐方式
+openssl rand -base64 32
+```
+
+#### 部署平台配置示例
+
+**Vercel / Netlify / Railway 等 PaaS 平台**：
+
+在平台的环境变量设置页面添加：
+- `NEXTAUTH_SECRET` = 你的随机密钥
+- `NEXTAUTH_URL` = 你的生产域名
+- `DATABASE_URL` = 生产数据库连接字符串
+
+**Docker 部署**：
+
+```bash
+docker run -d \
+  -e NEXTAUTH_SECRET="your-production-secret" \
+  -e NEXTAUTH_URL="https://your-domain.com" \
+  -e DATABASE_URL="postgresql://..." \
+  -p 3000:3000 \
+  your-image
+```
+
+**Docker Compose**：
+
+```yaml
+services:
+  app:
+    environment:
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - DATABASE_URL=${DATABASE_URL}
+```
+
+### 环境变量完整示例
 
 ```env
 # 数据库配置
 DATABASE_URL="postgresql://staff:staff_password@127.0.0.1:5432/staff_management?schema=public"
 
 # NextAuth 配置
-NEXTAUTH_SECRET="your-secret-key"
-NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-generated-secret-key-here"
+NEXTAUTH_URL="http://localhost:3000"  # 生产环境改为 https://your-domain.com
 ```
+
+### 常见问题
+
+**Q: 启动时报 `JWEDecryptionFailed: decryption operation failed`**
+
+A: 这通常是因为：
+1. `NEXTAUTH_SECRET` 未配置或使用了占位符
+2. 更换了 `NEXTAUTH_SECRET` 但浏览器有旧的登录 cookie
+
+解决方法：
+1. 确保 `.env` 中有正确的 `NEXTAUTH_SECRET`
+2. 清除浏览器 cookie（F12 → Application → Cookies → Clear）
+3. 重启开发服务器
 
 ## 测试数据说明
 
