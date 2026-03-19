@@ -33,6 +33,48 @@ export function calculateDays(start: Date, end: Date): number {
   return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1
 }
 
+export function formatDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+export function calculateLeaveDaysExcludingNonWorkingDays(
+  start: Date,
+  end: Date,
+  options?: {
+    legalHolidayDates?: string[]
+    compensatoryWorkDates?: string[]
+  }
+): number {
+  const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+  const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+
+  if (endDate < startDate) {
+    return 0
+  }
+
+  const legalHolidayDates = new Set(options?.legalHolidayDates || [])
+  const compensatoryWorkDates = new Set(options?.compensatoryWorkDates || [])
+
+  let workingDays = 0
+  for (const cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
+    const key = formatDateKey(cursor)
+    const day = cursor.getDay()
+    const isWeekend = day === 0 || day === 6
+    const isLegalHoliday = legalHolidayDates.has(key)
+    const isCompensatoryWorkday = compensatoryWorkDates.has(key)
+
+    if (isCompensatoryWorkday || (!isWeekend && !isLegalHoliday)) {
+      workingDays += 1
+    }
+  }
+
+  if (workingDays === 0) {
+    return 0
+  }
+
+  return formatDateKey(startDate) === formatDateKey(endDate) ? 0.5 : workingDays
+}
+
 // ========== 新增：薪资计算相关工具函数 ==========
 
 /**

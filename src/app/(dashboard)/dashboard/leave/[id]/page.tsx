@@ -9,7 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
-import { deleteLeaveApplication, getLeaveApplication, updateLeaveApplication } from '@/server/actions/leave'
+import {
+  deleteLeaveApplication,
+  getLeaveApplication,
+  getLeaveDurationPreview,
+  updateLeaveApplication,
+} from '@/server/actions/leave'
 
 export default function LeaveEditPage() {
   const params = useParams<{ id: string }>()
@@ -20,6 +25,10 @@ export default function LeaveEditPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
   const [initial, setInitial] = useState<any | null>(null)
+  const [leaveType, setLeaveType] = useState('ANNUAL')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [daysPreview, setDaysPreview] = useState<number>(0)
 
   const submitIntentRef = useRef<'save' | 'submit'>('save')
 
@@ -27,17 +36,43 @@ export default function LeaveEditPage() {
     const load = async () => {
       const app = await getLeaveApplication(id)
       setInitial(app)
+      if (app?.type) {
+        setLeaveType(app.type)
+      }
+      if (app?.startDate) {
+        setStartDate(new Date(app.startDate).toISOString().slice(0, 10))
+      }
+      if (app?.endDate) {
+        setEndDate(new Date(app.endDate).toISOString().slice(0, 10))
+      }
     }
     load()
   }, [id])
 
-  const canOperate = useMemo(() => !!session?.user?.id, [session?.user?.id])
-  const isReadonly = ['COMPLETED', 'APPROVED'].includes(initial?.status || '')
+  useEffect(() => {
+    const loadPreview = async () => {
+      if (!startDate || !endDate) {
+        setDaysPreview(0)
+        return
+      }
+
+      const result = await getLeaveDurationPreview(startDate, endDate)
+      setDaysPreview(result.days)
+    }
+
+    loadPreview()
+  }, [startDate, endDate])
+
+  const canOperate = useMemo(
+    () => !!session?.user?.id && session?.user?.id === initial?.userId && initial?.status === 'DRAFT',
+    [initial?.status, initial?.userId, session?.user?.id]
+  )
+  const isReadonly = !canOperate
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!canOperate) {
-      setMessage({ type: 'error', text: '用户未登录' })
+      setMessage({ type: 'error', text: '仅申请人本人可编辑草稿' })
       return
     }
 
@@ -59,7 +94,7 @@ export default function LeaveEditPage() {
 
   const onDelete = async () => {
     if (!canOperate) {
-      setMessage({ type: 'error', text: '用户未登录' })
+      setMessage({ type: 'error', text: '仅申请人本人可删除草稿' })
       return
     }
     setLoading(true)
@@ -88,7 +123,7 @@ export default function LeaveEditPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="type">假期类型</Label>
                 <Select
@@ -96,7 +131,8 @@ export default function LeaveEditPage() {
                   name="type"
                   required
                   disabled={isReadonly}
-                  defaultValue={initial?.type ?? 'ANNUAL'}
+                  value={leaveType}
+                  onChange={(e) => setLeaveType(e.target.value)}
                 >
                   <option value="ANNUAL">年假</option>
                   <option value="SICK">病假</option>
@@ -104,44 +140,59 @@ export default function LeaveEditPage() {
                   <option value="MARRIAGE">婚假</option>
                   <option value="MATERNITY">产假</option>
                   <option value="PATERNITY">陪产假</option>
+                  <option value="COMPENSATORY">调休</option>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>请假时间</Label>
-                <div className="flex space-x-2">
-                  <Input
-                    name="startDate"
-                    type="date"
-                    required
-                    disabled={isReadonly}
-                    className="flex-1"
-                    defaultValue={initial?.startDate ? new Date(initial.startDate).toISOString().slice(0, 10) : ''}
-                  />
-                  <span className="text-gray-400">至</span>
-                  <Input
-                    name="endDate"
-                    type="date"
-                    required
-                    disabled={isReadonly}
-                    className="flex-1"
-                    defaultValue={initial?.endDate ? new Date(initial.endDate).toISOString().slice(0, 10) : ''}
-                  />
-                </div>
+                <Label htmlFor="startDate">开始日期</Label>
+                <Input
+                  id="startDate"
+                  name="startDate"
+                  type="date"
+                  required
+                  disabled={isReadonly}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="destination">前往地点</Label>
+                <Label htmlFor="endDate">结束日期</Label>
                 <Input
-                  id="destination"
-                  name="destination"
-                  type="text"
+                  id="endDate"
+                  name="endDate"
+                  type="date"
+                  required
                   disabled={isReadonly}
-                  defaultValue={initial?.destination ?? ''}
+                  value={endDate}
+                  min={startDate || undefined}
+                  onChange={(e) => setEndDate(e.target.value)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>自动计算天数</Label>
+                <div className="flex h-10 items-center rounded-md border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
+                  {daysPreview > 0 ? `${daysPreview} 天` : '选择日期后自动计算'}
+                </div>
               </div>
             </div>
 
+            <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-600">
+              计算规则：按工作日自动计算，请假最小 0.5 天；周末和法定节假日不计入请假天数。
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="reason">请假事由</Label>
+              <Label htmlFor="destination">前往地点</Label>
+              <Input
+                id="destination"
+                name="destination"
+                type="text"
+                disabled={isReadonly}
+                defaultValue={initial?.destination ?? ''}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reason">{leaveType === 'COMPENSATORY' ? '调休事由' : '请假事由'}</Label>
               <Textarea
                 id="reason"
                 name="reason"
@@ -189,7 +240,7 @@ export default function LeaveEditPage() {
                 返回
               </Button>
             </div>
-            {isReadonly && <div className="text-sm text-gray-500">该申请已完成，不可再修改。</div>}
+            {isReadonly && <div className="text-sm text-gray-500">仅申请人本人可编辑草稿；已提交后需等待下一岗审核或退回。</div>}
           </form>
         </CardContent>
       </Card>

@@ -22,7 +22,7 @@ export const overtimeSchema = z.object({
 })
 
 export const leaveSchema = z.object({
-  type: z.enum(['ANNUAL', 'SICK', 'PERSONAL', 'MARRIAGE', 'MATERNITY', 'PATERNITY']),
+  type: z.enum(['ANNUAL', 'SICK', 'PERSONAL', 'MARRIAGE', 'MATERNITY', 'PATERNITY', 'COMPENSATORY']),
   startDate: z.string(),
   endDate: z.string(),
   destination: z.string().optional(),

@@ -54,7 +54,12 @@ export function Header() {
             <span className="text-sm text-gray-600">
               {session?.user?.name} ({session?.user?.role === 'ADMIN' ? '管理员' : session?.user?.role === 'MANAGER' ? '主管' : '员工'})
             </span>
-            <Button variant="outline" size="sm" onClick={() => signOut({ callbackUrl: '/auth/login' })}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800"
+              onClick={() => signOut({ callbackUrl: '/auth/login' })}
+            >
               退出登录
             </Button>
           </div>

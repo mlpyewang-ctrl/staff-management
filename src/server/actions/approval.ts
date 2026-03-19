@@ -54,6 +54,16 @@ function buildProgressText(completedSteps: number, totalSteps: number) {
   return `${completedSteps}/${totalSteps}`
 }
 
+const leaveTypeMap: Record<string, string> = {
+  ANNUAL: '年假',
+  SICK: '病假',
+  PERSONAL: '事假',
+  MARRIAGE: '婚假',
+  MATERNITY: '产假',
+  PATERNITY: '陪产假',
+  COMPENSATORY: '调休',
+}
+
 export async function approveApplication(formData: FormData) {
   try {
     const validatedData = approvalSchema.parse({
@@ -292,8 +302,8 @@ export async function approveApplication(formData: FormData) {
           },
         })
 
-        if (balance && !leaveApp.reason.startsWith('[调休]') && ['ANNUAL', 'SICK', 'PERSONAL'].includes(leaveApp.type)) {
-          const updateData: Record<string, { decrement: number }> = {}
+        if (balance && ['ANNUAL', 'SICK', 'PERSONAL', 'COMPENSATORY'].includes(leaveApp.type)) {
+          const updateData: Record<string, { decrement: number } | { increment: number }> = {}
 
           if (leaveApp.type === 'ANNUAL') {
             updateData.annual = { decrement: leaveApp.days }
@@ -301,6 +311,8 @@ export async function approveApplication(formData: FormData) {
             updateData.sick = { decrement: leaveApp.days }
           } else if (leaveApp.type === 'PERSONAL') {
             updateData.personal = { decrement: leaveApp.days }
+          } else if (leaveApp.type === 'COMPENSATORY') {
+            updateData.usedCompensatory = { increment: leaveApp.days * 8 }
           }
 
           await prisma.leaveBalance.update({
@@ -505,20 +517,11 @@ export async function getPendingApprovals(approverId?: string) {
           return null
         }
 
-        const leaveTypeMap: Record<string, string> = {
-          ANNUAL: '年假',
-          SICK: '病假',
-          PERSONAL: '事假',
-          MARRIAGE: '婚假',
-          MATERNITY: '产假',
-          PATERNITY: '陪产假',
-        }
-
         return {
           ...app,
           userName: app.user.name,
           departmentName: app.user.department?.name,
-          leaveTypeText: leaveTypeMap[app.type],
+          leaveTypeText: leaveTypeMap[app.type] || app.type,
           currentStepName: getCurrentStepLabel(workflow.currentStep),
           currentStepRole: workflow.currentStep.role,
           approvalProgress: buildProgressText(workflow.completedSteps, workflow.totalSteps),
@@ -544,7 +547,29 @@ export async function getApprovalHistory(approverId?: string) {
       take: 50,
     })
 
-    return approvals
+    const applicantIds = Array.from(new Set(approvals.map((approval) => approval.applicantId)))
+    const applicants = applicantIds.length
+      ? await prisma.user.findMany({
+          where: {
+            id: {
+              in: applicantIds,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        })
+      : []
+
+    const applicantMap = new Map(applicants.map((applicant) => [applicant.id, applicant.name]))
+
+    return approvals.map((approval) => ({
+      ...approval,
+      applicantName: applicantMap.get(approval.applicantId) || approval.applicantId,
+      applicationTypeText: approval.applicationType === 'OVERTIME' ? '加班' : '请假',
+      statusText: approval.status === 'APPROVED' ? '通过' : '退回',
+    }))
   } catch (error) {
     console.error('获取审批历史失败:', error)
     return []

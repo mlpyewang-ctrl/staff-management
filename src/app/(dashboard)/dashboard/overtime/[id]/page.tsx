@@ -29,13 +29,16 @@ export default function OvertimeEditPage() {
     load()
   }, [id])
 
-  const canOperate = useMemo(() => !!session?.user?.id, [session?.user?.id])
-  const isReadonly = ['COMPLETED', 'APPROVED'].includes(initial?.status || '')
+  const canOperate = useMemo(
+    () => !!session?.user?.id && session?.user?.id === initial?.userId && initial?.status === 'DRAFT',
+    [initial?.status, initial?.userId, session?.user?.id]
+  )
+  const isReadonly = !canOperate
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!canOperate) {
-      setMessage({ type: 'error', text: '用户未登录' })
+      setMessage({ type: 'error', text: '仅申请人本人可编辑草稿' })
       return
     }
     setLoading(true)
@@ -56,7 +59,7 @@ export default function OvertimeEditPage() {
 
   const onDelete = async () => {
     if (!canOperate) {
-      setMessage({ type: 'error', text: '用户未登录' })
+      setMessage({ type: 'error', text: '仅申请人本人可删除草稿' })
       return
     }
     setLoading(true)
@@ -187,7 +190,7 @@ export default function OvertimeEditPage() {
                 返回
               </Button>
             </div>
-            {isReadonly && <div className="text-sm text-gray-500">该申请已完成，不可再修改。</div>}
+            {isReadonly && <div className="text-sm text-gray-500">仅申请人本人可编辑草稿；已提交后需等待下一岗审核或退回。</div>}
           </form>
         </CardContent>
       </Card>

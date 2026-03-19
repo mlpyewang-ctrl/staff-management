@@ -39,7 +39,14 @@ export interface User {
 
 export type ApplicationStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED'
 
-export type LeaveType = 'ANNUAL' | 'SICK' | 'PERSONAL' | 'MARRIAGE' | 'MATERNITY' | 'PATERNITY'
+export type LeaveType =
+  | 'ANNUAL'
+  | 'SICK'
+  | 'PERSONAL'
+  | 'MARRIAGE'
+  | 'MATERNITY'
+  | 'PATERNITY'
+  | 'COMPENSATORY'
 
 export type ApplicationType = 'OVERTIME' | 'LEAVE'
 
@@ -85,6 +92,8 @@ export interface LeaveBalance {
   annual: number
   sick: number
   personal: number
+  compensatory?: number
+  usedCompensatory?: number
 }
 
 export interface PerformanceReview {

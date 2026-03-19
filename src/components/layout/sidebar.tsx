@@ -16,7 +16,6 @@ export function Sidebar() {
     { name: '仪表盘', href: '/dashboard', icon: '📊' },
     { name: '加班申请', href: '/dashboard/overtime', icon: '⏰' },
     { name: '请假管理', href: '/dashboard/leave', icon: '📅' },
-    { name: '调休管理', href: '/dashboard/compensatory', icon: '🏖️' },
     { name: '绩效管理', href: '/dashboard/performance', icon: '📈' },
     ...(canApprove ? [{ name: '审批中心', href: '/dashboard/approvals', icon: '✅' }] : []),
     ...(isAdmin ? [{ name: '部门管理', href: '/dashboard/departments', icon: '🏢' }] : []),

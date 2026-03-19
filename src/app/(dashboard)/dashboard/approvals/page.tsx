@@ -6,19 +6,25 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { getPendingApprovals, approveApplication } from '@/server/actions/approval'
+import { Badge } from '@/components/ui/badge'
+import { getPendingApprovals, approveApplication, getApprovalHistory } from '@/server/actions/approval'
 
 export default function ApprovalsPage() {
   const { data: session } = useSession()
   const [pendingApps, setPendingApps] = useState<{ overtime: any[]; leave: any[] }>({ overtime: [], leave: [] })
+  const [history, setHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
   const [remark, setRemark] = useState('')
   const [selectedApp, setSelectedApp] = useState<any>(null)
 
   const fetchPendingApprovals = async () => {
-    const data = await getPendingApprovals(session?.user?.id)
+    const [data, historyData] = await Promise.all([
+      getPendingApprovals(session?.user?.id),
+      getApprovalHistory(session?.user?.id),
+    ])
     setPendingApps(data)
+    setHistory(historyData)
   }
 
   useEffect(() => {
@@ -69,7 +75,7 @@ export default function ApprovalsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">审批中心</h1>
-        <p className="text-gray-600 mt-1">处理待审批的加班和请假申请</p>
+        <p className="text-gray-600 mt-1">处理待审批申请，并查看我的审批记录</p>
       </div>
 
       {selectedApp && (
@@ -287,6 +293,48 @@ export default function ApprovalsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>我的审批记录</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>申请类型</TableHead>
+                <TableHead>申请人</TableHead>
+                <TableHead>审批结果</TableHead>
+                <TableHead>审批意见</TableHead>
+                <TableHead>审批时间</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {history.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                    暂无审批记录
+                  </TableCell>
+                </TableRow>
+              ) : (
+                history.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>{item.applicationTypeText}</TableCell>
+                    <TableCell>{item.applicantName}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.status === 'APPROVED' ? 'success' : 'danger'}>
+                        {item.statusText}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">{item.remark || '-'}</TableCell>
+                    <TableCell>{new Date(item.createdAt).toLocaleString('zh-CN')}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 }

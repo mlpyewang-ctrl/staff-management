@@ -61,6 +61,21 @@ export async function createOvertimeApplication(formData: FormData) {
 export async function deleteOvertimeApplication(id: string) {
   try {
     if (!id) return { error: '缺少加班申请 ID' }
+    const application = await prisma.overtimeApplication.findUnique({
+      where: { id },
+      select: {
+        status: true,
+      },
+    })
+
+    if (!application) {
+      return { error: '加班申请不存在' }
+    }
+
+    if (application.status !== 'DRAFT') {
+      return { error: '只有草稿状态的加班申请可以删除' }
+    }
+
     await prisma.approval.deleteMany({
       where: {
         applicationId: id,
@@ -102,8 +117,8 @@ export async function updateOvertimeApplication(formData: FormData) {
       return { error: '加班申请不存在' }
     }
 
-    if (['COMPLETED', 'APPROVED'].includes(application.status)) {
-      return { error: '已完成的申请不可修改' }
+    if (application.status !== 'DRAFT') {
+      return { error: '只有草稿状态的加班申请可以修改' }
     }
 
     // 计算加班时长
@@ -209,11 +224,14 @@ export async function getOvertimeApplication(id: string) {
   }
 }
 
-export async function getOvertimeStats(userId?: string, departmentId?: string) {
+export async function getOvertimeStats(userId?: string, departmentId?: string, referenceMonth?: string) {
   try {
     const now = new Date()
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+    const [year, month] = referenceMonth
+      ? referenceMonth.split('-').map(Number)
+      : [now.getFullYear(), now.getMonth() + 1]
+    const firstDayOfMonth = new Date(year, month - 1, 1)
+    const lastDayOfMonth = new Date(year, month, 0, 23, 59, 59)
 
     const where: any = {
       status: {

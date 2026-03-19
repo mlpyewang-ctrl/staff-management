@@ -5,12 +5,9 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { createOvertimeApplication, getOvertimeApplications, updateOvertimeApplication } from '@/server/actions/overtime'
+import { getOvertimeApplications } from '@/server/actions/overtime'
 
 const statusMap: Record<string, string> = {
   DRAFT: '草稿',
@@ -31,11 +28,8 @@ const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger'
 export default function OvertimePage() {
   const { data: session } = useSession()
   const [applications, setApplications] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState({ type: '', text: '' })
 
   const canCreate = !!session?.user?.id
-  const canEdit = !!session?.user?.id
 
   const fetchApplications = async () => {
     const data = await getOvertimeApplications(
@@ -83,13 +77,13 @@ export default function OvertimePage() {
               <TableHead>类型</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>备注</TableHead>
-              {canEdit && <TableHead>操作</TableHead>}
+              {session?.user?.role === 'EMPLOYEE' && <TableHead>操作</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {applications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={8} className="text-center text-gray-500 py-8">
                     暂无申请记录
                   </TableCell>
                 </TableRow>
@@ -115,11 +109,15 @@ export default function OvertimePage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{app.remark || '-'}</TableCell>
-                    {canEdit && !['COMPLETED', 'APPROVED'].includes(app.status) && (
+                    {session?.user?.role === 'EMPLOYEE' && (
                       <TableCell>
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/dashboard/overtime/${app.id}`}>编辑</Link>
-                        </Button>
+                        {app.status === 'DRAFT' ? (
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/dashboard/overtime/${app.id}`}>编辑</Link>
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-gray-400">审批中/已完成</span>
+                        )}
                       </TableCell>
                     )}
                   </TableRow>

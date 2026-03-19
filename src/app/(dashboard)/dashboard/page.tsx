@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const { data: session } = useSession()
   const [overtimeHours, setOvertimeHours] = useState<number>(0)
   const [leaveDays, setLeaveDays] = useState<number>(0)
+  const [statsMonthLabel, setStatsMonthLabel] = useState<string>('本月')
   const [departments, setDepartments] = useState<any[]>([])
   const [selectedDepartment, setSelectedDepartment] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -25,15 +26,32 @@ export default function DashboardPage() {
       const isEmployee = session.user.role === 'EMPLOYEE'
       const userId = isEmployee ? session.user.id : undefined
       const deptId = !isEmployee && selectedDepartment ? selectedDepartment : undefined
+      const now = new Date()
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const previousMonth = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-      const [hours, days, depts] = await Promise.all([
-        getOvertimeStats(userId, deptId),
-        getLeaveStats(userId, deptId),
+      const [currentHours, currentDays, depts] = await Promise.all([
+        getOvertimeStats(userId, deptId, currentMonth),
+        getLeaveStats(userId, deptId, currentMonth),
         isEmployee ? Promise.resolve([]) : getDepartments(),
       ])
 
-      setOvertimeHours(hours)
-      setLeaveDays(days)
+      if (currentHours === 0 && currentDays === 0) {
+        const [previousHours, previousDays] = await Promise.all([
+          getOvertimeStats(userId, deptId, previousMonth),
+          getLeaveStats(userId, deptId, previousMonth),
+        ])
+
+        setOvertimeHours(previousHours)
+        setLeaveDays(previousDays)
+        setStatsMonthLabel(previousHours === 0 && previousDays === 0 ? '本月' : '上月')
+      } else {
+        setOvertimeHours(currentHours)
+        setLeaveDays(currentDays)
+        setStatsMonthLabel('本月')
+      }
+
       setDepartments(depts)
       setLoading(false)
     }
@@ -43,9 +61,9 @@ export default function DashboardPage() {
 
   const getStatsTitle = () => {
     if (session?.user?.role === 'EMPLOYEE') {
-      return '我的本月统计'
+      return `我的${statsMonthLabel}统计`
     }
-    return selectedDepartment ? '部门本月统计' : '全公司本月统计'
+    return selectedDepartment ? `部门${statsMonthLabel}统计` : `全公司${statsMonthLabel}统计`
   }
 
   const stats = [
@@ -119,9 +137,6 @@ export default function DashboardPage() {
                 </a>
                 <a href="/dashboard/performance/new" className="block p-3 bg-purple-50 rounded-md hover:bg-purple-100 transition-colors">
                   <span className="font-medium text-purple-700">填写绩效</span>
-                </a>
-                <a href="/dashboard/compensatory" className="block p-3 bg-orange-50 rounded-md hover:bg-orange-100 transition-colors">
-                  <span className="font-medium text-orange-700">调休管理</span>
                 </a>
               </>
             )}

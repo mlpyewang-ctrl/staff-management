@@ -3,75 +3,220 @@
 import { prisma } from '@/lib/prisma'
 import { leaveSchema } from '@/lib/validations'
 import { revalidatePath } from 'next/cache'
-import { calculateDays } from '@/lib/utils'
+import { calculateLeaveDaysExcludingNonWorkingDays, formatDateKey } from '@/lib/utils'
+import { SALARY_CONSTANTS } from '@/types'
+
+const leaveTypeMap: Record<string, string> = {
+  ANNUAL: '年假',
+  SICK: '病假',
+  PERSONAL: '事假',
+  MARRIAGE: '婚假',
+  MATERNITY: '产假',
+  PATERNITY: '陪产假',
+  COMPENSATORY: '调休',
+}
+
+function getCurrentYear() {
+  return new Date().getFullYear()
+}
+
+async function getOrCreateLeaveBalance(userId: string) {
+  let balance = await prisma.leaveBalance.findUnique({
+    where: { userId },
+  })
+
+  if (!balance) {
+    balance = await prisma.leaveBalance.create({
+      data: {
+        userId,
+        year: getCurrentYear(),
+        annual: 5,
+        sick: 10,
+        personal: 5,
+        compensatory: 0,
+        usedCompensatory: 0,
+      },
+    })
+  }
+
+  return balance
+}
+
+async function getPendingCompensatoryHours(userId: string, excludeId?: string) {
+  const apps = await prisma.leaveApplication.findMany({
+    where: {
+      userId,
+      type: 'COMPENSATORY',
+      status: 'PENDING',
+      id: excludeId
+        ? {
+            not: excludeId,
+          }
+        : undefined,
+    },
+    select: {
+      days: true,
+    },
+  })
+
+  return apps.reduce((sum, app) => sum + app.days * SALARY_CONSTANTS.HOURS_PER_DAY, 0)
+}
+
+async function getHolidayDateBuckets(startDate: Date, endDate: Date) {
+  const holidays = await prisma.holiday.findMany({
+    where: {
+      date: {
+        gte: new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()),
+        lte: new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59),
+      },
+    },
+    select: {
+      date: true,
+      type: true,
+    },
+  })
+
+  return {
+    legalHolidayDates: holidays
+      .filter((holiday) => holiday.type === 'LEGAL_HOLIDAY')
+      .map((holiday) => formatDateKey(new Date(holiday.date))),
+    compensatoryWorkDates: holidays
+      .filter((holiday) => holiday.type === 'COMPENSATORY')
+      .map((holiday) => formatDateKey(new Date(holiday.date))),
+  }
+}
+
+function buildLeavePayload(formData: FormData) {
+  const validatedData = leaveSchema.parse({
+    type: formData.get('type'),
+    startDate: formData.get('startDate'),
+    endDate: formData.get('endDate'),
+    destination: formData.get('destination'),
+    reason: formData.get('reason'),
+  })
+
+  const startDateTime = new Date(validatedData.startDate)
+  const endDateTime = new Date(validatedData.endDate)
+
+  return {
+    validatedData,
+    startDateTime,
+    endDateTime,
+  }
+}
+
+async function validateLeaveBalance(params: {
+  userId: string
+  leaveType: string
+  days: number
+  isCompensatory: boolean
+  excludeId?: string
+}) {
+  const balance = await getOrCreateLeaveBalance(params.userId)
+
+  if (params.isCompensatory) {
+    const pendingCompensatoryHours = await getPendingCompensatoryHours(params.userId, params.excludeId)
+    const availableCompensatory =
+      (balance.compensatory || 0) - (balance.usedCompensatory || 0) - pendingCompensatoryHours
+
+    if (availableCompensatory < params.days * SALARY_CONSTANTS.HOURS_PER_DAY) {
+      return { error: `调休余额不足，当前可用 ${availableCompensatory} 小时` }
+    }
+
+    return { balance }
+  }
+
+  let currentBalance = 0
+  if (params.leaveType === 'ANNUAL') {
+    currentBalance = balance.annual
+  } else if (params.leaveType === 'SICK') {
+    currentBalance = balance.sick
+  } else if (params.leaveType === 'PERSONAL') {
+    currentBalance = balance.personal
+  }
+
+  if (
+    params.days > currentBalance &&
+    params.leaveType !== 'MARRIAGE' &&
+    params.leaveType !== 'MATERNITY' &&
+    params.leaveType !== 'PATERNITY'
+  ) {
+    return { error: `假期余额不足，剩余${currentBalance}天` }
+  }
+
+  return { balance }
+}
+
+export async function getLeaveDurationPreview(startDate?: string, endDate?: string) {
+  try {
+    if (!startDate || !endDate) {
+      return { days: 0 }
+    }
+
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      return { days: 0 }
+    }
+
+    const holidayBuckets = await getHolidayDateBuckets(start, end)
+    const days = calculateLeaveDaysExcludingNonWorkingDays(start, end, holidayBuckets)
+
+    return { days }
+  } catch (error) {
+    console.error('获取请假天数预览失败:', error)
+    return { days: 0 }
+  }
+}
 
 export async function createLeaveApplication(formData: FormData) {
   try {
-    const validatedData = leaveSchema.parse({
-      type: formData.get('type'),
-      startDate: formData.get('startDate'),
-      endDate: formData.get('endDate'),
-      destination: formData.get('destination'),
-      reason: formData.get('reason'),
-    })
-
     const userId = formData.get('userId') as string
     if (!userId) {
       return { error: '用户未登录' }
     }
 
     const action = (formData.get('action') as string) === 'submit' ? 'submit' : 'save'
+    const payload = buildLeavePayload(formData)
+    const holidayBuckets = await getHolidayDateBuckets(payload.startDateTime, payload.endDateTime)
+    const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, holidayBuckets)
 
-    // 检查假期余额（仅提交时强校验）
-    const balance = await prisma.leaveBalance.findFirst({
-      where: {
-        userId,
-        year: new Date().getFullYear(),
-      },
-    })
-
-    const startDateTime = new Date(validatedData.startDate)
-    const endDateTime = new Date(validatedData.endDate)
-    const rawDays = calculateDays(startDateTime, endDateTime)
-    // 请假天数按 0.5 天为粒度向上取整
-    const days = Math.ceil(rawDays * 2) / 2
-
-    // 根据假期类型检查余额
-    let currentBalance = 0
-    if (validatedData.type === 'ANNUAL' && balance) {
-      currentBalance = balance.annual
-    } else if (validatedData.type === 'SICK' && balance) {
-      currentBalance = balance.sick
-    } else if (validatedData.type === 'PERSONAL' && balance) {
-      currentBalance = balance.personal
+    if (days <= 0) {
+      return { error: '所选日期不包含有效工作日，请重新选择' }
     }
 
-    if (
-      action === 'submit' &&
-      days > currentBalance &&
-      validatedData.type !== 'MARRIAGE' &&
-      validatedData.type !== 'MATERNITY' &&
-      validatedData.type !== 'PATERNITY'
-    ) {
-      return { error: `假期余额不足，剩余${currentBalance}天` }
+    if (action === 'submit') {
+      const balanceCheck = await validateLeaveBalance({
+        userId,
+        leaveType: payload.validatedData.type,
+        days,
+        isCompensatory: payload.validatedData.type === 'COMPENSATORY',
+      })
+
+      if (balanceCheck.error) {
+        return { error: balanceCheck.error }
+      }
     }
 
     const created = await prisma.leaveApplication.create({
       data: {
         userId,
-        type: validatedData.type,
-        startDate: startDateTime,
-        endDate: endDateTime,
+        type: payload.validatedData.type,
+        startDate: payload.startDateTime,
+        endDate: payload.endDateTime,
         days,
-        reason: validatedData.reason,
-        destination: validatedData.destination,
+        reason: payload.validatedData.reason,
+        destination: payload.validatedData.destination,
         status: action === 'submit' ? 'PENDING' : 'DRAFT',
       },
     })
 
     revalidatePath('/dashboard/leave')
+    revalidatePath('/dashboard/compensatory')
+    const applicationLabel = payload.validatedData.type === 'COMPENSATORY' ? '调休申请' : '请假申请'
     return {
-      success: action === 'submit' ? '请假申请已提交' : '请假草稿已保存',
+      success: action === 'submit' ? `${applicationLabel}已提交` : `${applicationLabel.replace('申请', '')}草稿已保存`,
       id: created.id,
       status: created.status,
     }
@@ -96,6 +241,22 @@ export async function getLeaveApplication(id: string) {
 export async function deleteLeaveApplication(id: string) {
   try {
     if (!id) return { error: '缺少请假申请 ID' }
+
+    const application = await prisma.leaveApplication.findUnique({
+      where: { id },
+      select: {
+        status: true,
+      },
+    })
+
+    if (!application) {
+      return { error: '请假申请不存在' }
+    }
+
+    if (application.status !== 'DRAFT') {
+      return { error: '只有草稿状态的请假申请可以删除' }
+    }
+
     await prisma.approval.deleteMany({
       where: {
         applicationId: id,
@@ -104,6 +265,7 @@ export async function deleteLeaveApplication(id: string) {
     })
     await prisma.leaveApplication.delete({ where: { id } })
     revalidatePath('/dashboard/leave')
+    revalidatePath('/dashboard/compensatory')
     return { success: '请假申请已删除' }
   } catch (error) {
     if (error instanceof Error) return { error: error.message }
@@ -118,14 +280,6 @@ export async function updateLeaveApplication(formData: FormData) {
       return { error: '缺少请假申请 ID' }
     }
 
-    const validatedData = leaveSchema.parse({
-      type: formData.get('type'),
-      startDate: formData.get('startDate'),
-      endDate: formData.get('endDate'),
-      destination: formData.get('destination'),
-      reason: formData.get('reason'),
-    })
-
     const application = await prisma.leaveApplication.findUnique({
       where: { id },
     })
@@ -133,16 +287,32 @@ export async function updateLeaveApplication(formData: FormData) {
       return { error: '请假申请不存在' }
     }
 
-    if (['COMPLETED', 'APPROVED'].includes(application.status)) {
-      return { error: '已完成的申请不可修改' }
+    if (application.status !== 'DRAFT') {
+      return { error: '只有草稿状态的请假申请可以修改' }
     }
 
-    const startDateTime = new Date(validatedData.startDate)
-    const endDateTime = new Date(validatedData.endDate)
-    const rawDays = calculateDays(startDateTime, endDateTime)
-    const days = Math.ceil(rawDays * 2) / 2
-
+    const payload = buildLeavePayload(formData)
+    const holidayBuckets = await getHolidayDateBuckets(payload.startDateTime, payload.endDateTime)
+    const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, holidayBuckets)
     const nextStatus = (formData.get('action') as string) === 'submit' ? 'PENDING' : 'DRAFT'
+
+    if (days <= 0) {
+      return { error: '所选日期不包含有效工作日，请重新选择' }
+    }
+
+    if (nextStatus === 'PENDING') {
+      const balanceCheck = await validateLeaveBalance({
+        userId: application.userId,
+        leaveType: payload.validatedData.type,
+        days,
+        isCompensatory: payload.validatedData.type === 'COMPENSATORY',
+        excludeId: id,
+      })
+
+      if (balanceCheck.error) {
+        return { error: balanceCheck.error }
+      }
+    }
 
     await prisma.approval.deleteMany({
       where: {
@@ -154,12 +324,12 @@ export async function updateLeaveApplication(formData: FormData) {
     await prisma.leaveApplication.update({
       where: { id },
       data: {
-        type: validatedData.type,
-        startDate: startDateTime,
-        endDate: endDateTime,
+        type: payload.validatedData.type,
+        startDate: payload.startDateTime,
+        endDate: payload.endDateTime,
         days,
-        reason: validatedData.reason,
-        destination: validatedData.destination,
+        reason: payload.validatedData.reason,
+        destination: payload.validatedData.destination,
         status: nextStatus,
         approverId: null,
         approvedAt: null,
@@ -168,7 +338,9 @@ export async function updateLeaveApplication(formData: FormData) {
     })
 
     revalidatePath('/dashboard/leave')
-    return { success: nextStatus === 'PENDING' ? '请假申请已提交，审批流程已重新开始' : '请假申请已保存为草稿' }
+    revalidatePath('/dashboard/compensatory')
+    const applicationLabel = payload.validatedData.type === 'COMPENSATORY' ? '调休申请' : '请假申请'
+    return { success: nextStatus === 'PENDING' ? `${applicationLabel}已提交` : `${applicationLabel}已保存为草稿` }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -180,7 +352,7 @@ export async function updateLeaveApplication(formData: FormData) {
 export async function getLeaveApplications(userId?: string, role?: string) {
   try {
     const where: any = {}
-    
+
     if (role === 'EMPLOYEE' && userId) {
       where.userId = userId
     }
@@ -198,19 +370,11 @@ export async function getLeaveApplications(userId?: string, role?: string) {
       orderBy: { createdAt: 'desc' },
     })
 
-    const leaveTypeMap: Record<string, string> = {
-      ANNUAL: '年假',
-      SICK: '病假',
-      PERSONAL: '事假',
-      MARRIAGE: '婚假',
-      MATERNITY: '产假',
-      PATERNITY: '陪产假',
-    }
-
-    return applications.map(app => ({
+    return applications.map((app) => ({
       ...app,
       userName: app.user.name,
-      leaveTypeText: leaveTypeMap[app.type],
+      leaveTypeText: leaveTypeMap[app.type] || app.type,
+      compensatoryHours: app.type === 'COMPENSATORY' ? app.days * SALARY_CONSTANTS.HOURS_PER_DAY : 0,
     }))
   } catch (error) {
     console.error('获取请假申请列表失败:', error)
@@ -224,7 +388,6 @@ export async function getLeaveBalances(userId: string) {
       return null
     }
 
-    // reseed 后旧 session 里的 userId 可能已经失效，先校验用户是否存在，避免外键报错
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true },
@@ -233,27 +396,7 @@ export async function getLeaveBalances(userId: string) {
       return null
     }
 
-    // userId 在 schema 中是 unique，直接按 userId 查
-    const balance = await prisma.leaveBalance.findUnique({
-      where: { userId },
-    })
-
-    if (!balance) {
-      // 创建默认余额
-      const newBalance = await prisma.leaveBalance.create({
-        data: {
-          userId,
-          year: new Date().getFullYear(),
-          annual: 5,
-          sick: 10,
-          personal: 5,
-          compensatory: 0,
-          usedCompensatory: 0,
-        },
-      })
-      return newBalance
-    }
-
+    const balance = await getOrCreateLeaveBalance(userId)
     return balance
   } catch (error) {
     console.error('获取假期余额失败:', error)
@@ -261,11 +404,14 @@ export async function getLeaveBalances(userId: string) {
   }
 }
 
-export async function getLeaveStats(userId?: string, departmentId?: string) {
+export async function getLeaveStats(userId?: string, departmentId?: string, referenceMonth?: string) {
   try {
     const now = new Date()
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+    const [year, month] = referenceMonth
+      ? referenceMonth.split('-').map(Number)
+      : [now.getFullYear(), now.getMonth() + 1]
+    const firstDayOfMonth = new Date(year, month - 1, 1)
+    const lastDayOfMonth = new Date(year, month, 0, 23, 59, 59)
 
     const where: any = {
       status: {
@@ -285,7 +431,7 @@ export async function getLeaveStats(userId?: string, departmentId?: string) {
 
     if (departmentId) {
       where.user = {
-        departmentId: departmentId,
+        departmentId,
       }
     }
 
@@ -300,24 +446,20 @@ export async function getLeaveStats(userId?: string, departmentId?: string) {
 
     let totalDays = 0
     for (const app of applications) {
-      // Calculate the overlap between the leave period and current month
       const leaveStart = new Date(app.startDate)
       const leaveEnd = new Date(app.endDate)
 
       const effectiveStart = leaveStart < firstDayOfMonth ? firstDayOfMonth : leaveStart
       const effectiveEnd = leaveEnd > lastDayOfMonth ? lastDayOfMonth : leaveEnd
 
-      // Calculate days in the overlap period
       const msPerDay = 24 * 60 * 60 * 1000
       const overlapDays = Math.ceil((effectiveEnd.getTime() - effectiveStart.getTime()) / msPerDay) + 1
-
-      // Proportionally allocate the leave days
       const totalLeaveDays = (leaveEnd.getTime() - leaveStart.getTime()) / msPerDay + 1
       const ratio = overlapDays / totalLeaveDays
       totalDays += app.days * ratio
     }
 
-    return Math.round(totalDays * 2) / 2 // Round to nearest 0.5
+    return Math.round(totalDays * 2) / 2
   } catch (error) {
     console.error('获取请假统计失败:', error)
     return 0

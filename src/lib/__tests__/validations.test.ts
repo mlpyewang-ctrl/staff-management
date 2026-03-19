@@ -139,7 +139,7 @@ describe('leaveSchema', () => {
   })
 
   it('should accept all valid leave types', () => {
-    const types = ['ANNUAL', 'SICK', 'PERSONAL', 'MARRIAGE', 'MATERNITY', 'PATERNITY'] as const
+    const types = ['ANNUAL', 'SICK', 'PERSONAL', 'MARRIAGE', 'MATERNITY', 'PATERNITY', 'COMPENSATORY'] as const
     types.forEach((type) => {
       const result = leaveSchema.safeParse({
         type,
