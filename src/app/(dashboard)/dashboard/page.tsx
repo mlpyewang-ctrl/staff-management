@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Calendar } from '@/components/ui/calendar'
 import { getOvertimeStats } from '@/server/actions/overtime'
 import { getLeaveStats } from '@/server/actions/leave'
 import { getDepartments } from '@/server/actions/department'
@@ -119,6 +120,9 @@ export default function DashboardPage() {
                 <a href="/dashboard/performance/new" className="block p-3 bg-purple-50 rounded-md hover:bg-purple-100 transition-colors">
                   <span className="font-medium text-purple-700">填写绩效</span>
                 </a>
+                <a href="/dashboard/compensatory" className="block p-3 bg-orange-50 rounded-md hover:bg-orange-100 transition-colors">
+                  <span className="font-medium text-orange-700">调休管理</span>
+                </a>
               </>
             )}
             {(session?.user?.role === 'MANAGER' || session?.user?.role === 'ADMIN') && (
@@ -131,20 +135,30 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>系统公告</CardTitle>
+            <CardTitle>日历</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="text-sm text-gray-600">
-                <p>欢迎使用劳务派遣员工管理系统</p>
-                <p>请按时完成月度绩效填写</p>
-                <p>加班申请需提前 1 天提交</p>
-                <p>请假申请请确保假期余额充足</p>
-              </div>
-            </div>
+            <Calendar />
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>系统公告</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="text-sm text-gray-600">
+              <p>欢迎使用劳务派遣员工管理系统</p>
+              <p>请按时完成月度绩效填写</p>
+              <p>加班申请需提前 1 天提交</p>
+              <p>请假申请请确保假期余额充足</p>
+              <p>月加班超过36小时部分自动转调休</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

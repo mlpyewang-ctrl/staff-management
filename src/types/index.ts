@@ -116,3 +116,76 @@ export interface Approval {
   applicantName?: string
   applicationDate?: Date
 }
+
+// ========== 新增：薪资和调休相关类型 ==========
+
+export type SalaryStatus = 'DRAFT' | 'CONFIRMED' | 'PAID'
+
+export type OvertimeType = 'WORKDAY' | 'WEEKEND' | 'HOLIDAY'
+
+export type SettlementType = 'SALARY' | 'COMPENSATORY'
+
+export type HolidayType = 'LEGAL_HOLIDAY' | 'COMPENSATORY'
+
+export interface Holiday {
+  id: string
+  name: string
+  date: Date
+  year: number
+  type: HolidayType
+  createdAt: Date
+}
+
+export interface SalaryRecord {
+  id: string
+  userId: string
+  month: string
+  baseSalary: number
+  workdayOvertimeHours: number
+  workdayOvertimePay: number
+  weekendOvertimeHours: number
+  weekendOvertimePay: number
+  holidayOvertimeHours: number
+  holidayOvertimePay: number
+  totalOvertimePay: number
+  compensatoryHours: number
+  deduction: number
+  netSalary: number
+  status: SalaryStatus
+  paidAt?: Date | null
+  createdAt: Date
+  updatedAt: Date
+  userName?: string
+  departmentName?: string
+  positionName?: string
+}
+
+export interface OvertimeSettlement {
+  id: string
+  userId: string
+  overtimeId: string
+  salaryRecordId?: string | null
+  hours: number
+  settlementType: SettlementType
+  createdAt: Date
+}
+
+export interface CompensatoryLeaveInfo {
+  totalCompensatory: number       // 累计调休（小时）
+  availableCompensatory: number   // 可用调休（小时）
+  usedCompensatory: number        // 已使用调休（小时）
+  settledOvertimeHours: number    // 已清算加班时长（小时）
+}
+
+// 薪资计算参数
+export const SALARY_CONSTANTS = {
+  WORKDAYS_PER_MONTH: 21.75,      // 月计薪天数
+  HOURS_PER_DAY: 8,               // 每天工作小时数
+  MAX_OVERTIME_HOURS: 36,         // 每月最大加班小时数（超过转调休）
+  WORKDAY_OVERTIME_RATE: 1.5,     // 工作日加班倍率
+  WEEKEND_OVERTIME_RATE: 2.0,     // 周末加班倍率
+  HOLIDAY_OVERTIME_RATE: 3.0,     // 法定节假日加班倍率
+  FULL_DAY_HOURS: 8,              // 一天调休小时数
+  HALF_DAY_HOURS: 4,              // 半天调休小时数
+  SALARY_CUTOFF_DAY: 20,          // 薪资截止日（每月20号）
+} as const

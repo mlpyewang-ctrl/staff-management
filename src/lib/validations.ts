@@ -72,3 +72,27 @@ export const positionSchema = z.object({
     .refine((v) => !isNaN(Number(v)) && Number(v) >= 0, '请输入有效的薪资数额'),
   level: z.string().optional(),
 })
+
+// ========== 新增：薪资和调休相关验证规则 ==========
+
+export const salaryGenerateSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, '请选择有效的月份'),
+  departmentId: z.string().optional(),
+})
+
+export const salaryStatusSchema = z.object({
+  salaryId: z.string(),
+  status: z.enum(['CONFIRMED', 'PAID']),
+})
+
+export const compensatoryUseSchema = z.object({
+  hours: z.enum(['4', '8']), // 半天4h 或 一天8h
+  startDate: z.string(),
+  reason: z.string().min(10, '请详细描述调休事由（至少 10 个字符）'),
+})
+
+export const holidaySchema = z.object({
+  name: z.string().min(2, '节假日名称至少需要 2 个字符'),
+  date: z.string(),
+  type: z.enum(['LEGAL_HOLIDAY', 'COMPENSATORY']),
+})

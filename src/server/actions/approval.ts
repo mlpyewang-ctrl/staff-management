@@ -6,31 +6,6 @@ import { revalidatePath } from 'next/cache'
 
 export async function approveApplication(formData: FormData) {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '7d0b3e',
-      },
-      body: JSON.stringify({
-        sessionId: '7d0b3e',
-        runId: 'pre-fix',
-        hypothesisId: 'H_in',
-        location: 'src/server/actions/approval.ts:approveApplication',
-        message: 'ApproveApplication entry',
-        data: {
-          applicationId: formData.get('applicationId'),
-          applicationType: formData.get('applicationType'),
-          status: formData.get('status'),
-          remarkType: typeof formData.get('remark'),
-          approverIdPresent: !!formData.get('approverId'),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
-
     const validatedData = approvalSchema.parse({
       applicationId: formData.get('applicationId'),
       applicationType: formData.get('applicationType'),
@@ -55,30 +30,6 @@ export async function approveApplication(formData: FormData) {
         return { error: '加班申请不存在' }
       }
 
-      // #region agent log
-      fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '7d0b3e',
-        },
-        body: JSON.stringify({
-          sessionId: '7d0b3e',
-          runId: 'pre-fix',
-          hypothesisId: 'H1',
-          location: 'src/server/actions/approval.ts:approveApplication:OVERTIME',
-          message: 'Overtime branch before update/create approval',
-          data: {
-            applicationId: validatedData.applicationId,
-            status: validatedData.status,
-            approverIdPresent: !!approverId,
-            applicantIdPresent: !!overtimeApp.userId,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
-
       await prisma.overtimeApplication.update({
         where: { id: validatedData.applicationId },
         data: {
@@ -101,29 +52,6 @@ export async function approveApplication(formData: FormData) {
         },
       })
     } else if (validatedData.applicationType === 'LEAVE') {
-      // #region agent log
-      fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '7d0b3e',
-        },
-        body: JSON.stringify({
-          sessionId: '7d0b3e',
-          runId: 'pre-fix',
-          hypothesisId: 'H2',
-          location: 'src/server/actions/approval.ts:approveApplication:LEAVE',
-          message: 'Leave branch entry',
-          data: {
-            applicationId: validatedData.applicationId,
-            status: validatedData.status,
-            approverIdPresent: !!approverId,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
-
       const leaveApp = await prisma.leaveApplication.findUnique({
         where: { id: validatedData.applicationId },
       })
@@ -186,29 +114,6 @@ export async function approveApplication(formData: FormData) {
     revalidatePath('/dashboard/leave')
     return { success: '审批完成' }
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '7d0b3e',
-      },
-      body: JSON.stringify({
-        sessionId: '7d0b3e',
-        runId: 'pre-fix',
-        hypothesisId: 'H_err',
-        location: 'src/server/actions/approval.ts:approveApplication:catch',
-        message: 'ApproveApplication error',
-        data: {
-          name: (error as any)?.name,
-          message: (error as any)?.message,
-          code: (error as any)?.code,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
-
     if (error instanceof Error) {
       return { error: error.message }
     }

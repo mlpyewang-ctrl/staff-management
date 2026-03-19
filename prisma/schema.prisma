@@ -36,6 +36,8 @@ model User {
   reviewedPerformance  PerformanceReview[] @relation("Reviewee")
   approvals            Approval[]
   leaveBalance         LeaveBalance?
+  salaryRecords        SalaryRecord[]
+  overtimeSettlements  OvertimeSettlement[]
 
   department Department? @relation(fields: [departmentId], references: [id])
   position   Position?   @relation(fields: [positionId], references: [id])
@@ -76,6 +78,8 @@ model OvertimeApplication {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
+  overtimeSettlements OvertimeSettlement[]
+  
   @@map("overtime_applications")
 }
 
@@ -100,17 +104,77 @@ model LeaveApplication {
 }
 
 model LeaveBalance {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  year      Int      // 年份
-  annual    Float    @default(5)   // 年假余额
-  sick      Float    @default(10)  // 病假余额
-  personal  Float    @default(5)   // 事假余额
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year             Int      // 年份
+  annual           Float    @default(5)   // 年假余额
+  sick             Float    @default(10)  // 病假余额
+  personal         Float    @default(5)   // 事假余额
+  compensatory     Float    @default(0)   // 调休余额（小时）
+  usedCompensatory Float    @default(0)   // 已使用调休（小时）
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   
   @@map("leave_balances")
+}
+
+// 法定节假日
+model Holiday {
+  id        String   @id @default(cuid())
+  name      String            // 节假日名称
+  date      DateTime          // 日期
+  year      Int               // 年份
+  type      String            // LEGAL_HOLIDAY（法定节假日）/ COMPENSATORY（调休工作日）
+  createdAt DateTime @default(now())
+  
+  @@index([year])
+  @@index([date])
+  @@map("holidays")
+}
+
+// 薪资记录
+model SalaryRecord {
+  id                   String   @id @default(cuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month                String                         // 薪资月份 YYYY-MM
+  baseSalary           Float                          // 基本工资
+  workdayOvertimeHours Float    @default(0)           // 工作日加班小时
+  workdayOvertimePay   Float    @default(0)           // 工作日加班费
+  weekendOvertimeHours Float    @default(0)           // 周末加班小时
+  weekendOvertimePay   Float    @default(0)           // 周末加班费
+  holidayOvertimeHours Float    @default(0)           // 节假日加班小时
+  holidayOvertimePay   Float    @default(0)           // 节假日加班费
+  totalOvertimePay     Float    @default(0)           // 加班费合计
+  compensatoryHours    Float    @default(0)           // 转调休时长（小时）
+  deduction            Float    @default(0)           // 请假扣款
+  netSalary            Float                          // 应发工资
+  status               String   @default("DRAFT")     // DRAFT/CONFIRMED/PAID
+  paidAt               DateTime?                      // 发放时间
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  overtimeSettlements  OvertimeSettlement[]
+
+  @@unique([userId, month])
+  @@map("salary_records")
+}
+
+// 加班清算记录（记录每笔加班是计薪还是转调休）
+model OvertimeSettlement {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  overtimeId     String
+  overtime       OvertimeApplication @relation(fields: [overtimeId], references: [id], onDelete: Cascade)
+  salaryRecordId String?
+  salaryRecord   SalaryRecord? @relation(fields: [salaryRecordId], references: [id], onDelete: SetNull)
+  hours          Float                          // 清算的小时数
+  settlementType String                         // SALARY（计薪）/ COMPENSATORY（转调休）
+  createdAt      DateTime @default(now())
+
+  @@map("overtime_settlements")
 }
 
 model PerformanceReview {

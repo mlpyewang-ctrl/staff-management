@@ -22,28 +22,6 @@ export async function createLeaveApplication(formData: FormData) {
 
     const action = (formData.get('action') as string) === 'submit' ? 'submit' : 'save'
 
-    // #region agent log
-    fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '00641c',
-      },
-      body: JSON.stringify({
-        sessionId: '00641c',
-        runId: 'pre-fix',
-        hypothesisId: 'S2',
-        location: 'src/server/actions/leave.ts:createLeaveApplication',
-        message: 'Create leave',
-        data: {
-          action,
-          userIdPresent: !!userId,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
-
     // 检查假期余额（仅提交时强校验）
     const balance = await prisma.leaveBalance.findFirst({
       where: {
@@ -220,11 +198,22 @@ export async function getLeaveApplications(userId?: string, role?: string) {
 
 export async function getLeaveBalances(userId: string) {
   try {
-    const balance = await prisma.leaveBalance.findFirst({
-      where: {
-        userId,
-        year: new Date().getFullYear(),
-      },
+    if (!userId) {
+      return null
+    }
+
+    // reseed 后旧 session 里的 userId 可能已经失效，先校验用户是否存在，避免外键报错
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+    if (!user) {
+      return null
+    }
+
+    // userId 在 schema 中是 unique，直接按 userId 查
+    const balance = await prisma.leaveBalance.findUnique({
+      where: { userId },
     })
 
     if (!balance) {
@@ -233,6 +222,11 @@ export async function getLeaveBalances(userId: string) {
         data: {
           userId,
           year: new Date().getFullYear(),
+          annual: 5,
+          sick: 10,
+          personal: 5,
+          compensatory: 0,
+          usedCompensatory: 0,
         },
       })
       return newBalance

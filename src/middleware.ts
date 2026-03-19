@@ -43,6 +43,13 @@ export async function middleware(req: any) {
         return NextResponse.redirect(new URL('/dashboard', nextUrl))
       }
     }
+    
+    // 薪资管理页面只有管理员可以访问
+    if (nextUrl.pathname.startsWith('/dashboard/salary')) {
+      if (role !== 'ADMIN') {
+        return NextResponse.redirect(new URL('/dashboard', nextUrl))
+      }
+    }
   }
 
   return NextResponse.next()

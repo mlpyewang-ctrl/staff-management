@@ -31,28 +31,6 @@ export async function createOvertimeApplication(formData: FormData) {
 
     const action = (formData.get('action') as string) === 'submit' ? 'submit' : 'save'
 
-    // #region agent log
-    fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '00641c',
-      },
-      body: JSON.stringify({
-        sessionId: '00641c',
-        runId: 'pre-fix',
-        hypothesisId: 'S1',
-        location: 'src/server/actions/overtime.ts:createOvertimeApplication',
-        message: 'Create overtime',
-        data: {
-          action,
-          userIdPresent: !!userId,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
-
     const created = await prisma.overtimeApplication.create({
       data: {
         userId,

@@ -40,55 +40,12 @@ export default function OvertimePage() {
     )
     setApplications(data)
 
-    // #region agent log
-    fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '21ada3',
-      },
-      body: JSON.stringify({
-        sessionId: '21ada3',
-        runId: 'nav-debug',
-        hypothesisId: 'H-buttons',
-        location: 'src/app/(dashboard)/dashboard/overtime/page.tsx:39',
-        message: 'overtime page loaded',
-        data: {
-          role: session?.user?.role ?? null,
-          appCount: data.length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion agent log
   }
 
   useEffect(() => {
     if (session) {
       fetchApplications()
 
-      // #region agent log
-      fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '00641c',
-        },
-        body: JSON.stringify({
-          sessionId: '00641c',
-          runId: 'pre-fix',
-          hypothesisId: 'B2',
-          location: 'src/app/(dashboard)/dashboard/overtime/page.tsx:useEffect',
-          message: 'Overtime page session ready',
-          data: {
-            role: session?.user?.role ?? null,
-            canCreate,
-            canEdit,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
     }
   }, [session])
 

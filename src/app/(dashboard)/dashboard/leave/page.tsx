@@ -58,50 +58,6 @@ export default function LeavePage() {
       fetchApplications()
       fetchBalances()
 
-      // #region agent log
-      fetch('http://127.0.0.1:7875/ingest/9ebff9d1-0e95-46e2-b9d7-c6c26881e0ee', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '00641c',
-        },
-        body: JSON.stringify({
-          sessionId: '00641c',
-          runId: 'pre-fix',
-          hypothesisId: 'B3',
-          location: 'src/app/(dashboard)/dashboard/leave/page.tsx:useEffect',
-          message: 'Leave page session ready',
-          data: {
-            role: session?.user?.role ?? null,
-            canCreate,
-            canEdit,
-            hasBalances: !!balances,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
-
-      // #region agent log
-      fetch('http://127.0.0.1:7411/ingest/a123eedd-0d9e-424e-b565-89bc816ab6ab', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '21ada3',
-        },
-        body: JSON.stringify({
-          sessionId: '21ada3',
-          runId: 'nav-debug',
-          hypothesisId: 'H-buttons',
-          location: 'src/app/(dashboard)/dashboard/leave/page.tsx:63',
-          message: 'leave page loaded',
-          data: {
-            role: session.user?.role ?? null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
     }
   }, [session])
 
