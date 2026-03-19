@@ -21,9 +21,10 @@ import {
   getSalaryExportData,
   updateSalaryStatus,
   deleteSalaryRecord,
+  getSalaryMonths,
 } from '@/server/actions/salary'
 import { getDepartments } from '@/server/actions/department'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
 
 interface SalaryRecord {
   id: string
@@ -63,6 +64,7 @@ export default function SalaryPage() {
   const [records, setRecords] = useState<SalaryRecord[]>([])
   const [stats, setStats] = useState<SalaryStats | null>(null)
   const [departments, setDepartments] = useState<any[]>([])
+  const [months, setMonths] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({
     month: '',
@@ -78,14 +80,16 @@ export default function SalaryPage() {
 
     const loadData = async () => {
       setLoading(true)
-      const [recordsData, statsData, depts] = await Promise.all([
+      const [recordsData, statsData, depts, monthOptions] = await Promise.all([
         getSalaryRecords(filters),
         getSalaryStats(filters.month || undefined),
         getDepartments(),
+        getSalaryMonths(),
       ])
       setRecords(recordsData)
       setStats(statsData)
       setDepartments(depts)
+      setMonths(monthOptions)
       setLoading(false)
     }
 
@@ -217,12 +221,18 @@ export default function SalaryPage() {
           <div className="flex flex-wrap gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">月份</label>
-              <input
-                type="month"
+              <select
                 className="block rounded-md border border-gray-300 px-3 py-1.5 text-sm"
                 value={filters.month}
                 onChange={(e) => setFilters({ ...filters, month: e.target.value })}
-              />
+              >
+                <option value="">全部月份</option>
+                {months.map((month) => (
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">部门</label>

@@ -116,7 +116,8 @@ export default function CompensatoryPage() {
     const statusConfig: Record<string, { variant: 'default' | 'success' | 'warning' | 'danger'; text: string }> = {
       PENDING: { variant: 'warning', text: '待审批' },
       APPROVED: { variant: 'success', text: '已通过' },
-      REJECTED: { variant: 'danger', text: '已拒绝' },
+      REJECTED: { variant: 'danger', text: '已退回' },
+      COMPLETED: { variant: 'success', text: '已完成' },
       DRAFT: { variant: 'default', text: '草稿' },
     }
     const config = statusConfig[status] || { variant: 'default', text: status }

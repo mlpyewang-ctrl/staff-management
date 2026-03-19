@@ -8,12 +8,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { getPendingApprovals, approveApplication } from '@/server/actions/approval'
 
-const statusVariant: Record<string, 'warning' | 'success' | 'danger'> = {
-  PENDING: 'warning',
-  APPROVED: 'success',
-  REJECTED: 'danger',
-}
-
 export default function ApprovalsPage() {
   const { data: session } = useSession()
   const [pendingApps, setPendingApps] = useState<{ overtime: any[]; leave: any[] }>({ overtime: [], leave: [] })
@@ -23,7 +17,7 @@ export default function ApprovalsPage() {
   const [selectedApp, setSelectedApp] = useState<any>(null)
 
   const fetchPendingApprovals = async () => {
-    const data = await getPendingApprovals(session?.user?.role)
+    const data = await getPendingApprovals(session?.user?.id)
     setPendingApps(data)
   }
 
@@ -90,6 +84,14 @@ export default function ApprovalsPage() {
               <div>
                 <Label className="text-sm text-gray-600">申请人</Label>
                 <div className="font-medium">{selectedApp.userName}</div>
+              </div>
+              <div>
+                <Label className="text-sm text-gray-600">当前审批岗</Label>
+                <div className="font-medium">{selectedApp.currentStepName}</div>
+              </div>
+              <div>
+                <Label className="text-sm text-gray-600">审批进度</Label>
+                <div className="font-medium">{selectedApp.approvalProgress}</div>
               </div>
               {selectedApp.type === 'OVERTIME' ? (
                 <>
@@ -196,6 +198,8 @@ export default function ApprovalsPage() {
                   <TableHead>申请人</TableHead>
                   <TableHead>日期</TableHead>
                   <TableHead>时长</TableHead>
+                  <TableHead>审批岗</TableHead>
+                  <TableHead>进度</TableHead>
                   <TableHead>事由</TableHead>
                   <TableHead>操作</TableHead>
                 </TableRow>
@@ -203,7 +207,7 @@ export default function ApprovalsPage() {
               <TableBody>
                 {pendingApps.overtime.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                       暂无待审批加班
                     </TableCell>
                   </TableRow>
@@ -215,6 +219,8 @@ export default function ApprovalsPage() {
                         {new Date(app.date).toLocaleDateString('zh-CN')}
                       </TableCell>
                       <TableCell>{app.hours}小时</TableCell>
+                      <TableCell>{app.currentStepName}</TableCell>
+                      <TableCell>{app.approvalProgress}</TableCell>
                       <TableCell className="max-w-xs truncate">{app.reason}</TableCell>
                       <TableCell>
                         <Button
@@ -243,6 +249,8 @@ export default function ApprovalsPage() {
                   <TableHead>申请人</TableHead>
                   <TableHead>类型</TableHead>
                   <TableHead>天数</TableHead>
+                  <TableHead>审批岗</TableHead>
+                  <TableHead>进度</TableHead>
                   <TableHead>事由</TableHead>
                   <TableHead>操作</TableHead>
                 </TableRow>
@@ -250,7 +258,7 @@ export default function ApprovalsPage() {
               <TableBody>
                 {pendingApps.leave.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                       暂无待审批请假
                     </TableCell>
                   </TableRow>
@@ -260,6 +268,8 @@ export default function ApprovalsPage() {
                       <TableCell>{app.userName}</TableCell>
                       <TableCell>{app.leaveTypeText}</TableCell>
                       <TableCell>{app.days}天</TableCell>
+                      <TableCell>{app.currentStepName}</TableCell>
+                      <TableCell>{app.approvalProgress}</TableCell>
                       <TableCell className="max-w-xs truncate">{app.reason}</TableCell>
                       <TableCell>
                         <Button

@@ -96,6 +96,12 @@ export async function getLeaveApplication(id: string) {
 export async function deleteLeaveApplication(id: string) {
   try {
     if (!id) return { error: '缺少请假申请 ID' }
+    await prisma.approval.deleteMany({
+      where: {
+        applicationId: id,
+        applicationType: 'LEAVE',
+      },
+    })
     await prisma.leaveApplication.delete({ where: { id } })
     revalidatePath('/dashboard/leave')
     return { success: '请假申请已删除' }
@@ -127,10 +133,23 @@ export async function updateLeaveApplication(formData: FormData) {
       return { error: '请假申请不存在' }
     }
 
+    if (['COMPLETED', 'APPROVED'].includes(application.status)) {
+      return { error: '已完成的申请不可修改' }
+    }
+
     const startDateTime = new Date(validatedData.startDate)
     const endDateTime = new Date(validatedData.endDate)
     const rawDays = calculateDays(startDateTime, endDateTime)
     const days = Math.ceil(rawDays * 2) / 2
+
+    const nextStatus = (formData.get('action') as string) === 'submit' ? 'PENDING' : 'DRAFT'
+
+    await prisma.approval.deleteMany({
+      where: {
+        applicationId: id,
+        applicationType: 'LEAVE',
+      },
+    })
 
     await prisma.leaveApplication.update({
       where: { id },
@@ -141,12 +160,15 @@ export async function updateLeaveApplication(formData: FormData) {
         days,
         reason: validatedData.reason,
         destination: validatedData.destination,
-        status: (formData.get('action') as string) === 'submit' ? 'PENDING' : undefined,
+        status: nextStatus,
+        approverId: null,
+        approvedAt: null,
+        remark: null,
       },
     })
 
     revalidatePath('/dashboard/leave')
-    return { success: (formData.get('action') as string) === 'submit' ? '请假申请已提交' : '请假申请已保存' }
+    return { success: nextStatus === 'PENDING' ? '请假申请已提交，审批流程已重新开始' : '请假申请已保存为草稿' }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -246,7 +268,9 @@ export async function getLeaveStats(userId?: string, departmentId?: string) {
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
 
     const where: any = {
-      status: 'APPROVED',
+      status: {
+        in: ['APPROVED', 'COMPLETED'],
+      },
       startDate: {
         lte: lastDayOfMonth,
       },

@@ -37,7 +37,7 @@ export interface User {
   companyId?: string | null
 }
 
-export type ApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+export type ApplicationStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED'
 
 export type LeaveType = 'ANNUAL' | 'SICK' | 'PERSONAL' | 'MARRIAGE' | 'MATERNITY' | 'PATERNITY'
 

@@ -23,6 +23,10 @@ interface SalaryRecordDetail {
   holidayOvertimePay: number
   totalOvertimePay: number
   compensatoryHours: number
+  hourlySalary: number
+  paidOvertimeHours: number
+  compensatoryOvertimeHours: number
+  totalOvertimeHours: number
   deduction: number
   netSalary: number
   status: string
@@ -35,7 +39,7 @@ interface SalaryRecordDetail {
   user: {
     name: string
     email: string
-    level?: string
+    level?: string | null
   }
   overtimeSettlements: Array<{
     id: string
@@ -195,6 +199,22 @@ export default function SalaryDetailPage() {
               <div className="flex justify-between">
                 <dt className="text-gray-500">状态</dt>
                 <dd>{getStatusBadge(record.status)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">小时薪资</dt>
+                <dd>{formatCurrency(record.hourlySalary)}/小时</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">转加班费时长</dt>
+                <dd>{record.paidOvertimeHours}小时</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">计调休加班时长</dt>
+                <dd>{record.compensatoryOvertimeHours}小时</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">总加班时长</dt>
+                <dd>{record.totalOvertimeHours}小时</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">创建时间</dt>

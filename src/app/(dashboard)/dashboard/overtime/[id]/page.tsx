@@ -30,6 +30,7 @@ export default function OvertimeEditPage() {
   }, [id])
 
   const canOperate = useMemo(() => !!session?.user?.id, [session?.user?.id])
+  const isReadonly = ['COMPLETED', 'APPROVED'].includes(initial?.status || '')
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -92,6 +93,7 @@ export default function OvertimeEditPage() {
                   name="date"
                   type="date"
                   required
+                  disabled={isReadonly}
                   defaultValue={initial?.date ? new Date(initial.date).toISOString().slice(0, 10) : ''}
                 />
               </div>
@@ -102,6 +104,7 @@ export default function OvertimeEditPage() {
                     name="startTime"
                     type="time"
                     required
+                    disabled={isReadonly}
                     className="flex-1"
                     defaultValue={
                       initial?.startTime ? new Date(initial.startTime).toISOString().slice(11, 16) : ''
@@ -112,6 +115,7 @@ export default function OvertimeEditPage() {
                     name="endTime"
                     type="time"
                     required
+                    disabled={isReadonly}
                     className="flex-1"
                     defaultValue={initial?.endTime ? new Date(initial.endTime).toISOString().slice(11, 16) : ''}
                   />
@@ -124,6 +128,7 @@ export default function OvertimeEditPage() {
                   name="type"
                   className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   defaultValue={initial?.type ?? 'WORKDAY'}
+                  disabled={isReadonly}
                   required
                 >
                   <option value="WORKDAY">工作日</option>
@@ -135,7 +140,14 @@ export default function OvertimeEditPage() {
 
             <div className="space-y-2">
               <Label htmlFor="reason">加班事由</Label>
-              <Textarea id="reason" name="reason" rows={4} required defaultValue={initial?.reason ?? ''} />
+              <Textarea
+                id="reason"
+                name="reason"
+                rows={4}
+                required
+                disabled={isReadonly}
+                defaultValue={initial?.reason ?? ''}
+              />
             </div>
 
             {message.text && (
@@ -145,32 +157,37 @@ export default function OvertimeEditPage() {
             )}
 
             <div className="flex space-x-2">
-              <Button
-                type="submit"
-                disabled={loading}
-                onClick={() => {
-                  submitIntentRef.current = 'save'
-                }}
-              >
-                {loading ? '处理中...' : '保存'}
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
-                  submitIntentRef.current = 'submit'
-                }}
-              >
-                提交
-              </Button>
-              <Button type="button" variant="destructive" disabled={loading} onClick={onDelete}>
-                删除
-              </Button>
+              {!isReadonly && (
+                <>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    onClick={() => {
+                      submitIntentRef.current = 'save'
+                    }}
+                  >
+                    {loading ? '处理中...' : '保存'}
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={() => {
+                      submitIntentRef.current = 'submit'
+                    }}
+                  >
+                    提交
+                  </Button>
+                  <Button type="button" variant="destructive" disabled={loading} onClick={onDelete}>
+                    删除
+                  </Button>
+                </>
+              )}
               <Button type="button" variant="outline" onClick={() => router.push('/dashboard/overtime')}>
                 返回
               </Button>
             </div>
+            {isReadonly && <div className="text-sm text-gray-500">该申请已完成，不可再修改。</div>}
           </form>
         </CardContent>
       </Card>

@@ -6,10 +6,33 @@ import { salaryGenerateSchema, salaryStatusSchema } from '@/lib/validations'
 import {
   calculateHourlyRate,
   calculateOvertimeAllocation,
-  getPreviousMonth,
   canGenerateSalary,
 } from '@/lib/utils'
 import { SALARY_CONSTANTS } from '@/types'
+
+function buildSalaryRecordSummary<T extends {
+  baseSalary: number
+  workdayOvertimeHours: number
+  weekendOvertimeHours: number
+  holidayOvertimeHours: number
+  compensatoryHours: number
+}>(
+  record: T,
+  compensatoryHoursOverride?: number
+) {
+  const hourlySalary = Math.round(calculateHourlyRate(record.baseSalary) * 100) / 100
+  const paidOvertimeHours =
+    record.workdayOvertimeHours + record.weekendOvertimeHours + record.holidayOvertimeHours
+  const compensatoryOvertimeHours = compensatoryHoursOverride ?? record.compensatoryHours
+  const totalOvertimeHours = paidOvertimeHours + compensatoryOvertimeHours
+
+  return {
+    hourlySalary,
+    paidOvertimeHours,
+    compensatoryOvertimeHours,
+    totalOvertimeHours,
+  }
+}
 
 // 获取薪资记录列表
 export async function getSalaryRecords(filters?: {
@@ -97,11 +120,19 @@ export async function getSalaryRecord(id: string) {
 
     if (!record) return null
 
+    const compensatorySettledHours = record.overtimeSettlements
+      .filter((settlement) => settlement.settlementType === 'COMPENSATORY')
+      .reduce((sum, settlement) => sum + settlement.hours, 0)
+
     return {
       ...record,
       userName: record.user.name,
       departmentName: record.user.department?.name,
       positionName: record.user.position?.name,
+      ...buildSalaryRecordSummary(
+        record,
+        compensatorySettledHours > 0 ? compensatorySettledHours : undefined
+      ),
     }
   } catch (error) {
     console.error('获取薪资记录详情失败:', error)
@@ -180,7 +211,9 @@ export async function generateSalaryRecords(formData: FormData) {
       const overtimeApps = await prisma.overtimeApplication.findMany({
         where: {
           userId: user.id,
-          status: 'APPROVED',
+          status: {
+            in: ['APPROVED', 'COMPLETED'],
+          },
           date: {
             gte: startDate,
             lte: endDate,
@@ -215,7 +248,9 @@ export async function generateSalaryRecords(formData: FormData) {
       const leaveApps = await prisma.leaveApplication.findMany({
         where: {
           userId: user.id,
-          status: 'APPROVED',
+          status: {
+            in: ['APPROVED', 'COMPLETED'],
+          },
           type: 'PERSONAL',
           startDate: {
             gte: startDate,
@@ -452,6 +487,25 @@ export async function getAvailableMonths() {
   }
 
   return months
+}
+
+export async function getSalaryMonths() {
+  try {
+    const records = await prisma.salaryRecord.findMany({
+      distinct: ['month'],
+      select: {
+        month: true,
+      },
+      orderBy: {
+        month: 'desc',
+      },
+    })
+
+    return records.map((record) => record.month)
+  } catch (error) {
+    console.error('获取薪资月份列表失败:', error)
+    return []
+  }
 }
 
 // 导出薪资数据为 Excel 格式（返回数据供前端处理）

@@ -61,6 +61,12 @@ export async function createOvertimeApplication(formData: FormData) {
 export async function deleteOvertimeApplication(id: string) {
   try {
     if (!id) return { error: '缺少加班申请 ID' }
+    await prisma.approval.deleteMany({
+      where: {
+        applicationId: id,
+        applicationType: 'OVERTIME',
+      },
+    })
     await prisma.overtimeApplication.delete({ where: { id } })
     revalidatePath('/dashboard/overtime')
     return { success: '加班申请已删除' }
@@ -85,6 +91,21 @@ export async function updateOvertimeApplication(formData: FormData) {
       reason: formData.get('reason'),
     })
 
+    const application = await prisma.overtimeApplication.findUnique({
+      where: { id },
+      select: {
+        status: true,
+      },
+    })
+
+    if (!application) {
+      return { error: '加班申请不存在' }
+    }
+
+    if (['COMPLETED', 'APPROVED'].includes(application.status)) {
+      return { error: '已完成的申请不可修改' }
+    }
+
     // 计算加班时长
     const startDateTime = new Date(`${validatedData.date} ${validatedData.startTime}`)
     const endDateTime = new Date(`${validatedData.date} ${validatedData.endTime}`)
@@ -93,6 +114,15 @@ export async function updateOvertimeApplication(formData: FormData) {
     if (hours <= 0) {
       return { error: '结束时间必须晚于开始时间' }
     }
+
+    const nextStatus = (formData.get('action') as string) === 'submit' ? 'PENDING' : 'DRAFT'
+
+    await prisma.approval.deleteMany({
+      where: {
+        applicationId: id,
+        applicationType: 'OVERTIME',
+      },
+    })
 
     await prisma.overtimeApplication.update({
       where: { id },
@@ -103,12 +133,15 @@ export async function updateOvertimeApplication(formData: FormData) {
         hours,
         type: validatedData.type,
         reason: validatedData.reason,
-        status: (formData.get('action') as string) === 'submit' ? 'PENDING' : undefined,
+        status: nextStatus,
+        approverId: null,
+        approvedAt: null,
+        remark: null,
       },
     })
 
     revalidatePath('/dashboard/overtime')
-    return { success: (formData.get('action') as string) === 'submit' ? '加班申请已提交' : '加班申请已保存' }
+    return { success: nextStatus === 'PENDING' ? '加班申请已提交，审批流程已重新开始' : '加班申请已保存为草稿' }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -183,7 +216,9 @@ export async function getOvertimeStats(userId?: string, departmentId?: string) {
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
 
     const where: any = {
-      status: 'APPROVED',
+      status: {
+        in: ['APPROVED', 'COMPLETED'],
+      },
       date: {
         gte: firstDayOfMonth,
         lte: lastDayOfMonth,

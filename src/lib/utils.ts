@@ -84,7 +84,7 @@ export function calculateOvertimeAllocation(
 } {
   // 计算总时长
   const totalHours = overtimeData.reduce((sum, item) => sum + item.hours, 0)
-  const maxPaidHours = SALARY_CONSTANTS.MAX_OVERTIME_HOURS
+  const maxPaidHours: number = SALARY_CONSTANTS.MAX_OVERTIME_HOURS
 
   if (totalHours <= maxPaidHours) {
     // 全部计薪

@@ -13,15 +13,19 @@ import { Badge } from '@/components/ui/badge'
 import { createOvertimeApplication, getOvertimeApplications, updateOvertimeApplication } from '@/server/actions/overtime'
 
 const statusMap: Record<string, string> = {
+  DRAFT: '草稿',
   PENDING: '待审批',
   APPROVED: '已通过',
-  REJECTED: '已拒绝',
+  REJECTED: '已退回',
+  COMPLETED: '已完成',
 }
 
-const statusVariant: Record<string, 'warning' | 'success' | 'danger'> = {
+const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger'> = {
+  DRAFT: 'default',
   PENDING: 'warning',
   APPROVED: 'success',
   REJECTED: 'danger',
+  COMPLETED: 'success',
 }
 
 export default function OvertimePage() {
@@ -111,7 +115,7 @@ export default function OvertimePage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{app.remark || '-'}</TableCell>
-                    {canEdit && (
+                    {canEdit && !['COMPLETED', 'APPROVED'].includes(app.status) && (
                       <TableCell>
                         <Button asChild variant="outline" size="sm">
                           <Link href={`/dashboard/overtime/${app.id}`}>编辑</Link>

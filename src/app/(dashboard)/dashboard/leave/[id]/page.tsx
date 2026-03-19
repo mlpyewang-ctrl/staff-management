@@ -32,6 +32,7 @@ export default function LeaveEditPage() {
   }, [id])
 
   const canOperate = useMemo(() => !!session?.user?.id, [session?.user?.id])
+  const isReadonly = ['COMPLETED', 'APPROVED'].includes(initial?.status || '')
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -90,7 +91,13 @@ export default function LeaveEditPage() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="type">假期类型</Label>
-                <Select id="type" name="type" required defaultValue={initial?.type ?? 'ANNUAL'}>
+                <Select
+                  id="type"
+                  name="type"
+                  required
+                  disabled={isReadonly}
+                  defaultValue={initial?.type ?? 'ANNUAL'}
+                >
                   <option value="ANNUAL">年假</option>
                   <option value="SICK">病假</option>
                   <option value="PERSONAL">事假</option>
@@ -106,6 +113,7 @@ export default function LeaveEditPage() {
                     name="startDate"
                     type="date"
                     required
+                    disabled={isReadonly}
                     className="flex-1"
                     defaultValue={initial?.startDate ? new Date(initial.startDate).toISOString().slice(0, 10) : ''}
                   />
@@ -114,6 +122,7 @@ export default function LeaveEditPage() {
                     name="endDate"
                     type="date"
                     required
+                    disabled={isReadonly}
                     className="flex-1"
                     defaultValue={initial?.endDate ? new Date(initial.endDate).toISOString().slice(0, 10) : ''}
                   />
@@ -121,13 +130,26 @@ export default function LeaveEditPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="destination">前往地点</Label>
-                <Input id="destination" name="destination" type="text" defaultValue={initial?.destination ?? ''} />
+                <Input
+                  id="destination"
+                  name="destination"
+                  type="text"
+                  disabled={isReadonly}
+                  defaultValue={initial?.destination ?? ''}
+                />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="reason">请假事由</Label>
-              <Textarea id="reason" name="reason" rows={4} required defaultValue={initial?.reason ?? ''} />
+              <Textarea
+                id="reason"
+                name="reason"
+                rows={4}
+                required
+                disabled={isReadonly}
+                defaultValue={initial?.reason ?? ''}
+              />
             </div>
 
             {message.text && (
@@ -137,32 +159,37 @@ export default function LeaveEditPage() {
             )}
 
             <div className="flex space-x-2">
-              <Button
-                type="submit"
-                disabled={loading}
-                onClick={() => {
-                  submitIntentRef.current = 'save'
-                }}
-              >
-                {loading ? '处理中...' : '保存'}
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
-                  submitIntentRef.current = 'submit'
-                }}
-              >
-                提交
-              </Button>
-              <Button type="button" variant="destructive" disabled={loading} onClick={onDelete}>
-                删除
-              </Button>
+              {!isReadonly && (
+                <>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    onClick={() => {
+                      submitIntentRef.current = 'save'
+                    }}
+                  >
+                    {loading ? '处理中...' : '保存'}
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={() => {
+                      submitIntentRef.current = 'submit'
+                    }}
+                  >
+                    提交
+                  </Button>
+                  <Button type="button" variant="destructive" disabled={loading} onClick={onDelete}>
+                    删除
+                  </Button>
+                </>
+              )}
               <Button type="button" variant="outline" onClick={() => router.push('/dashboard/leave')}>
                 返回
               </Button>
             </div>
+            {isReadonly && <div className="text-sm text-gray-500">该申请已完成，不可再修改。</div>}
           </form>
         </CardContent>
       </Card>
