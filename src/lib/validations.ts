@@ -1,4 +1,10 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
+
+const optionalText = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => value || undefined)
 
 export const loginSchema = z.object({
   email: z.string().email('请输入有效的邮箱地址'),
@@ -30,7 +36,6 @@ export const leaveSchema = z.object({
 })
 
 export const performanceSchema = z.object({
-  // 支持 YYYY-MM 或 YYYY-Qx（季度）
   period: z
     .string()
     .regex(/^\d{4}-(0[1-9]|1[0-2]|Q[1-4])$/, '格式为 YYYY-MM 或 YYYY-Qx'),
@@ -52,28 +57,27 @@ export const approvalSchema = z.object({
 
 export const userProfileSchema = z.object({
   name: z.string().min(2, '姓名至少需要 2 个字符'),
-  idCard: z.string().optional(),
-  phone: z.string().optional(),
-  salary: z
-    .string()
-    .optional()
-    .transform((v) => (v ? Number(v) : undefined))
-    .refine((v) => v === undefined || !Number.isNaN(v), '薪资必须是数字'),
-  level: z.string().optional(),
-  departmentId: z.string().optional(),
-  positionId: z.string().optional(),
-  startDate: z.string().optional(),
+  idCard: optionalText,
+  phone: optionalText,
+  startDate: optionalText,
+})
+
+export const userJobAssignmentSchema = z.object({
+  departmentId: optionalText,
+  positionId: optionalText,
+  level: optionalText.refine(
+    (value) => value === undefined || value.length <= 50,
+    '职级不能超过 50 个字符'
+  ),
 })
 
 export const positionSchema = z.object({
   name: z.string().min(2, '岗位名称至少需要 2 个字符'),
   salary: z
     .string()
-    .refine((v) => !isNaN(Number(v)) && Number(v) >= 0, '请输入有效的薪资数额'),
+    .refine((value) => !Number.isNaN(Number(value)) && Number(value) >= 0, '请输入有效的薪资金额'),
   level: z.string().optional(),
 })
-
-// ========== 新增：薪资和调休相关验证规则 ==========
 
 export const salaryGenerateSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, '请选择有效的月份'),
@@ -86,7 +90,7 @@ export const salaryStatusSchema = z.object({
 })
 
 export const compensatoryUseSchema = z.object({
-  hours: z.enum(['4', '8']), // 半天4h 或 一天8h
+  hours: z.enum(['4', '8']),
   startDate: z.string(),
   reason: z.string().min(10, '请详细描述调休事由（至少 10 个字符）'),
 })

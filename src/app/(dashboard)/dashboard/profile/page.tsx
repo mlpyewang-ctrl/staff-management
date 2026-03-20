@@ -1,53 +1,64 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { getUserProfile, updateUserProfile } from '@/server/actions/user'
-import { getDepartments } from '@/server/actions/department'
-import { getPositions } from '@/server/actions/position'
+
+interface UserProfile {
+  id: string
+  email: string
+  name: string
+  idCard?: string | null
+  phone?: string | null
+  salary?: number | null
+  level?: string | null
+  startDate?: string | Date | null
+  department?: {
+    name: string
+  } | null
+  position?: {
+    name: string
+    salary?: number | null
+    level?: string | null
+  } | null
+}
 
 export default function ProfileDashboardPage() {
   const { data: session } = useSession()
-  const [profile, setProfile] = useState<any | null>(null)
-  const [departments, setDepartments] = useState<any[]>([])
-  const [positions, setPositions] = useState<any[]>([])
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
 
   useEffect(() => {
     const load = async () => {
       if (!session?.user?.id) return
-      const [p, depts, pos] = await Promise.all([
-        getUserProfile(session.user.id),
-        getDepartments(),
-        getPositions(),
-      ])
-      setProfile(p)
-      setDepartments(depts)
-      setPositions(pos)
+      const userProfile = await getUserProfile(session.user.id)
+      setProfile(userProfile)
     }
+
     load()
   }, [session])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
     if (!session?.user?.id) return
+
     setLoading(true)
     setMessage({ type: '', text: '' })
 
-    const formData = new FormData(e.target as HTMLFormElement)
+    const formData = new FormData(event.currentTarget)
     const result = await updateUserProfile(session.user.id, formData)
 
     if (result.error) {
       setMessage({ type: 'error', text: result.error })
     } else if (result.success) {
       setMessage({ type: 'success', text: result.success })
-      const p = await getUserProfile(session.user.id)
-      setProfile(p)
+      const userProfile = await getUserProfile(session.user.id)
+      setProfile(userProfile)
     }
 
     setLoading(false)
@@ -57,11 +68,23 @@ export default function ProfileDashboardPage() {
     return null
   }
 
+  const salaryText = profile?.position?.salary
+    ? profile.position.salary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
+    : profile?.salary
+    ? profile.salary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
+    : '未设置'
+
+  const levelText = profile?.level || profile?.position?.level || '未设置'
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">个人信息</h1>
-        <p className="text-gray-600 mt-1">查看和维护您的基本资料</p>
+        <p className="mt-1 text-gray-600">查看和维护您的基础资料</p>
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        部门、岗位和职级由管理员在“人员岗位”模块统一维护，个人和部门主管不能在这里直接修改。
       </div>
 
       <Card>
@@ -70,40 +93,22 @@ export default function ProfileDashboardPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">姓名</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  defaultValue={profile?.name || session.user.name || ''}
-                  required
-                />
+                <Input id="name" name="name" defaultValue={profile?.name || session.user.name || ''} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">邮箱</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={profile?.email || session.user.email || ''}
-                  disabled
-                />
+                <Input id="email" type="email" value={profile?.email || session.user.email || ''} disabled />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="idCard">身份证号</Label>
-                <Input
-                  id="idCard"
-                  name="idCard"
-                  defaultValue={profile?.idCard || ''}
-                />
+                <Input id="idCard" name="idCard" defaultValue={profile?.idCard || ''} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">电话号码</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  defaultValue={profile?.phone || ''}
-                />
+                <Input id="phone" name="phone" defaultValue={profile?.phone || ''} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="startDate">工作起始日期</Label>
@@ -112,71 +117,25 @@ export default function ProfileDashboardPage() {
                   name="startDate"
                   type="date"
                   defaultValue={
-                    profile?.startDate
-                      ? new Date(profile.startDate).toISOString().slice(0, 10)
-                      : ''
+                    profile?.startDate ? new Date(profile.startDate).toISOString().slice(0, 10) : ''
                   }
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="departmentId">部门</Label>
-                <select
-                  id="departmentId"
-                  name="departmentId"
-                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  defaultValue={profile?.departmentId || ''}
-                >
-                  <option value="">未分配</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
+                <Label htmlFor="departmentDisplay">部门</Label>
+                <Input id="departmentDisplay" value={profile?.department?.name || '未分配'} disabled />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="positionId">岗位</Label>
-                <select
-                  id="positionId"
-                  name="positionId"
-                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  defaultValue={profile?.positionId || ''}
-                >
-                  <option value="">未分配</option>
-                  {positions.map((pos) => (
-                    <option key={pos.id} value={pos.id}>
-                      {pos.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="salaryDisplay">薪资</Label>
-                <Input
-                  id="salaryDisplay"
-                  type="text"
-                  value={
-                    profile?.position
-                      ? `${profile.position.salary?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}（岗位薪资）`
-                      : profile?.salary
-                      ? profile.salary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
-                      : '未设置'
-                  }
-                  disabled
-                />
+                <Label htmlFor="positionDisplay">岗位</Label>
+                <Input id="positionDisplay" value={profile?.position?.name || '未设置'} disabled />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="levelDisplay">职级</Label>
-                <Input
-                  id="levelDisplay"
-                  type="text"
-                  value={
-                    profile?.position
-                      ? `${profile.position.level || '未设置'}（岗位职级）`
-                      : profile?.level || '未设置'
-                  }
-                  disabled
-                />
+                <Input id="levelDisplay" value={levelText} disabled />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="salaryDisplay">薪资</Label>
+                <Input id="salaryDisplay" value={salaryText} disabled />
               </div>
             </div>
 

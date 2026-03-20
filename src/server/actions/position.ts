@@ -1,6 +1,16 @@
-'use server'
+﻿'use server'
 
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+
+async function ensureAdmin() {
+  const session = await getServerSession(authOptions)
+
+  if (session?.user?.role !== 'ADMIN') {
+    throw new Error('只有管理员可以执行此操作')
+  }
+}
 
 export async function getPositions() {
   return prisma.position.findMany({
@@ -30,6 +40,8 @@ export async function getPosition(id: string) {
 
 export async function createPosition(formData: FormData) {
   try {
+    await ensureAdmin()
+
     const name = (formData.get('name') as string) || ''
     const salaryStr = (formData.get('salary') as string) || ''
     const level = (formData.get('level') as string) || ''
@@ -39,8 +51,8 @@ export async function createPosition(formData: FormData) {
     }
 
     const salary = parseFloat(salaryStr)
-    if (isNaN(salary) || salary < 0) {
-      return { error: '请输入有效的薪资数额' }
+    if (Number.isNaN(salary) || salary < 0) {
+      return { error: '请输入有效的薪资金额' }
     }
 
     const position = await prisma.position.create({
@@ -65,6 +77,8 @@ export async function createPosition(formData: FormData) {
 
 export async function updatePosition(id: string, formData: FormData) {
   try {
+    await ensureAdmin()
+
     const name = (formData.get('name') as string) || ''
     const salaryStr = (formData.get('salary') as string) || ''
     const level = (formData.get('level') as string) || ''
@@ -74,8 +88,8 @@ export async function updatePosition(id: string, formData: FormData) {
     }
 
     const salary = parseFloat(salaryStr)
-    if (isNaN(salary) || salary < 0) {
-      return { error: '请输入有效的薪资数额' }
+    if (Number.isNaN(salary) || salary < 0) {
+      return { error: '请输入有效的薪资金额' }
     }
 
     const position = await prisma.position.update({
@@ -101,12 +115,14 @@ export async function updatePosition(id: string, formData: FormData) {
 
 export async function deletePosition(id: string) {
   try {
+    await ensureAdmin()
+
     const usersCount = await prisma.user.count({
       where: { positionId: id },
     })
 
     if (usersCount > 0) {
-      return { error: `该岗位下有 ${usersCount} 名员工，无法删除` }
+      return { error: `该岗位下还有 ${usersCount} 名员工，无法删除` }
     }
 
     await prisma.position.delete({

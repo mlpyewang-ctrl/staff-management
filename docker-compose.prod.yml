@@ -1,0 +1,41 @@
+﻿services:
+  postgres:
+    image: "${POSTGRES_IMAGE:-postgres:16-alpine}"
+    container_name: staff-management-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      TZ: "${TZ:-Asia/Shanghai}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    image: "${IMAGE_NAME:-staff-management-app}:${IMAGE_TAG:-offline}"
+    container_name: staff-management-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: "${DATABASE_URL}"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"
+      NEXTAUTH_URL: "${NEXTAUTH_URL}"
+      RUN_DB_PUSH: "${RUN_DB_PUSH:-true}"
+      RUN_DB_SEED: "${RUN_DB_SEED:-false}"
+      TZ: "${TZ:-Asia/Shanghai}"
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:

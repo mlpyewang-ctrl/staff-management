@@ -1,410 +1,330 @@
-# 劳务派遣员工管理系统
+﻿# 劳务派遣员工管理系统
 
-一个基于 Next.js 的劳务派遣员工管理系统，支持员工管理、加班申请、请假申请、调休管理、薪资结算和可配置审批流程等功能。
+一个基于 `Next.js 14 + Prisma + PostgreSQL` 的劳务派遣员工管理系统，覆盖员工档案、部门岗位、加班、请假、调休、绩效、审批流和薪资管理等场景。
+
+## 功能概览
+
+### 员工端
+- 个人信息维护
+- 加班申请、请假申请、调休申请
+- 绩效自评与记录查看
+- 查看个人部门、岗位、职级、薪资信息
+
+### 主管端
+- 审批本部门流程中的申请单
+- 查看审批中心待办
+- 参与绩效考核流程
+
+### 管理员端
+- 部门管理、岗位管理、人员岗位管理
+- 审批流配置
+- 薪资生成、薪资明细、按月导出 Excel
+- 统一维护员工岗位、部门和岗位职级，避免个人或主管随意修改
 
 ## 技术栈
 
-- **前端**: Next.js 14 + React 18 + TypeScript + Tailwind CSS
-- **后端**: Next.js API Routes
-- **数据库**: PostgreSQL (Docker)
-- **ORM**: Prisma
-- **认证**: NextAuth.js
+- 前端：`Next.js 14`、`React 18`、`TypeScript`
+- UI：`Tailwind CSS`
+- 数据库：`PostgreSQL`
+- ORM：`Prisma`
+- 认证：`NextAuth.js`
+- 测试：`Vitest`
+- 部署：`Docker`、`Docker Compose`
 
-## 环境要求
+## 本地开发
 
-- Node.js 18+
-- Docker & Docker Compose (或 Colima on macOS)
-- npm 或 yarn
+### 环境要求
 
-## 快速启动
+- `Node.js 18+`，推荐 `Node.js 20`
+- `npm 9+`
+- `Docker` / `Docker Compose`
 
-### 1. 启动数据库
-
-```bash
-# 启动 PostgreSQL 容器
-docker-compose up -d
-
-# 查看容器状态
-docker-compose ps
-```
-
-### 2. 安装依赖
-
-```bash
-npm install
-```
-
-### 3. 同步数据库结构
-
-```bash
-npm run db:push
-```
-
-### 4. 初始化测试数据
-
-```bash
-npm run db:seed
-```
-
-### 5. 启动开发服务器
-
-```bash
-npm run dev
-```
-
-访问 http://localhost:3000
-
-## 一键启动脚本
-
-```bash
-# 启动数据库、同步结构、初始化数据、启动服务
-docker-compose up -d && npm install && npm run db:push && npm run db:seed && npm run dev
-```
-
-## 数据库管理
-
-```bash
-# 打开 Prisma Studio (可视化数据库管理)
-npm run db:studio
-```
-
-## 测试账号
-
-所有账号密码均为: `password123`
-
-### 管理员
-
-| 邮箱 | 姓名 | 部门 | 角色 |
-|------|------|------|------|
-| admin@zltech.com | 系统管理员 | 人事部 | ADMIN |
-
-### 部门经理
-
-| 邮箱 | 姓名 | 部门 | 角色 |
-|------|------|------|------|
-| tech.manager@zltech.com | 张技术 | 技术部 | MANAGER |
-| hr.manager@zltech.com | 李人事 | 人事部 | MANAGER |
-
-### 普通员工
-
-| 邮箱 | 姓名 | 部门 | 岗位 | 角色 |
-|------|------|------|------|------|
-| wang.qiang@zltech.com | 王强 | 技术部 | 工程师 | EMPLOYEE |
-| zhao.li@zltech.com | 赵丽 | 技术部 | 初级工程师 | EMPLOYEE |
-| chen.ming@zltech.com | 陈明 | 技术部 | 高级工程师 | EMPLOYEE |
-| liu.fang@zltech.com | 刘芳 | 人事部 | 人事专员 | EMPLOYEE |
-| sun.wei@zltech.com | 孙伟 | 财务部 | 财务专员 | EMPLOYEE |
-| zhou.jie@zltech.com | 周杰 | 财务部 | 财务专员 | EMPLOYEE |
-
-## 功能模块
-
-### 员工功能
-- 个人信息管理
-- 加班申请（草稿/提交/退回后修改）
-- 请假申请（草稿/提交/退回后修改）
-- 绩效自评
-- 调休管理
-
-### 经理功能
-- 部门员工管理
-- 审批加班/请假申请
-- 绩效考核评价
-
-### 管理员功能
-- 公司管理
-- 部门管理
-- 岗位管理
-- 用户管理
-- 审批流程配置
-- 薪资管理（新增）
-- 所有审批操作
-
-### 新增功能
-
-#### 薪资管理（仅管理员）
-- 自动计算月度薪资
-- 加班费计算（工作日1.5倍、周末2倍、节假日3倍）
-- 超过36小时加班自动转调休
-- 薪资详情展示小时薪资、计调休时长、转加班费时长、总加班时长
-- 薪资列表按月份下拉筛选
-- 薪资导出 CSV（可直接用 Excel 打开）
-- 薪资状态管理（草稿/已确认/已支付）
-
-#### 调休管理（所有用户）
-- 查看累计调休时长
-- 申请调休（一天8h/半天4h）
-- 调休使用记录
-- 调休来源记录
-
-#### 日历模块（所有用户）
-- 仪表盘显示日历
-- 标注法定节假日
-
-## 审批流规则
-
-### 默认流程
-
-- 同部门申请默认按“部门经理 -> 管理员”顺序审批
-- 审批流程可在“审批流程配置”页面按部门维护
-
-### 状态流转
-
-- 员工保存申请时状态为 `DRAFT`
-- 员工提交申请后状态为 `PENDING`
-- 非最后一岗审批通过后，申请保持 `PENDING` 并流转到下一岗
-- 最后一岗审批通过后，申请状态置为 `COMPLETED`
-- 当前审批岗拒绝后，申请退回上一岗；如果当前就是第一岗，则退回申请人并恢复为 `DRAFT`
-
-### 退回后修改
-
-- 退回给申请人的单据支持继续编辑
-- 申请人修改后再次提交时，会重新发起审批流程
-- 已完成的单据不可再编辑
-
-## 项目结构
-
-```
-staff-management/
-├── prisma/
-│   ├── schema.prisma          # 数据库模型定义
-│   └── seed.ts                # 测试数据脚本
-├── scripts/
-│   └── init-db.js             # 数据库初始化脚本
-├── src/
-│   ├── app/
-│   │   ├── (dashboard)/       # 需要登录的页面（路由组）
-│   │   │   ├── dashboard/     # 所有功能页面
-│   │   │   │   ├── approval-flows/   # 审批流程配置
-│   │   │   │   ├── approvals/        # 审批中心
-│   │   │   │   ├── compensatory/     # 调休管理
-│   │   │   │   ├── departments/      # 部门管理
-│   │   │   │   ├── leave/            # 请假管理
-│   │   │   │   ├── overtime/         # 加班申请
-│   │   │   │   ├── performance/      # 绩效管理
-│   │   │   │   ├── positions/        # 岗位管理
-│   │   │   │   ├── profile/          # 个人信息
-│   │   │   │   └── salary/           # 薪资管理
-│   │   │   └── layout.tsx    # Dashboard 布局
-│   │   ├── api/              # API 路由
-│   │   │   └── auth/[...nextauth]/  # NextAuth 认证
-│   │   ├── auth/             # 登录/注册页面
-│   │   ├── globals.css       # 全局样式
-│   │   ├── layout.tsx        # 根布局
-│   │   └── page.tsx          # 首页
-│   ├── components/
-│   │   ├── layout/           # 布局组件（header, sidebar）
-│   │   ├── providers.tsx     # Context Providers
-│   │   └── ui/               # UI 基础组件
-│   ├── lib/
-│   │   ├── __tests__/        # 工具函数测试
-│   │   ├── approval-constants.ts  # 审批相关常量
-│   │   ├── approval-workflow.ts   # 审批流节点与状态计算
-│   │   ├── prisma.ts         # Prisma 客户端
-│   │   ├── utils.ts          # 工具函数
-│   │   └── validations.ts    # Zod 验证规则
-│   ├── server/actions/       # Server Actions（后端逻辑）
-│   │   ├── __tests__/        # Server Actions 测试
-│   │   ├── approval.ts       # 审批操作
-│   │   ├── approvalFlow.ts   # 审批流程
-│   │   ├── auth.ts           # 认证
-│   │   ├── compensatory.ts   # 调休管理
-│   │   ├── department.ts     # 部门管理
-│   │   ├── holiday.ts        # 节假日管理
-│   │   ├── leave.ts          # 请假管理
-│   │   ├── overtime.ts       # 加班管理
-│   │   ├── performance.ts    # 绩效管理
-│   │   ├── position.ts       # 岗位管理
-│   │   ├── salary.ts         # 薪资管理
-│   │   └── user.ts           # 用户管理
-│   ├── test/                 # 测试配置
-│   │   └── setup.ts          # 测试环境设置
-│   ├── types/
-│   │   └── index.ts          # TypeScript 类型定义
-│   └── middleware.ts         # Next.js 中间件（认证）
-├── vitest.config.ts          # Vitest 配置
-├── docker-compose.yml        # Docker 配置
-├── .env                      # 环境变量
-├── package.json
-└── README.md
-```
-
-## 常用命令
-
-| 命令 | 说明 |
-|------|------|
-| `npm run dev` | 启动开发服务器 |
-| `npm run build` | 构建生产版本 |
-| `npm run start` | 启动生产服务器 |
-| `npm run db:push` | 同步数据库结构 |
-| `npm run db:seed` | 初始化测试数据 |
-| `npm run db:studio` | 打开 Prisma Studio |
-| `npm run test` | 运行测试 |
-| `npm run test:watch` | 监听模式运行测试 |
-| `npm run test:coverage` | 运行测试并生成覆盖率报告 |
-| `docker-compose up -d` | 启动数据库容器 |
-| `docker-compose down` | 停止数据库容器 |
-
-## 测试
-
-项目使用 Vitest 作为测试框架，包含以下测试：
-
-- **验证规则测试** (`src/lib/__tests__/validations.test.ts`)：测试所有 Zod 验证规则
-- **审批流测试** (`src/lib/__tests__/approval-workflow.test.ts`)：测试审批节点推进、退回上一岗和退回申请人逻辑
-- **Server Actions 测试** (`src/server/actions/__tests__/auth.test.ts`)：测试认证相关 Server Actions
-
-```bash
-# 运行所有测试
-npm run test
-
-# 监听模式
-npm run test:watch
-
-# 生成覆盖率报告
-npm run test:coverage
-```
-
-## 环境变量配置
-
-### 开发环境
-
-1. 复制 `.env.example` 为 `.env`：
+### 初始化环境变量
 
 ```bash
 cp .env.example .env
 ```
 
-2. 生成 `NEXTAUTH_SECRET`：
+PowerShell：
 
-```bash
-# macOS / Linux
-openssl rand -base64 32
-
-# Windows (PowerShell)
-# 方法一：如果有 openssl
-openssl rand -base64 32
-
-# 方法二：使用 Node.js
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```powershell
+Copy-Item .env.example .env
 ```
 
-3. 将生成的密钥填入 `.env` 文件的 `NEXTAUTH_SECRET`。
+关键变量：
 
-### 生产环境
+| 变量 | 说明 |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL 连接串 |
+| `NEXTAUTH_SECRET` | NextAuth 加密密钥 |
+| `NEXTAUTH_URL` | 应用访问地址 |
+| `POSTGRES_*` | 本地 Docker PostgreSQL 配置 |
 
-在生产环境中，需要配置以下环境变量：
-
-| 变量名 | 说明 | 示例 |
-|--------|------|------|
-| `DATABASE_URL` | PostgreSQL 连接字符串 | `postgresql://user:password@host:5432/dbname` |
-| `NEXTAUTH_SECRET` | JWT 加密密钥（**必须**随机生成） | 长度至少 32 字符的随机字符串 |
-| `NEXTAUTH_URL` | 应用访问地址 | `https://your-domain.com` |
-
-#### 生成 NEXTAUTH_SECRET
-
-**重要**：生产环境必须使用强随机密钥，不要使用示例中的值！
+生成 `NEXTAUTH_SECRET`：
 
 ```bash
-# 推荐方式
 openssl rand -base64 32
 ```
 
-#### 部署平台配置示例
-
-**Vercel / Netlify / Railway 等 PaaS 平台**：
-
-在平台的环境变量设置页面添加：
-- `NEXTAUTH_SECRET` = 你的随机密钥
-- `NEXTAUTH_URL` = 你的生产域名
-- `DATABASE_URL` = 生产数据库连接字符串
-
-**Docker 部署**：
+### 启动本地环境
 
 ```bash
-docker run -d \
-  -e NEXTAUTH_SECRET="your-production-secret" \
-  -e NEXTAUTH_URL="https://your-domain.com" \
-  -e DATABASE_URL="postgresql://..." \
-  -p 3000:3000 \
-  your-image
+docker compose up -d
+npm install
+npm run db:push
+npm run db:seed
+npm run dev
 ```
 
-**Docker Compose**：
+访问：`http://localhost:3000`
 
-```yaml
-services:
-  app:
-    environment:
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - NEXTAUTH_URL=${NEXTAUTH_URL}
-      - DATABASE_URL=${DATABASE_URL}
+## 常用命令
+
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 启动开发环境 |
+| `npm run build` | 构建生产版本 |
+| `npm run start` | 启动生产服务 |
+| `npm run test` | 运行测试 |
+| `npm run db:push` | 同步 Prisma Schema 到数据库 |
+| `npm run db:seed` | 初始化示例数据 |
+| `npm run db:studio` | 打开 Prisma Studio |
+| `docker compose up -d` | 启动本地 PostgreSQL |
+| `docker compose down` | 停止本地 PostgreSQL |
+
+## 测试账号
+
+默认测试密码：`password123`
+
+| 角色 | 邮箱 |
+| --- | --- |
+| 管理员 | `admin@zltech.com` |
+| 技术部主管 | `tech.manager@zltech.com` |
+| 人事部主管 | `hr.manager@zltech.com` |
+| 员工示例 | `wang.qiang@zltech.com`、`zhao.li@zltech.com`、`chen.ming@zltech.com` |
+
+## 离线服务器部署
+
+你的场景是离线服务器，所以推荐使用“联网环境提前打包镜像 + 离线服务器直接 `docker load` 运行”的方式。
+
+这套方案已经在仓库里准备好：
+
+- `Dockerfile`：构建应用镜像
+- `docker-compose.prod.yml`：生产部署编排
+- `.env.prod.example`：生产环境变量模板
+- `scripts/docker-entrypoint.sh`：容器启动时自动执行 `prisma db push`
+- `scripts/build-offline-bundle.ps1`：Windows 联网环境打包脚本
+- `scripts/build-offline-bundle.sh`：Linux/macOS 联网环境打包脚本
+- `scripts/install-offline-bundle.sh`：离线服务器导入并启动脚本
+
+### 方案说明
+
+在有网络的机器上：
+1. 拉取基础镜像依赖（如 `postgres:16-alpine`）
+2. 构建应用镜像
+3. 将应用镜像和数据库镜像导出为 `.tar`
+4. 连同 `docker-compose.prod.yml`、`.env.prod.example` 一起打成离线发布目录
+
+在离线服务器上：
+1. 拷贝离线发布目录
+2. 配置 `.env.prod`
+3. 执行 `docker load`
+4. 直接 `docker compose up -d`
+
+也就是说，离线服务器不需要联网拉依赖、不需要联网拉镜像。
+
+## 1. 联网机器打离线包
+
+### Windows PowerShell
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-offline-bundle.ps1
 ```
 
-### 环境变量完整示例
+### Linux / macOS
+
+```bash
+sh ./scripts/build-offline-bundle.sh
+```
+
+执行完成后，会生成一个类似下面的目录：
+
+```text
+.offline-bundle/
+└─ 20260320-143000/
+   ├─ bundle-info.txt
+   ├─ docker-compose.prod.yml
+   ├─ .env.prod.example
+   ├─ images/
+   │  ├─ app-image.tar
+   │  └─ postgres-image.tar
+   └─ scripts/
+      ├─ docker-entrypoint.sh
+      └─ install-offline-bundle.sh
+```
+
+默认镜像：
+- 应用镜像：`staff-management-app:offline`
+- 数据库镜像：`postgres:16-alpine`
+
+如果你要改镜像名，可在脚本里传参或设置环境变量。
+
+## 2. 拷贝到离线服务器
+
+把生成的整个离线目录拷到服务器，例如：
+
+```text
+/opt/staff-management-offline/
+```
+
+拷贝方式不限：
+- U 盘
+- 局域网共享
+- 堡垒机中转
+- `scp` 到一台可达机器后再转存
+
+## 3. 在离线服务器上启动
+
+进入离线目录：
+
+```bash
+cd /opt/staff-management-offline/20260320-143000
+```
+
+复制环境变量模板：
+
+```bash
+cp .env.prod.example .env.prod
+```
+
+然后修改 `.env.prod`，重点确认这些值：
+
+| 变量 | 说明 |
+| --- | --- |
+| `APP_PORT` | 对外端口，默认 `3000` |
+| `POSTGRES_PORT` | 数据库对外端口，默认 `5432` |
+| `POSTGRES_USER` | PostgreSQL 用户 |
+| `POSTGRES_PASSWORD` | PostgreSQL 密码 |
+| `POSTGRES_DB` | PostgreSQL 数据库名 |
+| `DATABASE_URL` | 应用连接数据库的地址，默认走 compose 内部 `postgres` 服务 |
+| `NEXTAUTH_SECRET` | 生产密钥，必须替换 |
+| `NEXTAUTH_URL` | 访问地址，如 `http://服务器IP:3000` |
+| `RUN_DB_PUSH` | 启动时自动同步表结构，默认 `true` |
+| `RUN_DB_SEED` | 是否初始化种子数据，默认 `false` |
+
+启动：
+
+```bash
+sh scripts/install-offline-bundle.sh
+```
+
+这个脚本会自动执行：
+
+```bash
+docker load -i images/postgres-image.tar
+docker load -i images/app-image.tar
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+### 查看状态
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+```
+
+### 查看日志
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f app
+```
+
+### 停止服务
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod down
+```
+
+## 4. 后续版本更新
+
+如果有新版本，重复一遍“联网机器打包 -> 拷贝到离线服务器 -> 重新 load + up -d”即可。
+
+推荐更新方式：
+
+1. 在联网机器重新执行离线打包脚本
+2. 把新的离线目录拷到服务器
+3. 进入新目录后再次执行：
+
+```bash
+sh scripts/install-offline-bundle.sh
+```
+
+Docker 会用新镜像替换旧容器。
+
+## 生产环境文件说明
+
+### `docker-compose.prod.yml`
+
+- 同时启动 `app` 和 `postgres`
+- `app` 默认使用本地镜像 `staff-management-app:offline`
+- `postgres` 默认使用本地镜像 `postgres:16-alpine`
+
+### `.env.prod.example`
+
+默认示例：
 
 ```env
-# 数据库配置
-DATABASE_URL="postgresql://staff:staff_password@127.0.0.1:5432/staff_management?schema=public"
+APP_PORT=3000
+POSTGRES_PORT=5432
+POSTGRES_IMAGE=postgres:16-alpine
+POSTGRES_USER=staff
+POSTGRES_PASSWORD=change_me
+POSTGRES_DB=staff_management
+TZ=Asia/Shanghai
 
-# NextAuth 配置
-NEXTAUTH_SECRET="your-generated-secret-key-here"
-NEXTAUTH_URL="http://localhost:3000"  # 生产环境改为 https://your-domain.com
+IMAGE_NAME=staff-management-app
+IMAGE_TAG=offline
+
+DATABASE_URL=postgresql://staff:change_me@postgres:5432/staff_management?schema=public
+NEXTAUTH_SECRET=replace_with_a_random_secret
+NEXTAUTH_URL=http://your-server-ip:3000
+
+RUN_DB_PUSH=true
+RUN_DB_SEED=false
 ```
 
-### 常见问题
+## 项目结构
 
-**Q: 启动时报 `JWEDecryptionFailed: decryption operation failed`**
+```text
+staff-management/
+├─ prisma/                    # Prisma schema 与种子数据
+├─ scripts/                   # 启动、部署、离线打包脚本
+├─ src/
+│  ├─ app/                    # Next.js App Router 页面
+│  ├─ components/             # UI 与布局组件
+│  ├─ lib/                    # 工具函数、认证、校验
+│  ├─ server/actions/         # Server Actions
+│  ├─ test/                   # 测试初始化
+│  └─ types/                  # 类型定义
+├─ .github/workflows/         # GitHub Actions 工作流（可选）
+├─ docker-compose.yml         # 本地 PostgreSQL
+├─ docker-compose.prod.yml    # 生产部署编排
+├─ Dockerfile                 # 应用镜像
+└─ README.md
+```
 
-A: 这通常是因为：
-1. `NEXTAUTH_SECRET` 未配置或使用了占位符
-2. 更换了 `NEXTAUTH_SECRET` 但浏览器有旧的登录 cookie
+## 注意事项
 
-解决方法：
-1. 确保 `.env` 中有正确的 `NEXTAUTH_SECRET`
-2. 清除浏览器 cookie（F12 → Application → Cookies → Clear）
-3. 重启开发服务器
+- 当前仓库没有 Prisma Migration 文件，生产环境默认通过 `prisma db push` 同步表结构
+- 如果后续改为正式 migration，建议将容器启动逻辑改为 `prisma migrate deploy`
+- 离线服务器首次部署前，请先确认已安装 `Docker` 和 `Docker Compose`
+- 如果服务器完全不能联网，`postgres` 镜像也必须通过离线包带过去，所以不要只拷应用镜像
+- `.offline-bundle/` 目录建议不要提交到 Git
 
-## 测试数据说明
+## 验证
 
-种子数据脚本 (`prisma/seed.ts`) 会创建:
+建议在打包前先执行：
 
-- 1 个公司: 智联科技有限公司
-- 3 个部门: 技术部、人事部、财务部
-- 5 个岗位: 高级工程师、工程师、初级工程师、人事专员、财务专员
-- 9 个用户: 1 管理员 + 2 经理 + 6 员工
-- 每个用户的假期余额
-- 每个部门的审批流程配置
-- 示例加班申请、请假申请、绩效考核记录
-- **新增：2024-2026年法定节假日数据**
-- **新增：测试加班申请数据（覆盖不同场景）**
-- **新增：测试薪资记录数据**
-- **新增：调休余额数据**
-
-### 测试场景覆盖
-
-| 场景 | 说明 |
-|------|------|
-| 加班 < 36h | 全部计入加班费 |
-| 加班 > 36h | 超出部分自动转调休 |
-| 混合加班类型 | 按优先级转调休（节假日>周末>工作日） |
-| 调休使用 | 申请调休，走审批流程 |
-| 审批通过 | 中间岗通过后流转下一岗，最后一岗通过后置为完成 |
-| 审批退回 | 拒绝时退回上一岗，首岗拒绝则退回申请人并允许修改 |
-| 薪资导出 | CSV 导出测试（可直接用 Excel 打开） |
-
-### 测试用户调休数据
-
-| 用户 | 累计调休 | 说明 |
-|------|---------|------|
-| 陈明 | 12h | 从上月加班结转 |
-| 赵丽 | 8h | 从上月加班结转 |
-
-### 测试用户薪资说明
-
-| 用户 | 月份 | 特点 |
-|------|------|------|
-| 王强 | 2026-01 | 有已确认薪资记录，适合验证普通计薪场景 |
-| 陈明 | 2026-01 | 有已支付薪资记录，适合验证超 36h 转调休场景 |
-| 赵丽 | 2026-01 | 有草稿薪资记录，适合验证详情页与状态流转 |
-
-## stop 服务
-docker-compose down
+```bash
+npm run build
+npm test
+```

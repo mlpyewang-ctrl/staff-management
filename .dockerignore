@@ -1,0 +1,15 @@
+﻿.git
+.gitignore
+.next
+node_modules
+npm-debug.log
+Dockerfile*
+docker-compose*.yml
+README.md
+.env
+.env.*
+!.env.example
+!.env.prod.example
+coverage
+.cursor
+.lingma
