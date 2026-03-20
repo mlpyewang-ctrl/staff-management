@@ -1,46 +1,53 @@
-'use client'
+﻿'use client'
 
-import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar } from '@/components/ui/calendar'
+import { Select } from '@/components/ui/select'
+import { formatDate } from '@/lib/utils'
 import { getOvertimeStats } from '@/server/actions/overtime'
 import { getLeaveStats } from '@/server/actions/leave'
 import { getDepartments } from '@/server/actions/department'
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const [overtimeHours, setOvertimeHours] = useState<number>(0)
-  const [leaveDays, setLeaveDays] = useState<number>(0)
-  const [statsMonthLabel, setStatsMonthLabel] = useState<string>('本月')
+  const [overtimeHours, setOvertimeHours] = useState(0)
+  const [leaveDays, setLeaveDays] = useState(0)
+  const [statsMonthLabel, setStatsMonthLabel] = useState('本月')
   const [departments, setDepartments] = useState<any[]>([])
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('')
+  const [selectedDepartment, setSelectedDepartment] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const loadStats = async () => {
-      if (!session?.user) return
+      if (!session?.user) {
+        return
+      }
 
       setLoading(true)
 
       const isEmployee = session.user.role === 'EMPLOYEE'
       const userId = isEmployee ? session.user.id : undefined
-      const deptId = !isEmployee && selectedDepartment ? selectedDepartment : undefined
+      const departmentId = !isEmployee && selectedDepartment ? selectedDepartment : undefined
       const now = new Date()
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
       const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       const previousMonth = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-      const [currentHours, currentDays, depts] = await Promise.all([
-        getOvertimeStats(userId, deptId, currentMonth),
-        getLeaveStats(userId, deptId, currentMonth),
+      const [currentHours, currentDays, deptList] = await Promise.all([
+        getOvertimeStats(userId, departmentId, currentMonth),
+        getLeaveStats(userId, departmentId, currentMonth),
         isEmployee ? Promise.resolve([]) : getDepartments(),
       ])
 
       if (currentHours === 0 && currentDays === 0) {
         const [previousHours, previousDays] = await Promise.all([
-          getOvertimeStats(userId, deptId, previousMonth),
-          getLeaveStats(userId, deptId, previousMonth),
+          getOvertimeStats(userId, departmentId, previousMonth),
+          getLeaveStats(userId, departmentId, previousMonth),
         ])
 
         setOvertimeHours(previousHours)
@@ -52,125 +59,221 @@ export default function DashboardPage() {
         setStatsMonthLabel('本月')
       }
 
-      setDepartments(depts)
+      setDepartments(deptList)
       setLoading(false)
     }
 
     loadStats()
-  }, [session, selectedDepartment])
+  }, [selectedDepartment, session])
 
-  const getStatsTitle = () => {
-    if (session?.user?.role === 'EMPLOYEE') {
-      return `我的${statsMonthLabel}统计`
-    }
-    return selectedDepartment ? `部门${statsMonthLabel}统计` : `全公司${statsMonthLabel}统计`
-  }
+  const roleLabel =
+    session?.user?.role === 'ADMIN'
+      ? '系统管理员'
+      : session?.user?.role === 'MANAGER'
+      ? '部门主管'
+      : '员工'
+
+  const departmentName = useMemo(
+    () => departments.find((department) => department.id === selectedDepartment)?.name || '全部部门',
+    [departments, selectedDepartment]
+  )
 
   const stats = [
-    { name: '本月加班', value: loading ? '...' : `${overtimeHours} 小时`, icon: '⏰' },
-    { name: '本月请假', value: loading ? '...' : `${leaveDays} 天`, icon: '📅' },
+    {
+      name: `${statsMonthLabel}加班`,
+      value: loading ? '...' : `${overtimeHours} 小时`,
+      hint: '已审批通过的有效时长',
+      accent: 'from-sky-500/15 to-sky-500/5 text-sky-700',
+    },
+    {
+      name: `${statsMonthLabel}请假`,
+      value: loading ? '...' : `${leaveDays} 天`,
+      hint: '已纳入统计的请假天数',
+      accent: 'from-emerald-500/15 to-emerald-500/5 text-emerald-700',
+    },
   ]
+
+  const quickActions = [
+    ...(session?.user?.role === 'EMPLOYEE'
+      ? [
+          {
+            title: '发起加班申请',
+            description: '快速提交加班记录并进入审批流程。',
+            href: '/dashboard/overtime/new',
+            style: 'bg-sky-50 text-sky-700 hover:bg-sky-100',
+          },
+          {
+            title: '提交请假申请',
+            description: '按假期类型填写申请并查看余额。',
+            href: '/dashboard/leave/new',
+            style: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+          },
+          {
+            title: '填写绩效记录',
+            description: '补充本期绩效和自评内容。',
+            href: '/dashboard/performance/new',
+            style: 'bg-amber-50 text-amber-700 hover:bg-amber-100',
+          },
+        ]
+      : []),
+    ...((session?.user?.role === 'MANAGER' || session?.user?.role === 'ADMIN')
+      ? [
+          {
+            title: '处理审批待办',
+            description: '查看当前轮到你的审批事项。',
+            href: '/dashboard/approvals',
+            style: 'bg-violet-50 text-violet-700 hover:bg-violet-100',
+          },
+        ]
+      : []),
+  ]
+
+  const overviewTitle =
+    session?.user?.role === 'EMPLOYEE' ? `我的${statsMonthLabel}概览` : `${departmentName}${statsMonthLabel}概览`
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">欢迎回来，{session?.user?.name}！</h1>
-        <p className="text-gray-600 mt-1">
-          角色：{session?.user?.role === 'ADMIN' ? '系统管理员' : session?.user?.role === 'MANAGER' ? '主管' : '员工'}
-        </p>
-      </div>
+      <section className="grid gap-6 xl:grid-cols-[1.7fr,1fr]">
+        <Card className="overflow-hidden border border-sky-100 bg-[linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(238,246,255,0.95))] shadow-xl">
+          <CardContent className="p-6 sm:p-8">
+            <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl space-y-4">
+                <Badge className="border border-sky-200 bg-sky-50 text-sky-700">
+                  {roleLabel}
+                </Badge>
+                <div>
+                  <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                    欢迎回来，{session?.user?.name || '同事'}
+                  </h1>
+                  <p className="mt-3 text-sm leading-7 text-slate-700 sm:text-base">
+                    今天是 {formatDate(new Date())}。你当前查看的是
+                    {session?.user?.role === 'EMPLOYEE' ? '个人工作台' : departmentName}
+                    的业务概览，常用操作和关键数据都放在这里。
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button asChild className="bg-slate-950 text-white hover:bg-slate-800">
+                    <Link href="/dashboard/overtime">查看加班记录</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  >
+                    <Link href="/dashboard/profile">维护个人信息</Link>
+                  </Button>
+                </div>
+              </div>
 
-      {/* Department filter for admin/manager */}
-      {session?.user?.role !== 'EMPLOYEE' && (
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center space-x-4">
-              <span className="text-sm font-medium text-gray-700">筛选部门：</span>
-              <select
-                className="block rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-              >
-                <option value="">全部部门</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </option>
+              <div className="grid gap-3 sm:min-w-[280px] sm:grid-cols-2 lg:w-[320px] lg:grid-cols-1">
+                {stats.map((stat) => (
+                  <div
+                    key={stat.name}
+                    className={`rounded-3xl border border-white/70 bg-gradient-to-br p-5 ${stat.accent}`}
+                  >
+                    <div className="text-sm font-medium text-slate-700">{stat.name}</div>
+                    <div className="mt-3 text-3xl font-semibold text-slate-900">{stat.value}</div>
+                    <div className="mt-2 text-xs text-slate-600">{stat.hint}</div>
+                  </div>
                 ))}
-              </select>
+              </div>
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* Stats cards */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">{getStatsTitle()}</h2>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <Card key={stat.name}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{stat.name}</CardTitle>
-                <span className="text-2xl">{stat.icon}</span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+        <Card className="border-white/70 bg-white/80 shadow-lg backdrop-blur">
+          <CardHeader className="pb-3">
+            <CardTitle>{overviewTitle}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {session?.user?.role !== 'EMPLOYEE' && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-slate-700">部门筛选</div>
+                <Select value={selectedDepartment} onChange={(event) => setSelectedDepartment(event.target.value)}>
+                  <option value="">全部部门</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm text-slate-500">当前统计范围</div>
+                <div className="mt-2 text-lg font-semibold text-slate-900">{statsMonthLabel}</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {session?.user?.role === 'EMPLOYEE' ? '展示你的个人统计结果' : `当前选择：${departmentName}`}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm text-slate-500">工作提醒</div>
+                <div className="mt-2 text-lg font-semibold text-slate-900">记录更集中</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  仪表盘已把常用入口、统计和日历集中到同一屏。
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+        <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
           <CardHeader>
             <CardTitle>快捷操作</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {session?.user?.role === 'EMPLOYEE' && (
-              <>
-                <a href="/dashboard/overtime/new" className="block p-3 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors">
-                  <span className="font-medium text-blue-700">提交加班申请</span>
-                </a>
-                <a href="/dashboard/leave/new" className="block p-3 bg-green-50 rounded-md hover:bg-green-100 transition-colors">
-                  <span className="font-medium text-green-700">提交请假申请</span>
-                </a>
-                <a href="/dashboard/performance/new" className="block p-3 bg-purple-50 rounded-md hover:bg-purple-100 transition-colors">
-                  <span className="font-medium text-purple-700">填写绩效</span>
-                </a>
-              </>
-            )}
-            {(session?.user?.role === 'MANAGER' || session?.user?.role === 'ADMIN') && (
-              <a href="/dashboard/approvals" className="block p-3 bg-yellow-50 rounded-md hover:bg-yellow-100 transition-colors">
-                <span className="font-medium text-yellow-700">处理审批</span>
-              </a>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            {quickActions.length > 0 ? (
+              quickActions.map((action) => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className={`rounded-3xl p-5 transition-colors ${action.style}`}
+                >
+                  <div className="text-lg font-semibold">{action.title}</div>
+                  <div className="mt-2 text-sm leading-6 opacity-90">{action.description}</div>
+                </Link>
+              ))
+            ) : (
+              <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
+                当前角色暂时没有快捷操作入口，请从左侧菜单进入对应模块。
+              </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
           <CardHeader>
             <CardTitle>日历</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Calendar />
           </CardContent>
         </Card>
-      </div>
+      </section>
 
-      <Card>
+      <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
         <CardHeader>
-          <CardTitle>系统公告</CardTitle>
+          <CardTitle>系统提醒</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <div className="text-sm text-gray-600">
-              <p>欢迎使用劳务派遣员工管理系统</p>
-              <p>请按时完成月度绩效填写</p>
-              <p>加班申请需提前 1 天提交</p>
-              <p>请假申请请确保假期余额充足</p>
-              <p>月加班超过36小时部分自动转调休</p>
-            </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              '请按时补充绩效记录，避免月底集中填写。',
+              '加班申请建议提前发起，便于审批节点按时流转。',
+              '请假前先确认假期余额和排班安排。',
+              '月度工时超额部分会按系统规则转入调休或薪资结算。',
+            ].map((notice) => (
+              <div
+                key={notice}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600"
+              >
+                {notice}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

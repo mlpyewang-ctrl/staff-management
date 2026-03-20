@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { Role } from '@/types'
+import { authLogger } from '@/lib/auth-logger'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -68,5 +69,6 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/auth/login',
   },
+  logger: authLogger,
   secret: process.env.NEXTAUTH_SECRET,
 }
