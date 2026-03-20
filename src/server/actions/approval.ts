@@ -1,8 +1,7 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
-import { approvalSchema } from '@/lib/validations'
 import { revalidatePath } from 'next/cache'
+
 import {
   canApproveCurrentStep,
   getDefaultApprovalFlowSteps,
@@ -10,8 +9,21 @@ import {
   resolveApprovalWorkflowState,
   type ApprovalFlowStep,
 } from '@/lib/approval-workflow'
+import { requireManagerUser } from '@/lib/action-auth'
+import { prisma } from '@/lib/prisma'
+import { approvalSchema } from '@/lib/validations'
 
 type SupportedApplicationType = 'OVERTIME' | 'LEAVE'
+
+const leaveTypeMap: Record<string, string> = {
+  ANNUAL: '年假',
+  SICK: '病假',
+  PERSONAL: '事假',
+  MARRIAGE: '婚假',
+  MATERNITY: '产假',
+  PATERNITY: '陪产假',
+  COMPENSATORY: '调休',
+}
 
 function parseFlowTypes(types: string) {
   try {
@@ -22,7 +34,10 @@ function parseFlowTypes(types: string) {
   }
 }
 
-async function getApprovalSteps(departmentId: string | null | undefined, applicationType: SupportedApplicationType) {
+async function getApprovalSteps(
+  departmentId: string | null | undefined,
+  applicationType: SupportedApplicationType
+) {
   if (!departmentId) {
     return getDefaultApprovalFlowSteps()
   }
@@ -54,18 +69,21 @@ function buildProgressText(completedSteps: number, totalSteps: number) {
   return `${completedSteps}/${totalSteps}`
 }
 
-const leaveTypeMap: Record<string, string> = {
-  ANNUAL: '年假',
-  SICK: '病假',
-  PERSONAL: '事假',
-  MARRIAGE: '婚假',
-  MATERNITY: '产假',
-  PATERNITY: '陪产假',
-  COMPENSATORY: '调休',
+function normalizeApprovalStatuses(
+  approvals: Array<{
+    status: string
+  }>
+) {
+  return approvals
+    .filter((approval) => approval.status === 'APPROVED' || approval.status === 'REJECTED')
+    .map((approval) => ({
+      status: approval.status as 'APPROVED' | 'REJECTED',
+    }))
 }
 
 export async function approveApplication(formData: FormData) {
   try {
+    const sessionUser = await requireManagerUser()
     const validatedData = approvalSchema.parse({
       applicationId: formData.get('applicationId'),
       applicationType: formData.get('applicationType'),
@@ -73,13 +91,8 @@ export async function approveApplication(formData: FormData) {
       remark: formData.get('remark'),
     })
 
-    const approverId = formData.get('approverId') as string
-    if (!approverId) {
-      return { error: '审批人信息缺失' }
-    }
-
     const approver = await prisma.user.findUnique({
-      where: { id: approverId },
+      where: { id: sessionUser.id },
       select: {
         id: true,
         role: true,
@@ -94,7 +107,7 @@ export async function approveApplication(formData: FormData) {
     const now = new Date()
 
     if (validatedData.applicationType === 'OVERTIME') {
-      const overtimeApp = await prisma.overtimeApplication.findUnique({
+      const overtimeApplication = await prisma.overtimeApplication.findUnique({
         where: { id: validatedData.applicationId },
         include: {
           user: {
@@ -107,36 +120,32 @@ export async function approveApplication(formData: FormData) {
         },
       })
 
-      if (!overtimeApp) {
+      if (!overtimeApplication) {
         return { error: '加班申请不存在' }
       }
 
-      if (['COMPLETED', 'APPROVED'].includes(overtimeApp.status)) {
+      if (['COMPLETED', 'APPROVED'].includes(overtimeApplication.status)) {
         return { error: '该申请已完成审批' }
       }
 
-      if (overtimeApp.status === 'DRAFT') {
+      if (overtimeApplication.status === 'DRAFT') {
         return { error: '该申请已退回申请人，请等待申请人修改后重新提交' }
       }
 
-      const steps = await getApprovalSteps(overtimeApp.user.departmentId, 'OVERTIME')
+      const steps = await getApprovalSteps(overtimeApplication.user.departmentId, 'OVERTIME')
       const approvals = await prisma.approval.findMany({
         where: {
-          applicationId: overtimeApp.id,
+          applicationId: overtimeApplication.id,
           applicationType: 'OVERTIME',
         },
         orderBy: {
           createdAt: 'asc',
         },
       })
-      const normalizedApprovals = approvals
-        .filter((approval) => approval.status === 'APPROVED' || approval.status === 'REJECTED')
-        .map((approval) => ({ status: approval.status as 'APPROVED' | 'REJECTED' }))
-
       const workflow = resolveApprovalWorkflowState({
         steps,
-        approvals: normalizedApprovals,
-        applicationStatus: overtimeApp.status,
+        approvals: normalizeApprovalStatuses(approvals),
+        applicationStatus: overtimeApplication.status,
       })
 
       if (workflow.isCompleted || !workflow.currentStep || workflow.currentStepIndex === null) {
@@ -148,56 +157,73 @@ export async function approveApplication(formData: FormData) {
           currentStep: workflow.currentStep,
           approverRole: approver.role,
           approverDepartmentId: approver.departmentId,
-          applicantDepartmentId: overtimeApp.user.departmentId,
+          applicantDepartmentId: overtimeApplication.user.departmentId,
         })
       ) {
-        return { error: `当前待 ${getCurrentStepLabel(workflow.currentStep)} 处理` }
+        return { error: `当前仅支持处理 ${getCurrentStepLabel(workflow.currentStep)}` }
       }
-
-      await prisma.approval.create({
-        data: {
-          applicationId: overtimeApp.id,
-          applicationType: 'OVERTIME',
-          applicantId: overtimeApp.userId,
-          approverId,
-          status: validatedData.status,
-          remark: validatedData.remark,
-        },
-      })
 
       if (validatedData.status === 'APPROVED') {
         const isFinalStep = workflow.currentStepIndex === steps.length - 1
 
-        await prisma.overtimeApplication.update({
-          where: { id: overtimeApp.id },
-          data: {
-            status: isFinalStep ? 'COMPLETED' : 'PENDING',
-            approverId,
-            approvedAt: isFinalStep ? now : null,
-            remark: validatedData.remark || null,
-          },
+        await prisma.$transaction(async (tx) => {
+          await tx.approval.create({
+            data: {
+              applicationId: overtimeApplication.id,
+              applicationType: 'OVERTIME',
+              applicantId: overtimeApplication.userId,
+              approverId: approver.id,
+              status: validatedData.status,
+              remark: validatedData.remark,
+            },
+          })
+
+          await tx.overtimeApplication.update({
+            where: { id: overtimeApplication.id },
+            data: {
+              status: isFinalStep ? 'COMPLETED' : 'PENDING',
+              approverId: approver.id,
+              approvedAt: isFinalStep ? now : null,
+              remark: validatedData.remark || null,
+            },
+          })
         })
 
         revalidatePath('/dashboard/approvals')
         revalidatePath('/dashboard/overtime')
 
         if (isFinalStep) {
-          return { success: '审批完成，状态已置为完成' }
+          return { success: '审批完成，状态已更新为已完成' }
         }
 
-        return { success: `审批已通过，流转至 ${getCurrentStepLabel(steps[workflow.currentStepIndex + 1])}` }
+        return {
+          success: `审批已通过，流转至 ${getCurrentStepLabel(steps[workflow.currentStepIndex + 1])}`,
+        }
       }
 
       const shouldReturnToApplicant = workflow.currentStepIndex === 0
 
-      await prisma.overtimeApplication.update({
-        where: { id: overtimeApp.id },
-        data: {
-          status: shouldReturnToApplicant ? 'DRAFT' : 'PENDING',
-          approverId,
-          approvedAt: null,
-          remark: validatedData.remark || null,
-        },
+      await prisma.$transaction(async (tx) => {
+        await tx.approval.create({
+          data: {
+            applicationId: overtimeApplication.id,
+            applicationType: 'OVERTIME',
+            applicantId: overtimeApplication.userId,
+            approverId: approver.id,
+            status: validatedData.status,
+            remark: validatedData.remark,
+          },
+        })
+
+        await tx.overtimeApplication.update({
+          where: { id: overtimeApplication.id },
+          data: {
+            status: shouldReturnToApplicant ? 'DRAFT' : 'PENDING',
+            approverId: approver.id,
+            approvedAt: null,
+            remark: validatedData.remark || null,
+          },
+        })
       })
 
       revalidatePath('/dashboard/approvals')
@@ -207,10 +233,10 @@ export async function approveApplication(formData: FormData) {
         return { success: '已退回申请人，申请人可修改后重新提交' }
       }
 
-      return { success: `已退回 ${getCurrentStepLabel(steps[workflow.currentStepIndex - 1])}` }
+      return { success: `已退回至 ${getCurrentStepLabel(steps[workflow.currentStepIndex - 1])}` }
     }
 
-    const leaveApp = await prisma.leaveApplication.findUnique({
+    const leaveApplication = await prisma.leaveApplication.findUnique({
       where: { id: validatedData.applicationId },
       include: {
         user: {
@@ -223,36 +249,32 @@ export async function approveApplication(formData: FormData) {
       },
     })
 
-    if (!leaveApp) {
+    if (!leaveApplication) {
       return { error: '请假申请不存在' }
     }
 
-    if (['COMPLETED', 'APPROVED'].includes(leaveApp.status)) {
+    if (['COMPLETED', 'APPROVED'].includes(leaveApplication.status)) {
       return { error: '该申请已完成审批' }
     }
 
-    if (leaveApp.status === 'DRAFT') {
+    if (leaveApplication.status === 'DRAFT') {
       return { error: '该申请已退回申请人，请等待申请人修改后重新提交' }
     }
 
-    const steps = await getApprovalSteps(leaveApp.user.departmentId, 'LEAVE')
+    const steps = await getApprovalSteps(leaveApplication.user.departmentId, 'LEAVE')
     const approvals = await prisma.approval.findMany({
       where: {
-        applicationId: leaveApp.id,
+        applicationId: leaveApplication.id,
         applicationType: 'LEAVE',
       },
       orderBy: {
         createdAt: 'asc',
       },
     })
-    const normalizedApprovals = approvals
-      .filter((approval) => approval.status === 'APPROVED' || approval.status === 'REJECTED')
-      .map((approval) => ({ status: approval.status as 'APPROVED' | 'REJECTED' }))
-
     const workflow = resolveApprovalWorkflowState({
       steps,
-      approvals: normalizedApprovals,
-      applicationStatus: leaveApp.status,
+      approvals: normalizeApprovalStatuses(approvals),
+      applicationStatus: leaveApplication.status,
     })
 
     if (workflow.isCompleted || !workflow.currentStep || workflow.currentStepIndex === null) {
@@ -264,85 +286,104 @@ export async function approveApplication(formData: FormData) {
         currentStep: workflow.currentStep,
         approverRole: approver.role,
         approverDepartmentId: approver.departmentId,
-        applicantDepartmentId: leaveApp.user.departmentId,
+        applicantDepartmentId: leaveApplication.user.departmentId,
       })
     ) {
-      return { error: `当前待 ${getCurrentStepLabel(workflow.currentStep)} 处理` }
+      return { error: `当前仅支持处理 ${getCurrentStepLabel(workflow.currentStep)}` }
     }
-
-    await prisma.approval.create({
-      data: {
-        applicationId: leaveApp.id,
-        applicationType: 'LEAVE',
-        applicantId: leaveApp.userId,
-        approverId,
-        status: validatedData.status,
-        remark: validatedData.remark,
-      },
-    })
 
     if (validatedData.status === 'APPROVED') {
       const isFinalStep = workflow.currentStepIndex === steps.length - 1
 
-      await prisma.leaveApplication.update({
-        where: { id: leaveApp.id },
-        data: {
-          status: isFinalStep ? 'COMPLETED' : 'PENDING',
-          approverId,
-          approvedAt: isFinalStep ? now : null,
-          remark: validatedData.remark || null,
-        },
-      })
-
-      if (isFinalStep) {
-        const balance = await prisma.leaveBalance.findFirst({
-          where: {
-            userId: leaveApp.userId,
-            year: now.getFullYear(),
+      await prisma.$transaction(async (tx) => {
+        await tx.approval.create({
+          data: {
+            applicationId: leaveApplication.id,
+            applicationType: 'LEAVE',
+            applicantId: leaveApplication.userId,
+            approverId: approver.id,
+            status: validatedData.status,
+            remark: validatedData.remark,
           },
         })
 
-        if (balance && ['ANNUAL', 'SICK', 'PERSONAL', 'COMPENSATORY'].includes(leaveApp.type)) {
-          const updateData: Record<string, { decrement: number } | { increment: number }> = {}
+        await tx.leaveApplication.update({
+          where: { id: leaveApplication.id },
+          data: {
+            status: isFinalStep ? 'COMPLETED' : 'PENDING',
+            approverId: approver.id,
+            approvedAt: isFinalStep ? now : null,
+            remark: validatedData.remark || null,
+          },
+        })
 
-          if (leaveApp.type === 'ANNUAL') {
-            updateData.annual = { decrement: leaveApp.days }
-          } else if (leaveApp.type === 'SICK') {
-            updateData.sick = { decrement: leaveApp.days }
-          } else if (leaveApp.type === 'PERSONAL') {
-            updateData.personal = { decrement: leaveApp.days }
-          } else if (leaveApp.type === 'COMPENSATORY') {
-            updateData.usedCompensatory = { increment: leaveApp.days * 8 }
+        if (isFinalStep && ['ANNUAL', 'SICK', 'PERSONAL', 'COMPENSATORY'].includes(leaveApplication.type)) {
+          const balance = await tx.leaveBalance.findFirst({
+            where: {
+              userId: leaveApplication.userId,
+              year: now.getFullYear(),
+            },
+          })
+
+          if (!balance) {
+            return
           }
 
-          await prisma.leaveBalance.update({
+          const updateData: Record<string, { decrement: number } | { increment: number }> = {}
+
+          if (leaveApplication.type === 'ANNUAL') {
+            updateData.annual = { decrement: leaveApplication.days }
+          } else if (leaveApplication.type === 'SICK') {
+            updateData.sick = { decrement: leaveApplication.days }
+          } else if (leaveApplication.type === 'PERSONAL') {
+            updateData.personal = { decrement: leaveApplication.days }
+          } else if (leaveApplication.type === 'COMPENSATORY') {
+            updateData.usedCompensatory = { increment: leaveApplication.days * 8 }
+          }
+
+          await tx.leaveBalance.update({
             where: { id: balance.id },
             data: updateData,
           })
         }
-      }
+      })
 
       revalidatePath('/dashboard/approvals')
       revalidatePath('/dashboard/leave')
       revalidatePath('/dashboard/compensatory')
 
       if (isFinalStep) {
-        return { success: '审批完成，状态已置为完成' }
+        return { success: '审批完成，状态已更新为已完成' }
       }
 
-      return { success: `审批已通过，流转至 ${getCurrentStepLabel(steps[workflow.currentStepIndex + 1])}` }
+      return {
+        success: `审批已通过，流转至 ${getCurrentStepLabel(steps[workflow.currentStepIndex + 1])}`,
+      }
     }
 
     const shouldReturnToApplicant = workflow.currentStepIndex === 0
 
-    await prisma.leaveApplication.update({
-      where: { id: leaveApp.id },
-      data: {
-        status: shouldReturnToApplicant ? 'DRAFT' : 'PENDING',
-        approverId,
-        approvedAt: null,
-        remark: validatedData.remark || null,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.approval.create({
+        data: {
+          applicationId: leaveApplication.id,
+          applicationType: 'LEAVE',
+          applicantId: leaveApplication.userId,
+          approverId: approver.id,
+          status: validatedData.status,
+          remark: validatedData.remark,
+        },
+      })
+
+      await tx.leaveApplication.update({
+        where: { id: leaveApplication.id },
+        data: {
+          status: shouldReturnToApplicant ? 'DRAFT' : 'PENDING',
+          approverId: approver.id,
+          approvedAt: null,
+          remark: validatedData.remark || null,
+        },
+      })
     })
 
     revalidatePath('/dashboard/approvals')
@@ -353,7 +394,7 @@ export async function approveApplication(formData: FormData) {
       return { success: '已退回申请人，申请人可修改后重新提交' }
     }
 
-    return { success: `已退回 ${getCurrentStepLabel(steps[workflow.currentStepIndex - 1])}` }
+    return { success: `已退回至 ${getCurrentStepLabel(steps[workflow.currentStepIndex - 1])}` }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -362,14 +403,11 @@ export async function approveApplication(formData: FormData) {
   }
 }
 
-export async function getPendingApprovals(approverId?: string) {
+export async function getPendingApprovals(_approverId?: string) {
   try {
-    if (!approverId) {
-      return { overtime: [], leave: [] }
-    }
-
+    const sessionUser = await requireManagerUser()
     const approver = await prisma.user.findUnique({
-      where: { id: approverId },
+      where: { id: sessionUser.id },
       select: {
         id: true,
         role: true,
@@ -381,7 +419,7 @@ export async function getPendingApprovals(approverId?: string) {
       return { overtime: [], leave: [] }
     }
 
-    const [overtimeApps, leaveApps, flows, approvalHistory] = await Promise.all([
+    const [overtimeApplications, leaveApplications, flows, approvalHistory] = await Promise.all([
       prisma.overtimeApplication.findMany({
         where: { status: 'PENDING' },
         include: {
@@ -453,18 +491,15 @@ export async function getPendingApprovals(approverId?: string) {
       approvalHistoryMap.set(key, items)
     }
 
-    const overtime = overtimeApps
-      .map((app) => {
+    const overtime = overtimeApplications
+      .map((application) => {
         const steps =
-          flowStepMap.get(`${app.user.departmentId}:${'OVERTIME'}`) || getDefaultApprovalFlowSteps()
-        const history = approvalHistoryMap.get(`OVERTIME:${app.id}`) || []
-        const normalizedHistory = history
-          .filter((approval) => approval.status === 'APPROVED' || approval.status === 'REJECTED')
-          .map((approval) => ({ status: approval.status as 'APPROVED' | 'REJECTED' }))
+          flowStepMap.get(`${application.user.departmentId}:${'OVERTIME'}`) || getDefaultApprovalFlowSteps()
+        const history = approvalHistoryMap.get(`OVERTIME:${application.id}`) || []
         const workflow = resolveApprovalWorkflowState({
           steps,
-          approvals: normalizedHistory,
-          applicationStatus: app.status,
+          approvals: normalizeApprovalStatuses(history),
+          applicationStatus: application.status,
         })
 
         if (
@@ -474,16 +509,16 @@ export async function getPendingApprovals(approverId?: string) {
             currentStep: workflow.currentStep,
             approverRole: approver.role,
             approverDepartmentId: approver.departmentId,
-            applicantDepartmentId: app.user.departmentId,
+            applicantDepartmentId: application.user.departmentId,
           })
         ) {
           return null
         }
 
         return {
-          ...app,
-          userName: app.user.name,
-          departmentName: app.user.department?.name,
+          ...application,
+          userName: application.user.name,
+          departmentName: application.user.department?.name,
           currentStepName: getCurrentStepLabel(workflow.currentStep),
           currentStepRole: workflow.currentStep.role,
           approvalProgress: buildProgressText(workflow.completedSteps, workflow.totalSteps),
@@ -491,17 +526,15 @@ export async function getPendingApprovals(approverId?: string) {
       })
       .filter(Boolean)
 
-    const leave = leaveApps
-      .map((app) => {
-        const steps = flowStepMap.get(`${app.user.departmentId}:${'LEAVE'}`) || getDefaultApprovalFlowSteps()
-        const history = approvalHistoryMap.get(`LEAVE:${app.id}`) || []
-        const normalizedHistory = history
-          .filter((approval) => approval.status === 'APPROVED' || approval.status === 'REJECTED')
-          .map((approval) => ({ status: approval.status as 'APPROVED' | 'REJECTED' }))
+    const leave = leaveApplications
+      .map((application) => {
+        const steps =
+          flowStepMap.get(`${application.user.departmentId}:${'LEAVE'}`) || getDefaultApprovalFlowSteps()
+        const history = approvalHistoryMap.get(`LEAVE:${application.id}`) || []
         const workflow = resolveApprovalWorkflowState({
           steps,
-          approvals: normalizedHistory,
-          applicationStatus: app.status,
+          approvals: normalizeApprovalStatuses(history),
+          applicationStatus: application.status,
         })
 
         if (
@@ -511,17 +544,17 @@ export async function getPendingApprovals(approverId?: string) {
             currentStep: workflow.currentStep,
             approverRole: approver.role,
             approverDepartmentId: approver.departmentId,
-            applicantDepartmentId: app.user.departmentId,
+            applicantDepartmentId: application.user.departmentId,
           })
         ) {
           return null
         }
 
         return {
-          ...app,
-          userName: app.user.name,
-          departmentName: app.user.department?.name,
-          leaveTypeText: leaveTypeMap[app.type] || app.type,
+          ...application,
+          userName: application.user.name,
+          departmentName: application.user.department?.name,
+          leaveTypeText: leaveTypeMap[application.type] || application.type,
           currentStepName: getCurrentStepLabel(workflow.currentStep),
           currentStepRole: workflow.currentStep.role,
           approvalProgress: buildProgressText(workflow.completedSteps, workflow.totalSteps),
@@ -539,10 +572,11 @@ export async function getPendingApprovals(approverId?: string) {
   }
 }
 
-export async function getApprovalHistory(approverId?: string) {
+export async function getApprovalHistory(_approverId?: string) {
   try {
+    const sessionUser = await requireManagerUser()
     const approvals = await prisma.approval.findMany({
-      where: approverId ? { approverId } : {},
+      where: { approverId: sessionUser.id },
       orderBy: { createdAt: 'desc' },
       take: 50,
     })

@@ -1,9 +1,12 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
-import { leaveSchema } from '@/lib/validations'
+import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+
+import { requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { prisma } from '@/lib/prisma'
 import { calculateLeaveDaysExcludingNonWorkingDays, formatDateKey } from '@/lib/utils'
+import { leaveSchema } from '@/lib/validations'
 import { SALARY_CONSTANTS } from '@/types'
 
 const leaveTypeMap: Record<string, string> = {
@@ -43,7 +46,7 @@ async function getOrCreateLeaveBalance(userId: string) {
 }
 
 async function getPendingCompensatoryHours(userId: string, excludeId?: string) {
-  const apps = await prisma.leaveApplication.findMany({
+  const applications = await prisma.leaveApplication.findMany({
     where: {
       userId,
       type: 'COMPENSATORY',
@@ -59,7 +62,7 @@ async function getPendingCompensatoryHours(userId: string, excludeId?: string) {
     },
   })
 
-  return apps.reduce((sum, app) => sum + app.days * SALARY_CONSTANTS.HOURS_PER_DAY, 0)
+  return applications.reduce((sum, application) => sum + application.days * SALARY_CONSTANTS.HOURS_PER_DAY, 0)
 }
 
 async function getHolidayDateBuckets(startDate: Date, endDate: Date) {
@@ -141,14 +144,44 @@ async function validateLeaveBalance(params: {
     params.leaveType !== 'MATERNITY' &&
     params.leaveType !== 'PATERNITY'
   ) {
-    return { error: `假期余额不足，剩余${currentBalance}天` }
+    return { error: `假期余额不足，当前剩余 ${currentBalance} 天` }
   }
 
   return { balance }
 }
 
+async function requireLeaveOwnerOrAdmin(id: string) {
+  const sessionUser = await requireSessionUser()
+  const application = await prisma.leaveApplication.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+    },
+  })
+
+  if (!application) {
+    return {
+      sessionUser,
+      application: null,
+    }
+  }
+
+  if (sessionUser.role !== 'ADMIN' && sessionUser.id !== application.userId) {
+    throw new Error('无权操作该请假申请')
+  }
+
+  return {
+    sessionUser,
+    application,
+  }
+}
+
 export async function getLeaveDurationPreview(startDate?: string, endDate?: string) {
   try {
+    await requireSessionUser()
+
     if (!startDate || !endDate) {
       return { days: 0 }
     }
@@ -172,12 +205,8 @@ export async function getLeaveDurationPreview(startDate?: string, endDate?: stri
 
 export async function createLeaveApplication(formData: FormData) {
   try {
-    const userId = formData.get('userId') as string
-    if (!userId) {
-      return { error: '用户未登录' }
-    }
-
-    const action = (formData.get('action') as string) === 'submit' ? 'submit' : 'save'
+    const sessionUser = await requireSessionUser()
+    const action = formData.get('action') === 'submit' ? 'submit' : 'save'
     const payload = buildLeavePayload(formData)
     const holidayBuckets = await getHolidayDateBuckets(payload.startDateTime, payload.endDateTime)
     const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, holidayBuckets)
@@ -188,7 +217,7 @@ export async function createLeaveApplication(formData: FormData) {
 
     if (action === 'submit') {
       const balanceCheck = await validateLeaveBalance({
-        userId,
+        userId: sessionUser.id,
         leaveType: payload.validatedData.type,
         days,
         isCompensatory: payload.validatedData.type === 'COMPENSATORY',
@@ -201,7 +230,7 @@ export async function createLeaveApplication(formData: FormData) {
 
     const created = await prisma.leaveApplication.create({
       data: {
-        userId,
+        userId: sessionUser.id,
         type: payload.validatedData.type,
         startDate: payload.startDateTime,
         endDate: payload.endDateTime,
@@ -214,7 +243,9 @@ export async function createLeaveApplication(formData: FormData) {
 
     revalidatePath('/dashboard/leave')
     revalidatePath('/dashboard/compensatory')
+
     const applicationLabel = payload.validatedData.type === 'COMPENSATORY' ? '调休申请' : '请假申请'
+
     return {
       success: action === 'submit' ? `${applicationLabel}已提交` : `${applicationLabel.replace('申请', '')}草稿已保存`,
       id: created.id,
@@ -230,8 +261,20 @@ export async function createLeaveApplication(formData: FormData) {
 
 export async function getLeaveApplication(id: string) {
   try {
-    const app = await prisma.leaveApplication.findUnique({ where: { id } })
-    return app
+    const sessionUser = await requireSessionUser()
+    const application = await prisma.leaveApplication.findUnique({
+      where: { id },
+    })
+
+    if (!application) {
+      return null
+    }
+
+    if (sessionUser.role === 'EMPLOYEE' && application.userId !== sessionUser.id) {
+      return null
+    }
+
+    return application
   } catch (error) {
     console.error('获取请假申请详情失败:', error)
     return null
@@ -240,14 +283,11 @@ export async function getLeaveApplication(id: string) {
 
 export async function deleteLeaveApplication(id: string) {
   try {
-    if (!id) return { error: '缺少请假申请 ID' }
+    if (!id) {
+      return { error: '缺少请假申请 ID' }
+    }
 
-    const application = await prisma.leaveApplication.findUnique({
-      where: { id },
-      select: {
-        status: true,
-      },
-    })
+    const { application } = await requireLeaveOwnerOrAdmin(id)
 
     if (!application) {
       return { error: '请假申请不存在' }
@@ -257,32 +297,38 @@ export async function deleteLeaveApplication(id: string) {
       return { error: '只有草稿状态的请假申请可以删除' }
     }
 
-    await prisma.approval.deleteMany({
-      where: {
-        applicationId: id,
-        applicationType: 'LEAVE',
-      },
-    })
-    await prisma.leaveApplication.delete({ where: { id } })
+    await prisma.$transaction([
+      prisma.approval.deleteMany({
+        where: {
+          applicationId: id,
+          applicationType: 'LEAVE',
+        },
+      }),
+      prisma.leaveApplication.delete({
+        where: { id },
+      }),
+    ])
+
     revalidatePath('/dashboard/leave')
     revalidatePath('/dashboard/compensatory')
     return { success: '请假申请已删除' }
   } catch (error) {
-    if (error instanceof Error) return { error: error.message }
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
     return { error: '删除失败，请稍后重试' }
   }
 }
 
 export async function updateLeaveApplication(formData: FormData) {
   try {
-    const id = formData.get('id') as string
-    if (!id) {
+    const id = formData.get('id')
+    if (typeof id !== 'string' || !id) {
       return { error: '缺少请假申请 ID' }
     }
 
-    const application = await prisma.leaveApplication.findUnique({
-      where: { id },
-    })
+    const { application } = await requireLeaveOwnerOrAdmin(id)
+
     if (!application) {
       return { error: '请假申请不存在' }
     }
@@ -294,7 +340,7 @@ export async function updateLeaveApplication(formData: FormData) {
     const payload = buildLeavePayload(formData)
     const holidayBuckets = await getHolidayDateBuckets(payload.startDateTime, payload.endDateTime)
     const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, holidayBuckets)
-    const nextStatus = (formData.get('action') as string) === 'submit' ? 'PENDING' : 'DRAFT'
+    const nextStatus = formData.get('action') === 'submit' ? 'PENDING' : 'DRAFT'
 
     if (days <= 0) {
       return { error: '所选日期不包含有效工作日，请重新选择' }
@@ -314,33 +360,37 @@ export async function updateLeaveApplication(formData: FormData) {
       }
     }
 
-    await prisma.approval.deleteMany({
-      where: {
-        applicationId: id,
-        applicationType: 'LEAVE',
-      },
-    })
-
-    await prisma.leaveApplication.update({
-      where: { id },
-      data: {
-        type: payload.validatedData.type,
-        startDate: payload.startDateTime,
-        endDate: payload.endDateTime,
-        days,
-        reason: payload.validatedData.reason,
-        destination: payload.validatedData.destination,
-        status: nextStatus,
-        approverId: null,
-        approvedAt: null,
-        remark: null,
-      },
-    })
+    await prisma.$transaction([
+      prisma.approval.deleteMany({
+        where: {
+          applicationId: id,
+          applicationType: 'LEAVE',
+        },
+      }),
+      prisma.leaveApplication.update({
+        where: { id },
+        data: {
+          type: payload.validatedData.type,
+          startDate: payload.startDateTime,
+          endDate: payload.endDateTime,
+          days,
+          reason: payload.validatedData.reason,
+          destination: payload.validatedData.destination,
+          status: nextStatus,
+          approverId: null,
+          approvedAt: null,
+          remark: null,
+        },
+      }),
+    ])
 
     revalidatePath('/dashboard/leave')
     revalidatePath('/dashboard/compensatory')
+
     const applicationLabel = payload.validatedData.type === 'COMPENSATORY' ? '调休申请' : '请假申请'
-    return { success: nextStatus === 'PENDING' ? `${applicationLabel}已提交` : `${applicationLabel}已保存为草稿` }
+    return {
+      success: nextStatus === 'PENDING' ? `${applicationLabel}已提交` : `${applicationLabel}已保存为草稿`,
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -349,13 +399,15 @@ export async function updateLeaveApplication(formData: FormData) {
   }
 }
 
-export async function getLeaveApplications(userId?: string, role?: string) {
+export async function getLeaveApplications(_userId?: string, _role?: string) {
   try {
-    const where: any = {}
-
-    if (role === 'EMPLOYEE' && userId) {
-      where.userId = userId
-    }
+    const sessionUser = await requireSessionUser()
+    const where: Prisma.LeaveApplicationWhereInput =
+      sessionUser.role === 'EMPLOYEE'
+        ? {
+            userId: sessionUser.id,
+          }
+        : {}
 
     const applications = await prisma.leaveApplication.findMany({
       where,
@@ -370,11 +422,12 @@ export async function getLeaveApplications(userId?: string, role?: string) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return applications.map((app) => ({
-      ...app,
-      userName: app.user.name,
-      leaveTypeText: leaveTypeMap[app.type] || app.type,
-      compensatoryHours: app.type === 'COMPENSATORY' ? app.days * SALARY_CONSTANTS.HOURS_PER_DAY : 0,
+    return applications.map((application) => ({
+      ...application,
+      userName: application.user.name,
+      leaveTypeText: leaveTypeMap[application.type] || application.type,
+      compensatoryHours:
+        application.type === 'COMPENSATORY' ? application.days * SALARY_CONSTANTS.HOURS_PER_DAY : 0,
     }))
   } catch (error) {
     console.error('获取请假申请列表失败:', error)
@@ -388,16 +441,18 @@ export async function getLeaveBalances(userId: string) {
       return null
     }
 
+    await requireSelfOrAdmin(userId)
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true },
     })
+
     if (!user) {
       return null
     }
 
-    const balance = await getOrCreateLeaveBalance(userId)
-    return balance
+    return await getOrCreateLeaveBalance(userId)
   } catch (error) {
     console.error('获取假期余额失败:', error)
     return null
@@ -406,6 +461,7 @@ export async function getLeaveBalances(userId: string) {
 
 export async function getLeaveStats(userId?: string, departmentId?: string, referenceMonth?: string) {
   try {
+    const sessionUser = await requireSessionUser()
     const now = new Date()
     const [year, month] = referenceMonth
       ? referenceMonth.split('-').map(Number)
@@ -413,7 +469,7 @@ export async function getLeaveStats(userId?: string, departmentId?: string, refe
     const firstDayOfMonth = new Date(year, month - 1, 1)
     const lastDayOfMonth = new Date(year, month, 0, 23, 59, 59)
 
-    const where: any = {
+    const where: Prisma.LeaveApplicationWhereInput = {
       status: {
         in: ['APPROVED', 'COMPLETED'],
       },
@@ -425,11 +481,13 @@ export async function getLeaveStats(userId?: string, departmentId?: string, refe
       },
     }
 
-    if (userId) {
+    if (sessionUser.role === 'EMPLOYEE') {
+      where.userId = sessionUser.id
+    } else if (userId) {
       where.userId = userId
     }
 
-    if (departmentId) {
+    if (departmentId && sessionUser.role !== 'EMPLOYEE') {
       where.user = {
         departmentId,
       }
@@ -445,9 +503,9 @@ export async function getLeaveStats(userId?: string, departmentId?: string, refe
     })
 
     let totalDays = 0
-    for (const app of applications) {
-      const leaveStart = new Date(app.startDate)
-      const leaveEnd = new Date(app.endDate)
+    for (const application of applications) {
+      const leaveStart = new Date(application.startDate)
+      const leaveEnd = new Date(application.endDate)
 
       const effectiveStart = leaveStart < firstDayOfMonth ? firstDayOfMonth : leaveStart
       const effectiveEnd = leaveEnd > lastDayOfMonth ? lastDayOfMonth : leaveEnd
@@ -456,7 +514,7 @@ export async function getLeaveStats(userId?: string, departmentId?: string, refe
       const overlapDays = Math.ceil((effectiveEnd.getTime() - effectiveStart.getTime()) / msPerDay) + 1
       const totalLeaveDays = (leaveEnd.getTime() - leaveStart.getTime()) / msPerDay + 1
       const ratio = overlapDays / totalLeaveDays
-      totalDays += app.days * ratio
+      totalDays += application.days * ratio
     }
 
     return Math.round(totalDays * 2) / 2

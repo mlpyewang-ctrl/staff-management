@@ -80,6 +80,8 @@ model OvertimeApplication {
   
   overtimeSettlements OvertimeSettlement[]
   
+  @@index([userId, status, date])
+  @@index([status, createdAt])
   @@map("overtime_applications")
 }
 
@@ -100,6 +102,8 @@ model LeaveApplication {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
+  @@index([userId, status, startDate])
+  @@index([status, createdAt])
   @@map("leave_applications")
 }
 
@@ -116,6 +120,7 @@ model LeaveBalance {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   
+  @@index([year])
   @@map("leave_balances")
 }
 
@@ -158,6 +163,7 @@ model SalaryRecord {
   overtimeSettlements  OvertimeSettlement[]
 
   @@unique([userId, month])
+  @@index([month, status])
   @@map("salary_records")
 }
 
@@ -174,6 +180,9 @@ model OvertimeSettlement {
   settlementType String                         // SALARY（计薪）/ COMPENSATORY（转调休）
   createdAt      DateTime @default(now())
 
+  @@index([overtimeId, settlementType])
+  @@index([salaryRecordId])
+  @@index([userId, settlementType, createdAt])
   @@map("overtime_settlements")
 }
 
@@ -196,6 +205,8 @@ model PerformanceReview {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
+  @@unique([userId, period])
+  @@index([status, period])
   @@map("performance_reviews")
 }
 
@@ -225,6 +236,7 @@ model ApprovalFlow {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  @@index([departmentId, isActive])
   @@map("approval_flows")
 }
 
@@ -239,6 +251,9 @@ model Approval {
   remark          String?
   createdAt       DateTime @default(now())
   
+  @@index([applicationType, applicationId, createdAt])
+  @@index([approverId, createdAt])
+  @@index([applicantId, createdAt])
   @@map("approvals")
 }
 

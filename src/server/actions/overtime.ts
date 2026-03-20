@@ -1,12 +1,44 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
-import { overtimeSchema } from '@/lib/validations'
+import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+
+import { requireSessionUser } from '@/lib/action-auth'
+import { prisma } from '@/lib/prisma'
 import { calculateHours } from '@/lib/utils'
+import { overtimeSchema } from '@/lib/validations'
+
+async function requireOvertimeOwnerOrAdmin(id: string) {
+  const sessionUser = await requireSessionUser()
+  const application = await prisma.overtimeApplication.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+    },
+  })
+
+  if (!application) {
+    return {
+      sessionUser,
+      application: null,
+    }
+  }
+
+  if (sessionUser.role !== 'ADMIN' && sessionUser.id !== application.userId) {
+    throw new Error('无权操作该加班申请')
+  }
+
+  return {
+    sessionUser,
+    application,
+  }
+}
 
 export async function createOvertimeApplication(formData: FormData) {
   try {
+    const sessionUser = await requireSessionUser()
     const validatedData = overtimeSchema.parse({
       date: formData.get('date'),
       startTime: formData.get('startTime'),
@@ -15,12 +47,6 @@ export async function createOvertimeApplication(formData: FormData) {
       reason: formData.get('reason'),
     })
 
-    const userId = formData.get('userId') as string
-    if (!userId) {
-      return { error: '用户未登录' }
-    }
-
-    // 计算加班时长
     const startDateTime = new Date(`${validatedData.date} ${validatedData.startTime}`)
     const endDateTime = new Date(`${validatedData.date} ${validatedData.endTime}`)
     const hours = calculateHours(startDateTime, endDateTime)
@@ -29,11 +55,10 @@ export async function createOvertimeApplication(formData: FormData) {
       return { error: '结束时间必须晚于开始时间' }
     }
 
-    const action = (formData.get('action') as string) === 'submit' ? 'submit' : 'save'
-
+    const action = formData.get('action') === 'submit' ? 'submit' : 'save'
     const created = await prisma.overtimeApplication.create({
       data: {
-        userId,
+        userId: sessionUser.id,
         date: startDateTime,
         startTime: startDateTime,
         endTime: endDateTime,
@@ -45,6 +70,7 @@ export async function createOvertimeApplication(formData: FormData) {
     })
 
     revalidatePath('/dashboard/overtime')
+
     return {
       success: action === 'submit' ? '加班申请已提交' : '加班草稿已保存',
       id: created.id,
@@ -60,13 +86,11 @@ export async function createOvertimeApplication(formData: FormData) {
 
 export async function deleteOvertimeApplication(id: string) {
   try {
-    if (!id) return { error: '缺少加班申请 ID' }
-    const application = await prisma.overtimeApplication.findUnique({
-      where: { id },
-      select: {
-        status: true,
-      },
-    })
+    if (!id) {
+      return { error: '缺少加班申请 ID' }
+    }
+
+    const { application } = await requireOvertimeOwnerOrAdmin(id)
 
     if (!application) {
       return { error: '加班申请不存在' }
@@ -76,25 +100,32 @@ export async function deleteOvertimeApplication(id: string) {
       return { error: '只有草稿状态的加班申请可以删除' }
     }
 
-    await prisma.approval.deleteMany({
-      where: {
-        applicationId: id,
-        applicationType: 'OVERTIME',
-      },
-    })
-    await prisma.overtimeApplication.delete({ where: { id } })
+    await prisma.$transaction([
+      prisma.approval.deleteMany({
+        where: {
+          applicationId: id,
+          applicationType: 'OVERTIME',
+        },
+      }),
+      prisma.overtimeApplication.delete({
+        where: { id },
+      }),
+    ])
+
     revalidatePath('/dashboard/overtime')
     return { success: '加班申请已删除' }
   } catch (error) {
-    if (error instanceof Error) return { error: error.message }
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
     return { error: '删除失败，请稍后重试' }
   }
 }
 
 export async function updateOvertimeApplication(formData: FormData) {
   try {
-    const id = formData.get('id') as string
-    if (!id) {
+    const id = formData.get('id')
+    if (typeof id !== 'string' || !id) {
       return { error: '缺少加班申请 ID' }
     }
 
@@ -106,12 +137,7 @@ export async function updateOvertimeApplication(formData: FormData) {
       reason: formData.get('reason'),
     })
 
-    const application = await prisma.overtimeApplication.findUnique({
-      where: { id },
-      select: {
-        status: true,
-      },
-    })
+    const { application } = await requireOvertimeOwnerOrAdmin(id)
 
     if (!application) {
       return { error: '加班申请不存在' }
@@ -121,7 +147,6 @@ export async function updateOvertimeApplication(formData: FormData) {
       return { error: '只有草稿状态的加班申请可以修改' }
     }
 
-    // 计算加班时长
     const startDateTime = new Date(`${validatedData.date} ${validatedData.startTime}`)
     const endDateTime = new Date(`${validatedData.date} ${validatedData.endTime}`)
     const hours = calculateHours(startDateTime, endDateTime)
@@ -130,33 +155,37 @@ export async function updateOvertimeApplication(formData: FormData) {
       return { error: '结束时间必须晚于开始时间' }
     }
 
-    const nextStatus = (formData.get('action') as string) === 'submit' ? 'PENDING' : 'DRAFT'
+    const nextStatus = formData.get('action') === 'submit' ? 'PENDING' : 'DRAFT'
 
-    await prisma.approval.deleteMany({
-      where: {
-        applicationId: id,
-        applicationType: 'OVERTIME',
-      },
-    })
-
-    await prisma.overtimeApplication.update({
-      where: { id },
-      data: {
-        date: startDateTime,
-        startTime: startDateTime,
-        endTime: endDateTime,
-        hours,
-        type: validatedData.type,
-        reason: validatedData.reason,
-        status: nextStatus,
-        approverId: null,
-        approvedAt: null,
-        remark: null,
-      },
-    })
+    await prisma.$transaction([
+      prisma.approval.deleteMany({
+        where: {
+          applicationId: id,
+          applicationType: 'OVERTIME',
+        },
+      }),
+      prisma.overtimeApplication.update({
+        where: { id },
+        data: {
+          date: startDateTime,
+          startTime: startDateTime,
+          endTime: endDateTime,
+          hours,
+          type: validatedData.type,
+          reason: validatedData.reason,
+          status: nextStatus,
+          approverId: null,
+          approvedAt: null,
+          remark: null,
+        },
+      }),
+    ])
 
     revalidatePath('/dashboard/overtime')
-    return { success: nextStatus === 'PENDING' ? '加班申请已提交，审批流程已重新开始' : '加班申请已保存为草稿' }
+    return {
+      success:
+        nextStatus === 'PENDING' ? '加班申请已提交，审批流程已重新开始' : '加班申请已保存为草稿',
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
@@ -165,13 +194,15 @@ export async function updateOvertimeApplication(formData: FormData) {
   }
 }
 
-export async function getOvertimeApplications(userId?: string, role?: string) {
+export async function getOvertimeApplications(_userId?: string, _role?: string) {
   try {
-    const where: any = {}
-    
-    if (role === 'EMPLOYEE' && userId) {
-      where.userId = userId
-    }
+    const sessionUser = await requireSessionUser()
+    const where: Prisma.OvertimeApplicationWhereInput =
+      sessionUser.role === 'EMPLOYEE'
+        ? {
+            userId: sessionUser.id,
+          }
+        : {}
 
     const applications = await prisma.overtimeApplication.findMany({
       where,
@@ -186,9 +217,9 @@ export async function getOvertimeApplications(userId?: string, role?: string) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return applications.map(app => ({
-      ...app,
-      userName: app.user.name,
+    return applications.map((application) => ({
+      ...application,
+      userName: application.user.name,
     }))
   } catch (error) {
     console.error('获取加班申请列表失败:', error)
@@ -198,6 +229,7 @@ export async function getOvertimeApplications(userId?: string, role?: string) {
 
 export async function getOvertimeApplication(id: string) {
   try {
+    const sessionUser = await requireSessionUser()
     const application = await prisma.overtimeApplication.findUnique({
       where: { id },
       include: {
@@ -214,6 +246,10 @@ export async function getOvertimeApplication(id: string) {
       return null
     }
 
+    if (sessionUser.role === 'EMPLOYEE' && application.userId !== sessionUser.id) {
+      return null
+    }
+
     return {
       ...application,
       userName: application.user.name,
@@ -226,6 +262,7 @@ export async function getOvertimeApplication(id: string) {
 
 export async function getOvertimeStats(userId?: string, departmentId?: string, referenceMonth?: string) {
   try {
+    const sessionUser = await requireSessionUser()
     const now = new Date()
     const [year, month] = referenceMonth
       ? referenceMonth.split('-').map(Number)
@@ -233,7 +270,7 @@ export async function getOvertimeStats(userId?: string, departmentId?: string, r
     const firstDayOfMonth = new Date(year, month - 1, 1)
     const lastDayOfMonth = new Date(year, month, 0, 23, 59, 59)
 
-    const where: any = {
+    const where: Prisma.OvertimeApplicationWhereInput = {
       status: {
         in: ['APPROVED', 'COMPLETED'],
       },
@@ -243,13 +280,15 @@ export async function getOvertimeStats(userId?: string, departmentId?: string, r
       },
     }
 
-    if (userId) {
+    if (sessionUser.role === 'EMPLOYEE') {
+      where.userId = sessionUser.id
+    } else if (userId) {
       where.userId = userId
     }
 
-    if (departmentId) {
+    if (departmentId && sessionUser.role !== 'EMPLOYEE') {
       where.user = {
-        departmentId: departmentId,
+        departmentId,
       }
     }
 

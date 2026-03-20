@@ -15,7 +15,7 @@ export const registerSchema = z.object({
   email: z.string().email('请输入有效的邮箱地址'),
   password: z.string().min(6, '密码至少需要 6 个字符'),
   name: z.string().min(2, '姓名至少需要 2 个字符'),
-  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE']),
+  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE']).optional().default('EMPLOYEE'),
   companyId: z.string().nullish(),
 })
 

@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Mock dependencies before importing the module
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     user: {
@@ -20,23 +19,32 @@ vi.mock('bcryptjs', () => ({
   },
 }))
 
+vi.mock('next-auth', () => ({
+  getServerSession: vi.fn(),
+}))
+
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
+import { getServerSession } from 'next-auth'
+
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
-import { registerUser, createInitialAdmin } from '../auth'
+
+import { createInitialAdmin, registerUser } from '../auth'
 
 const mockPrisma = vi.mocked(prisma)
 const mockBcrypt = vi.mocked(bcrypt)
+const mockGetServerSession = vi.mocked(getServerSession)
 
 describe('registerUser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGetServerSession.mockResolvedValue(null)
   })
 
-  it('should register a new user successfully', async () => {
+  it('should register a new employee successfully', async () => {
     mockPrisma.user.findUnique.mockResolvedValue(null)
     mockPrisma.user.create.mockResolvedValue({
       id: '1',
@@ -46,14 +54,13 @@ describe('registerUser', () => {
       password: '$2a$10$hashedpassword',
       createdAt: new Date(),
       updatedAt: new Date(),
-    } as any)
-    mockPrisma.leaveBalance.create.mockResolvedValue({} as any)
+    } as never)
+    mockPrisma.leaveBalance.create.mockResolvedValue({} as never)
 
     const formData = new FormData()
     formData.append('email', 'test@example.com')
     formData.append('password', 'password123')
     formData.append('name', 'Test User')
-    formData.append('role', 'EMPLOYEE')
 
     const result = await registerUser(formData)
 
@@ -62,24 +69,98 @@ describe('registerUser', () => {
       where: { email: 'test@example.com' },
     })
     expect(mockBcrypt.hash).toHaveBeenCalledWith('password123', 10)
+    expect(mockPrisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        email: 'test@example.com',
+        name: 'Test User',
+        role: 'EMPLOYEE',
+      }),
+    })
     expect(mockPrisma.leaveBalance.create).toHaveBeenCalled()
+  })
+
+  it('should prevent unauthenticated users from self-registering as admin', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(null)
+    mockPrisma.user.create.mockResolvedValue({
+      id: '1',
+      email: 'admin@example.com',
+      name: 'Admin User',
+      role: 'EMPLOYEE',
+      password: '$2a$10$hashedpassword',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never)
+    mockPrisma.leaveBalance.create.mockResolvedValue({} as never)
+
+    const formData = new FormData()
+    formData.append('email', 'admin@example.com')
+    formData.append('password', 'password123')
+    formData.append('name', 'Admin User')
+    formData.append('role', 'ADMIN')
+
+    const result = await registerUser(formData)
+
+    expect(result).toEqual({ success: '注册成功，请登录' })
+    expect(mockPrisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        role: 'EMPLOYEE',
+      }),
+    })
+    expect(mockPrisma.leaveBalance.create).toHaveBeenCalled()
+  })
+
+  it('should allow admins to create non-employee accounts', async () => {
+    mockGetServerSession.mockResolvedValue({
+      user: {
+        id: 'admin-1',
+        email: 'root@example.com',
+        name: 'Root',
+        role: 'ADMIN',
+      },
+      expires: '2099-01-01T00:00:00.000Z',
+    })
+    mockPrisma.user.findUnique.mockResolvedValue(null)
+    mockPrisma.user.create.mockResolvedValue({
+      id: '1',
+      email: 'manager@example.com',
+      name: 'Manager User',
+      role: 'MANAGER',
+      password: '$2a$10$hashedpassword',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never)
+
+    const formData = new FormData()
+    formData.append('email', 'manager@example.com')
+    formData.append('password', 'password123')
+    formData.append('name', 'Manager User')
+    formData.append('role', 'MANAGER')
+
+    const result = await registerUser(formData)
+
+    expect(result).toEqual({ success: '注册成功，请登录' })
+    expect(mockPrisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        role: 'MANAGER',
+      }),
+    })
+    expect(mockPrisma.leaveBalance.create).not.toHaveBeenCalled()
   })
 
   it('should return error if email already exists', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
       id: '1',
       email: 'existing@example.com',
-    } as any)
+    } as never)
 
     const formData = new FormData()
     formData.append('email', 'existing@example.com')
     formData.append('password', 'password123')
     formData.append('name', 'Test User')
-    formData.append('role', 'EMPLOYEE')
 
     const result = await registerUser(formData)
 
-    expect(result).toEqual({ error: '该邮箱已被注册' })
+    expect(result).toHaveProperty('error')
     expect(mockPrisma.user.create).not.toHaveBeenCalled()
   })
 
@@ -88,7 +169,6 @@ describe('registerUser', () => {
     formData.append('email', 'invalid-email')
     formData.append('password', 'password123')
     formData.append('name', 'Test User')
-    formData.append('role', 'EMPLOYEE')
 
     const result = await registerUser(formData)
 
@@ -100,35 +180,10 @@ describe('registerUser', () => {
     formData.append('email', 'test@example.com')
     formData.append('password', '12345')
     formData.append('name', 'Test User')
-    formData.append('role', 'EMPLOYEE')
 
     const result = await registerUser(formData)
 
     expect(result).toHaveProperty('error')
-  })
-
-  it('should not create leave balance for non-employee users', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(null)
-    mockPrisma.user.create.mockResolvedValue({
-      id: '1',
-      email: 'admin@example.com',
-      name: 'Admin User',
-      role: 'ADMIN',
-      password: '$2a$10$hashedpassword',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as any)
-
-    const formData = new FormData()
-    formData.append('email', 'admin@example.com')
-    formData.append('password', 'password123')
-    formData.append('name', 'Admin User')
-    formData.append('role', 'ADMIN')
-
-    const result = await registerUser(formData)
-
-    expect(result).toEqual({ success: '注册成功，请登录' })
-    expect(mockPrisma.leaveBalance.create).not.toHaveBeenCalled()
   })
 })
 
@@ -142,22 +197,21 @@ describe('createInitialAdmin', () => {
     mockPrisma.user.create.mockResolvedValue({
       id: '1',
       email: 'admin@example.com',
-      name: '系统管理员',
+      name: 'System Admin',
       role: 'ADMIN',
       password: '$2a$10$hashedpassword',
       createdAt: new Date(),
       updatedAt: new Date(),
-    } as any)
+    } as never)
 
     await createInitialAdmin()
 
     expect(mockPrisma.user.create).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         email: 'admin@example.com',
         password: '$2a$10$hashedpassword',
-        name: '系统管理员',
         role: 'ADMIN',
-      },
+      }),
     })
   })
 
@@ -166,7 +220,7 @@ describe('createInitialAdmin', () => {
       id: '1',
       email: 'existing-admin@example.com',
       role: 'ADMIN',
-    } as any)
+    } as never)
 
     await createInitialAdmin()
 

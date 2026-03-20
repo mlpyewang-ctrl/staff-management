@@ -1,30 +1,49 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+
+import { requireAdminUser, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { prisma } from '@/lib/prisma'
 import { compensatoryUseSchema } from '@/lib/validations'
 import { SALARY_CONSTANTS } from '@/types'
 
-// 获取用户调休信息
+async function getOrCreateLeaveBalance(userId: string) {
+  let leaveBalance = await prisma.leaveBalance.findUnique({
+    where: { userId },
+  })
+
+  if (!leaveBalance) {
+    leaveBalance = await prisma.leaveBalance.create({
+      data: {
+        userId,
+        year: new Date().getFullYear(),
+        annual: 5,
+        sick: 10,
+        personal: 5,
+        compensatory: 0,
+        usedCompensatory: 0,
+      },
+    })
+  }
+
+  return leaveBalance
+}
+
 export async function getCompensatoryInfo(userId: string) {
   try {
-    // 获取假期余额
-    const leaveBalance = await prisma.leaveBalance.findUnique({
-      where: { userId },
-    })
+    await requireSelfOrAdmin(userId)
 
-    // 获取已清算的加班时长（已计薪或已转调休）
+    const leaveBalance = await getOrCreateLeaveBalance(userId)
     const settledOvertime = await prisma.overtimeSettlement.findMany({
       where: { userId },
       select: { hours: true },
     })
-
-    const settledOvertimeHours = settledOvertime.reduce((sum, s) => sum + s.hours, 0)
+    const settledOvertimeHours = settledOvertime.reduce((sum, settlement) => sum + settlement.hours, 0)
 
     return {
-      totalCompensatory: leaveBalance?.compensatory || 0,
-      availableCompensatory: (leaveBalance?.compensatory || 0) - (leaveBalance?.usedCompensatory || 0),
-      usedCompensatory: leaveBalance?.usedCompensatory || 0,
+      totalCompensatory: leaveBalance.compensatory || 0,
+      availableCompensatory: (leaveBalance.compensatory || 0) - (leaveBalance.usedCompensatory || 0),
+      usedCompensatory: leaveBalance.usedCompensatory || 0,
       settledOvertimeHours,
     }
   } catch (error) {
@@ -38,14 +57,9 @@ export async function getCompensatoryInfo(userId: string) {
   }
 }
 
-// 使用调休
 export async function useCompensatory(formData: FormData) {
   try {
-    const userId = formData.get('userId') as string
-    if (!userId) {
-      return { error: '用户未登录' }
-    }
-
+    const sessionUser = await requireSessionUser()
     const validatedData = compensatoryUseSchema.parse({
       hours: formData.get('hours'),
       startDate: formData.get('startDate'),
@@ -53,53 +67,43 @@ export async function useCompensatory(formData: FormData) {
     })
 
     const hoursToUse = Number(validatedData.hours)
-
-    // 获取当前调休余额
-    const leaveBalance = await prisma.leaveBalance.findUnique({
-      where: { userId },
-    })
-
-    if (!leaveBalance) {
-      return { error: '未找到假期余额记录' }
-    }
-
+    const leaveBalance = await getOrCreateLeaveBalance(sessionUser.id)
     const availableCompensatory = leaveBalance.compensatory - leaveBalance.usedCompensatory
 
     if (availableCompensatory < hoursToUse) {
       return { error: `调休余额不足，当前可用 ${availableCompensatory} 小时` }
     }
 
-    // 创建调休请假记录
     const startDate = new Date(validatedData.startDate)
     const isFullDay = hoursToUse === SALARY_CONSTANTS.FULL_DAY_HOURS
 
-    const leaveApp = await prisma.leaveApplication.create({
-      data: {
-        userId,
-        type: 'PERSONAL', // 调休作为事假处理
-        startDate,
-        endDate: startDate,
-        days: isFullDay ? 1 : 0.5,
-        reason: `[调休] ${validatedData.reason}`,
-        status: 'PENDING',
-      },
-    })
-
-    // 更新已使用调休
-    await prisma.leaveBalance.update({
-      where: { userId },
-      data: {
-        usedCompensatory: {
-          increment: hoursToUse,
+    const [leaveApplication] = await prisma.$transaction([
+      prisma.leaveApplication.create({
+        data: {
+          userId: sessionUser.id,
+          type: 'PERSONAL',
+          startDate,
+          endDate: startDate,
+          days: isFullDay ? 1 : 0.5,
+          reason: `[调休] ${validatedData.reason}`,
+          status: 'PENDING',
         },
-      },
-    })
+      }),
+      prisma.leaveBalance.update({
+        where: { userId: sessionUser.id },
+        data: {
+          usedCompensatory: {
+            increment: hoursToUse,
+          },
+        },
+      }),
+    ])
 
     revalidatePath('/dashboard/compensatory')
     revalidatePath('/dashboard/leave')
     return {
       success: '调休申请已提交，等待审批',
-      leaveApplicationId: leaveApp.id,
+      leaveApplicationId: leaveApplication.id,
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -109,11 +113,11 @@ export async function useCompensatory(formData: FormData) {
   }
 }
 
-// 获取调休使用记录
 export async function getCompensatoryUsageHistory(userId: string) {
   try {
-    // 获取所有调休相关的请假记录
-    const leaveApps = await prisma.leaveApplication.findMany({
+    await requireSelfOrAdmin(userId)
+
+    const leaveApplications = await prisma.leaveApplication.findMany({
       where: {
         userId,
         reason: {
@@ -123,14 +127,14 @@ export async function getCompensatoryUsageHistory(userId: string) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return leaveApps.map((app) => ({
-      id: app.id,
-      date: app.startDate,
-      days: app.days,
-      hours: app.days * SALARY_CONSTANTS.HOURS_PER_DAY,
-      reason: app.reason.replace('[调休] ', ''),
-      status: app.status,
-      createdAt: app.createdAt,
+    return leaveApplications.map((application) => ({
+      id: application.id,
+      date: application.startDate,
+      days: application.days,
+      hours: application.days * SALARY_CONSTANTS.HOURS_PER_DAY,
+      reason: application.reason.replace('[调休] ', ''),
+      status: application.status,
+      createdAt: application.createdAt,
     }))
   } catch (error) {
     console.error('获取调休使用记录失败:', error)
@@ -138,9 +142,10 @@ export async function getCompensatoryUsageHistory(userId: string) {
   }
 }
 
-// 获取调休来源记录（加班转调休的记录）
 export async function getCompensatorySourceHistory(userId: string) {
   try {
+    await requireSelfOrAdmin(userId)
+
     const settlements = await prisma.overtimeSettlement.findMany({
       where: {
         userId,
@@ -155,13 +160,13 @@ export async function getCompensatorySourceHistory(userId: string) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return settlements.map((s) => ({
-      id: s.id,
-      date: s.overtime.date,
-      hours: s.hours,
-      overtimeType: s.overtime.type,
-      salaryMonth: s.salaryRecord?.month,
-      createdAt: s.createdAt,
+    return settlements.map((settlement) => ({
+      id: settlement.id,
+      date: settlement.overtime.date,
+      hours: settlement.hours,
+      overtimeType: settlement.overtime.type,
+      salaryMonth: settlement.salaryRecord?.month,
+      createdAt: settlement.createdAt,
     }))
   } catch (error) {
     console.error('获取调休来源记录失败:', error)
@@ -169,38 +174,19 @@ export async function getCompensatorySourceHistory(userId: string) {
   }
 }
 
-// 管理员手动添加调休
 export async function adminAddCompensatory(formData: FormData) {
   try {
-    const userId = formData.get('userId') as string
-    const hours = Number(formData.get('hours'))
-    const reason = formData.get('reason') as string
+    await requireAdminUser()
 
-    if (!userId || !hours || hours <= 0) {
+    const userId = formData.get('userId')
+    const hours = Number(formData.get('hours'))
+    const reason = formData.get('reason')
+
+    if (typeof userId !== 'string' || !userId || !hours || hours <= 0) {
       return { error: '参数无效' }
     }
 
-    // 获取或创建假期余额记录
-    let leaveBalance = await prisma.leaveBalance.findUnique({
-      where: { userId },
-    })
-
-    if (!leaveBalance) {
-      const currentYear = new Date().getFullYear()
-      leaveBalance = await prisma.leaveBalance.create({
-        data: {
-          userId,
-          year: currentYear,
-          annual: 5,
-          sick: 10,
-          personal: 5,
-          compensatory: 0,
-          usedCompensatory: 0,
-        },
-      })
-    }
-
-    // 更新调休余额
+    await getOrCreateLeaveBalance(userId)
     await prisma.leaveBalance.update({
       where: { userId },
       data: {
@@ -210,8 +196,7 @@ export async function adminAddCompensatory(formData: FormData) {
       },
     })
 
-    // 记录日志（可以后续添加日志表）
-    console.log(`管理员添加调休: 用户 ${userId}, 小时数 ${hours}, 原因: ${reason}`)
+    console.log(`管理员添加调休: userId=${userId}, hours=${hours}, reason=${String(reason || '')}`)
 
     revalidatePath('/dashboard/compensatory')
     return { success: `成功添加 ${hours} 小时调休` }
@@ -223,11 +208,11 @@ export async function adminAddCompensatory(formData: FormData) {
   }
 }
 
-// 获取所有员工的调休信息（管理员用）
 export async function getAllCompensatoryInfo(departmentId?: string) {
   try {
-    const userWhere = departmentId ? { departmentId } : {}
+    await requireAdminUser()
 
+    const userWhere = departmentId ? { departmentId } : {}
     const users = await prisma.user.findMany({
       where: userWhere,
       include: {

@@ -1,13 +1,16 @@
-﻿'use server'
+'use server'
 
-import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
-import { salaryGenerateSchema, salaryStatusSchema } from '@/lib/validations'
+
+import { requireAdminUser } from '@/lib/action-auth'
+import { prisma } from '@/lib/prisma'
 import {
   calculateHourlyRate,
   calculateOvertimeAllocation,
   canGenerateSalary,
 } from '@/lib/utils'
+import { salaryGenerateSchema, salaryStatusSchema } from '@/lib/validations'
 import { SALARY_CONSTANTS } from '@/types'
 
 function buildSalaryRecordSummary<T extends {
@@ -16,10 +19,7 @@ function buildSalaryRecordSummary<T extends {
   weekendOvertimeHours: number
   holidayOvertimeHours: number
   compensatoryHours: number
-}>(
-  record: T,
-  compensatoryHoursOverride?: number
-) {
+}>(record: T, compensatoryHoursOverride?: number) {
   const hourlySalary = Math.round(calculateHourlyRate(record.baseSalary) * 100) / 100
   const paidOvertimeHours =
     record.workdayOvertimeHours + record.weekendOvertimeHours + record.holidayOvertimeHours
@@ -34,7 +34,35 @@ function buildSalaryRecordSummary<T extends {
   }
 }
 
-// 鑾峰彇钖祫璁板綍鍒楄〃
+function buildSalaryWhere(filters?: {
+  month?: string
+  departmentId?: string
+  status?: string
+  userId?: string
+}): Prisma.SalaryRecordWhereInput {
+  const where: Prisma.SalaryRecordWhereInput = {}
+
+  if (filters?.month) {
+    where.month = filters.month
+  }
+
+  if (filters?.status) {
+    where.status = filters.status
+  }
+
+  if (filters?.userId) {
+    where.userId = filters.userId
+  }
+
+  if (filters?.departmentId) {
+    where.user = {
+      departmentId: filters.departmentId,
+    }
+  }
+
+  return where
+}
+
 export async function getSalaryRecords(filters?: {
   month?: string
   departmentId?: string
@@ -42,25 +70,10 @@ export async function getSalaryRecords(filters?: {
   userId?: string
 }) {
   try {
-    const where: any = {}
-
-    if (filters?.month) {
-      where.month = filters.month
-    }
-    if (filters?.status) {
-      where.status = filters.status
-    }
-    if (filters?.userId) {
-      where.userId = filters.userId
-    }
-    if (filters?.departmentId) {
-      where.user = {
-        departmentId: filters.departmentId,
-      }
-    }
+    await requireAdminUser()
 
     const records = await prisma.salaryRecord.findMany({
-      where,
+      where: buildSalaryWhere(filters),
       include: {
         user: {
           select: {
@@ -86,14 +99,15 @@ export async function getSalaryRecords(filters?: {
       positionName: record.user.position?.name,
     }))
   } catch (error) {
-    console.error('鑾峰彇钖祫璁板綍澶辫触:', error)
+    console.error('获取薪资记录失败:', error)
     return []
   }
 }
 
-// 鑾峰彇鍗曟潯钖祫璁板綍
 export async function getSalaryRecord(id: string) {
   try {
+    await requireAdminUser()
+
     const record = await prisma.salaryRecord.findUnique({
       where: { id },
       include: {
@@ -118,7 +132,9 @@ export async function getSalaryRecord(id: string) {
       },
     })
 
-    if (!record) return null
+    if (!record) {
+      return null
+    }
 
     const compensatorySettledHours = record.overtimeSettlements
       .filter((settlement) => settlement.settlementType === 'COMPENSATORY')
@@ -135,29 +151,27 @@ export async function getSalaryRecord(id: string) {
       ),
     }
   } catch (error) {
-    console.error('鑾峰彇钖祫璁板綍璇︽儏澶辫触:', error)
+    console.error('获取薪资记录详情失败:', error)
     return null
   }
 }
 
-// 鐢熸垚钖祫璁板綍
 export async function generateSalaryRecords(formData: FormData) {
   try {
+    await requireAdminUser()
+
     const validatedData = salaryGenerateSchema.parse({
       month: formData.get('month'),
       departmentId: formData.get('departmentId') || undefined,
     })
 
     const { month, departmentId } = validatedData
-
-    // 妫€鏌ユ槸鍚﹀彲浠ョ敓鎴?
     const checkResult = canGenerateSalary(month)
     if (!checkResult.canGenerate) {
       return { error: checkResult.message }
     }
 
-    // 鑾峰彇闇€瑕佺敓鎴愯柂璧勭殑鐢ㄦ埛
-    const userWhere: any = {}
+    const userWhere: Prisma.UserWhereInput = {}
     if (departmentId) {
       userWhere.departmentId = departmentId
     }
@@ -167,7 +181,6 @@ export async function generateSalaryRecords(formData: FormData) {
       include: {
         position: true,
         department: true,
-        leaveBalance: true,
       },
     })
 
@@ -175,7 +188,6 @@ export async function generateSalaryRecords(formData: FormData) {
       return { error: '没有找到符合条件的员工' }
     }
 
-    // 瑙ｆ瀽鏈堜唤
     const [year, monthNum] = month.split('-').map(Number)
     const startDate = new Date(year, monthNum - 1, 1)
     const endDate = new Date(year, monthNum, 0, 23, 59, 59)
@@ -184,211 +196,204 @@ export async function generateSalaryRecords(formData: FormData) {
     let skipCount = 0
 
     for (const user of users) {
-      // 妫€鏌ユ槸鍚﹀凡瀛樺湪璇ユ湀浠界殑钖祫璁板綍
-      const existing = await prisma.salaryRecord.findUnique({
-        where: {
-          userId_month: {
-            userId: user.id,
-            month,
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.salaryRecord.findUnique({
+          where: {
+            userId_month: {
+              userId: user.id,
+              month,
+            },
           },
-        },
-      })
-
-      if (existing) {
-        skipCount++
-        continue
-      }
-
-      // 鑾峰彇鍩烘湰宸ヨ祫
-      const baseSalary = user.position?.salary ?? user.salary ?? 0
-      if (!baseSalary) {
-        console.log(`用户 ${user.name} 未设置薪资，已跳过`)
-        skipCount++
-        continue
-      }
-
-      // 鑾峰彇褰撴湀宸插鎵圭殑鍔犵彮璁板綍
-      const overtimeApps = await prisma.overtimeApplication.findMany({
-        where: {
-          userId: user.id,
-          status: {
-            in: ['APPROVED', 'COMPLETED'],
-          },
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-      })
-
-      // 鎸夌被鍨嬪垎缁勭粺璁″姞鐝椂闀?
-      const overtimeByType = {
-        WORKDAY: 0,
-        WEEKEND: 0,
-        HOLIDAY: 0,
-      }
-
-      for (const ot of overtimeApps) {
-        overtimeByType[ot.type as keyof typeof overtimeByType] += ot.hours
-      }
-
-      // 璁＄畻鏃惰柂
-      const hourlyRate = calculateHourlyRate(baseSalary)
-
-      // 璁＄畻鍔犵彮鍒嗛厤
-      const overtimeData = [
-        { type: 'HOLIDAY' as const, hours: overtimeByType.HOLIDAY },
-        { type: 'WEEKEND' as const, hours: overtimeByType.WEEKEND },
-        { type: 'WORKDAY' as const, hours: overtimeByType.WORKDAY },
-      ].filter((item) => item.hours > 0)
-
-      const allocation = calculateOvertimeAllocation(overtimeData, hourlyRate)
-
-      // 璁＄畻璇峰亣鎵ｆ锛堜簨鍋囷級
-      const leaveApps = await prisma.leaveApplication.findMany({
-        where: {
-          userId: user.id,
-          status: {
-            in: ['APPROVED', 'COMPLETED'],
-          },
-          type: 'PERSONAL',
-          startDate: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-      })
-
-      const dailyRate = baseSalary / SALARY_CONSTANTS.WORKDAYS_PER_MONTH
-      const personalLeaveDays = leaveApps.reduce((sum, app) => sum + app.days, 0)
-      const deduction = Math.round(personalLeaveDays * dailyRate * 100) / 100
-
-      // 璁＄畻搴斿彂宸ヨ祫
-      const netSalary = baseSalary + allocation.totalPay - deduction
-
-      // 鍒涘缓钖祫璁板綍
-      const salaryRecord = await prisma.salaryRecord.create({
-        data: {
-          userId: user.id,
-          month,
-          baseSalary,
-          // 杩欓噷鐨?*OvertimeHours 琛ㄧず鈥滆钖皬鏃舵暟鈥濓紙瓒呰繃36灏忔椂鐨勯儴鍒嗚浆璋冧紤锛屼笉璁¤柂锛?
-          workdayOvertimeHours: allocation.paidHours
-            .filter((h) => h.type === 'WORKDAY')
-            .reduce((sum, h) => sum + h.hours, 0),
-          workdayOvertimePay: allocation.paidHours
-            .filter((h) => h.type === 'WORKDAY')
-            .reduce((sum, h) => sum + h.hours * hourlyRate * SALARY_CONSTANTS.WORKDAY_OVERTIME_RATE, 0),
-          weekendOvertimeHours: allocation.paidHours
-            .filter((h) => h.type === 'WEEKEND')
-            .reduce((sum, h) => sum + h.hours, 0),
-          weekendOvertimePay: allocation.paidHours
-            .filter((h) => h.type === 'WEEKEND')
-            .reduce((sum, h) => sum + h.hours * hourlyRate * SALARY_CONSTANTS.WEEKEND_OVERTIME_RATE, 0),
-          holidayOvertimeHours: allocation.paidHours
-            .filter((h) => h.type === 'HOLIDAY')
-            .reduce((sum, h) => sum + h.hours, 0),
-          holidayOvertimePay: allocation.paidHours
-            .filter((h) => h.type === 'HOLIDAY')
-            .reduce((sum, h) => sum + h.hours * hourlyRate * SALARY_CONSTANTS.HOLIDAY_OVERTIME_RATE, 0),
-          totalOvertimePay: allocation.totalPay,
-          compensatoryHours: allocation.compensatoryHours,
-          deduction,
-          netSalary,
-          status: 'DRAFT',
-        },
-      })
-
-      // 鍒涘缓鍔犵彮娓呯畻璁板綍骞舵洿鏂拌皟浼戜綑棰?
-      if (allocation.compensatoryHours > 0) {
-        // 鎵惧嚭杞皟浼戠殑鍔犵彮璁板綍
-        let remainingCompensatoryHours = allocation.compensatoryHours
-
-        // 鎸変紭鍏堢骇鎵惧嚭闇€瑕佽浆璋冧紤鐨勫姞鐝褰曪紙宸ヤ綔鏃ヤ紭鍏堣浆璋冧紤锛?
-        const sortedOvertime = [...overtimeApps].sort((a, b) => {
-          const priority = { WORKDAY: 0, WEEKEND: 1, HOLIDAY: 2 }
-          return priority[a.type as keyof typeof priority] - priority[b.type as keyof typeof priority]
         })
 
-        for (const ot of sortedOvertime) {
-          if (remainingCompensatoryHours <= 0) break
+        if (existing) {
+          return 'skipped' as const
+        }
 
-          const hoursToSettle = Math.min(ot.hours, remainingCompensatoryHours)
+        const baseSalary = user.position?.salary ?? user.salary ?? 0
+        if (!baseSalary) {
+          console.log(`用户 ${user.name} 未设置薪资，已跳过`)
+          return 'skipped' as const
+        }
 
-          // 濡傛灉鍚屼竴鏉″姞鐝棦璁¤柂鍙堣浆璋冧紤锛屽厑璁稿瓨鍦ㄥ鏉?settlement锛堟寜 settlementType 鍖哄垎锛?
-          const existingCompSettlement = await prisma.overtimeSettlement.findFirst({
-            where: {
-              overtimeId: ot.id,
-              settlementType: 'COMPENSATORY',
+        const overtimeApplications = await tx.overtimeApplication.findMany({
+          where: {
+            userId: user.id,
+            status: {
+              in: ['APPROVED', 'COMPLETED'],
             },
+            date: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+        })
+
+        const overtimeByType = {
+          WORKDAY: 0,
+          WEEKEND: 0,
+          HOLIDAY: 0,
+        }
+
+        for (const overtimeApplication of overtimeApplications) {
+          overtimeByType[overtimeApplication.type as keyof typeof overtimeByType] += overtimeApplication.hours
+        }
+
+        const hourlyRate = calculateHourlyRate(baseSalary)
+        const overtimeData = [
+          { type: 'HOLIDAY' as const, hours: overtimeByType.HOLIDAY },
+          { type: 'WEEKEND' as const, hours: overtimeByType.WEEKEND },
+          { type: 'WORKDAY' as const, hours: overtimeByType.WORKDAY },
+        ].filter((item) => item.hours > 0)
+        const allocation = calculateOvertimeAllocation(overtimeData, hourlyRate)
+
+        const leaveApplications = await tx.leaveApplication.findMany({
+          where: {
+            userId: user.id,
+            status: {
+              in: ['APPROVED', 'COMPLETED'],
+            },
+            type: 'PERSONAL',
+            startDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+        })
+
+        const dailyRate = baseSalary / SALARY_CONSTANTS.WORKDAYS_PER_MONTH
+        const personalLeaveDays = leaveApplications.reduce((sum, application) => sum + application.days, 0)
+        const deduction = Math.round(personalLeaveDays * dailyRate * 100) / 100
+        const netSalary = baseSalary + allocation.totalPay - deduction
+
+        const salaryRecord = await tx.salaryRecord.create({
+          data: {
+            userId: user.id,
+            month,
+            baseSalary,
+            workdayOvertimeHours: allocation.paidHours
+              .filter((item) => item.type === 'WORKDAY')
+              .reduce((sum, item) => sum + item.hours, 0),
+            workdayOvertimePay: allocation.paidHours
+              .filter((item) => item.type === 'WORKDAY')
+              .reduce((sum, item) => sum + item.hours * hourlyRate * SALARY_CONSTANTS.WORKDAY_OVERTIME_RATE, 0),
+            weekendOvertimeHours: allocation.paidHours
+              .filter((item) => item.type === 'WEEKEND')
+              .reduce((sum, item) => sum + item.hours, 0),
+            weekendOvertimePay: allocation.paidHours
+              .filter((item) => item.type === 'WEEKEND')
+              .reduce((sum, item) => sum + item.hours * hourlyRate * SALARY_CONSTANTS.WEEKEND_OVERTIME_RATE, 0),
+            holidayOvertimeHours: allocation.paidHours
+              .filter((item) => item.type === 'HOLIDAY')
+              .reduce((sum, item) => sum + item.hours, 0),
+            holidayOvertimePay: allocation.paidHours
+              .filter((item) => item.type === 'HOLIDAY')
+              .reduce((sum, item) => sum + item.hours * hourlyRate * SALARY_CONSTANTS.HOLIDAY_OVERTIME_RATE, 0),
+            totalOvertimePay: allocation.totalPay,
+            compensatoryHours: allocation.compensatoryHours,
+            deduction,
+            netSalary,
+            status: 'DRAFT',
+          },
+        })
+
+        if (allocation.compensatoryHours > 0) {
+          let remainingCompensatoryHours = allocation.compensatoryHours
+          const sortedOvertime = [...overtimeApplications].sort((left, right) => {
+            const priority = { WORKDAY: 0, WEEKEND: 1, HOLIDAY: 2 }
+            return priority[left.type as keyof typeof priority] - priority[right.type as keyof typeof priority]
           })
 
-          if (existingCompSettlement) {
+          for (const overtimeApplication of sortedOvertime) {
+            if (remainingCompensatoryHours <= 0) {
+              break
+            }
+
+            const existingCompSettlement = await tx.overtimeSettlement.findFirst({
+              where: {
+                overtimeId: overtimeApplication.id,
+                settlementType: 'COMPENSATORY',
+              },
+            })
+
+            if (existingCompSettlement) {
+              remainingCompensatoryHours -= Math.min(overtimeApplication.hours, remainingCompensatoryHours)
+              continue
+            }
+
+            const hoursToSettle = Math.min(overtimeApplication.hours, remainingCompensatoryHours)
+            await tx.overtimeSettlement.create({
+              data: {
+                userId: user.id,
+                overtimeId: overtimeApplication.id,
+                salaryRecordId: salaryRecord.id,
+                hours: hoursToSettle,
+                settlementType: 'COMPENSATORY',
+              },
+            })
+
             remainingCompensatoryHours -= hoursToSettle
-            continue
           }
 
-          await prisma.overtimeSettlement.create({
-            data: {
-              userId: user.id,
-              overtimeId: ot.id,
-              salaryRecordId: salaryRecord.id,
-              hours: hoursToSettle,
-              settlementType: 'COMPENSATORY',
-            },
-          })
-
-          remainingCompensatoryHours -= hoursToSettle
-        }
-
-        // 鏇存柊璋冧紤浣欓
-        if (user.leaveBalance) {
-          await prisma.leaveBalance.update({
+          const leaveBalance = await tx.leaveBalance.findUnique({
             where: { userId: user.id },
-            data: {
-              compensatory: {
-                increment: allocation.compensatoryHours,
+          })
+
+          if (leaveBalance) {
+            await tx.leaveBalance.update({
+              where: { userId: user.id },
+              data: {
+                compensatory: {
+                  increment: allocation.compensatoryHours,
+                },
               },
-            },
-          })
+            })
+          }
         }
-      }
 
-      // 涓鸿钖殑鍔犵彮鍒涘缓娓呯畻璁板綍
-      for (const paid of allocation.paidHours) {
-        const otRecords = overtimeApps.filter((ot) => ot.type === paid.type)
-        let remainingHours = paid.hours
+        for (const paid of allocation.paidHours) {
+          const overtimeRecords = overtimeApplications.filter((application) => application.type === paid.type)
+          let remainingHours = paid.hours
 
-        for (const ot of otRecords) {
-          if (remainingHours <= 0) break
+          for (const overtimeApplication of overtimeRecords) {
+            if (remainingHours <= 0) {
+              break
+            }
 
-          // 妫€鏌ユ槸鍚﹀凡缁忓垱寤轰簡娓呯畻璁板綍
-          const existingSettlement = await prisma.overtimeSettlement.findFirst({
-            where: {
-              overtimeId: ot.id,
-              settlementType: 'SALARY',
-            },
-          })
+            const existingSettlement = await tx.overtimeSettlement.findFirst({
+              where: {
+                overtimeId: overtimeApplication.id,
+                settlementType: 'SALARY',
+              },
+            })
 
-          if (existingSettlement) continue
+            if (existingSettlement) {
+              continue
+            }
 
-          const hoursToSettle = Math.min(ot.hours, remainingHours)
+            const hoursToSettle = Math.min(overtimeApplication.hours, remainingHours)
+            await tx.overtimeSettlement.create({
+              data: {
+                userId: user.id,
+                overtimeId: overtimeApplication.id,
+                salaryRecordId: salaryRecord.id,
+                hours: hoursToSettle,
+                settlementType: 'SALARY',
+              },
+            })
 
-          await prisma.overtimeSettlement.create({
-            data: {
-              userId: user.id,
-              overtimeId: ot.id,
-              salaryRecordId: salaryRecord.id,
-              hours: hoursToSettle,
-              settlementType: 'SALARY',
-            },
-          })
-
-          remainingHours -= hoursToSettle
+            remainingHours -= hoursToSettle
+          }
         }
-      }
 
-      successCount++
+        return 'created' as const
+      })
+
+      if (result === 'created') {
+        successCount += 1
+      } else {
+        skipCount += 1
+      }
     }
 
     revalidatePath('/dashboard/salary')
@@ -401,19 +406,20 @@ export async function generateSalaryRecords(formData: FormData) {
     if (error instanceof Error) {
       return { error: error.message }
     }
-    return { error: '鐢熸垚澶辫触锛岃绋嶅悗閲嶈瘯' }
+    return { error: '生成失败，请稍后重试' }
   }
 }
 
-// 鏇存柊钖祫鐘舵€?
 export async function updateSalaryStatus(formData: FormData) {
   try {
+    await requireAdminUser()
+
     const validatedData = salaryStatusSchema.parse({
       salaryId: formData.get('salaryId'),
       status: formData.get('status'),
     })
 
-    const updateData: any = {
+    const updateData: Prisma.SalaryRecordUpdateInput = {
       status: validatedData.status,
     }
 
@@ -432,13 +438,14 @@ export async function updateSalaryStatus(formData: FormData) {
     if (error instanceof Error) {
       return { error: error.message }
     }
-    return { error: '鏇存柊澶辫触锛岃绋嶅悗閲嶈瘯' }
+    return { error: '更新失败，请稍后重试' }
   }
 }
 
-// 鍒犻櫎钖祫璁板綍锛堜粎鑽夌鐘舵€佸彲鍒犻櫎锛?
 export async function deleteSalaryRecord(id: string) {
   try {
+    await requireAdminUser()
+
     const record = await prisma.salaryRecord.findUnique({
       where: { id },
     })
@@ -448,17 +455,46 @@ export async function deleteSalaryRecord(id: string) {
     }
 
     if (record.status !== 'DRAFT') {
-      return { error: '鍙湁鑽夌鐘舵€佺殑钖祫璁板綍鍙互鍒犻櫎' }
+      return { error: '只有草稿状态的薪资记录可以删除' }
     }
 
-    // 鍒犻櫎鍏宠仈鐨勬竻绠楄褰?
-    await prisma.overtimeSettlement.deleteMany({
-      where: { salaryRecordId: id },
-    })
+    await prisma.$transaction(async (tx) => {
+      const compensatorySettlements = await tx.overtimeSettlement.findMany({
+        where: {
+          salaryRecordId: id,
+          settlementType: 'COMPENSATORY',
+        },
+        select: {
+          hours: true,
+        },
+      })
 
-    // 鍒犻櫎钖祫璁板綍
-    await prisma.salaryRecord.delete({
-      where: { id },
+      const compensatoryHours = compensatorySettlements.reduce((sum, settlement) => sum + settlement.hours, 0)
+
+      await tx.overtimeSettlement.deleteMany({
+        where: { salaryRecordId: id },
+      })
+
+      if (compensatoryHours > 0) {
+        const leaveBalance = await tx.leaveBalance.findUnique({
+          where: { userId: record.userId },
+        })
+
+        if (leaveBalance) {
+          await tx.leaveBalance.update({
+            where: { userId: record.userId },
+            data: {
+              compensatory: {
+                decrement: compensatoryHours,
+              },
+            },
+          })
+        }
+      }
+
+      await tx.salaryRecord.delete({
+        where: { id },
+      })
     })
 
     revalidatePath('/dashboard/salary')
@@ -467,24 +503,23 @@ export async function deleteSalaryRecord(id: string) {
     if (error instanceof Error) {
       return { error: error.message }
     }
-    return { error: '鍒犻櫎澶辫触锛岃绋嶅悗閲嶈瘯' }
+    return { error: '删除失败，请稍后重试' }
   }
 }
 
-// 鑾峰彇鍙敓鎴愮殑鏈堜唤
 export async function getAvailableMonths() {
+  await requireAdminUser()
+
   const now = new Date()
   const months: string[] = []
 
-  // 鑾峰彇杩囧幓6涓湀鐨勬湀浠?
-  for (let i = 1; i <= 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    
-    // 妫€鏌ユ槸鍚﹀彲浠ョ敓鎴?
-    const check = canGenerateSalary(monthStr)
+  for (let i = 1; i <= 6; i += 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const check = canGenerateSalary(month)
+
     if (check.canGenerate) {
-      months.push(monthStr)
+      months.push(month)
     }
   }
 
@@ -493,6 +528,8 @@ export async function getAvailableMonths() {
 
 export async function getSalaryMonths() {
   try {
+    await requireAdminUser()
+
     const records = await prisma.salaryRecord.findMany({
       distinct: ['month'],
       select: {
@@ -505,18 +542,19 @@ export async function getSalaryMonths() {
 
     return records.map((record) => record.month)
   } catch (error) {
-    console.error('鑾峰彇钖祫鏈堜唤鍒楄〃澶辫触:', error)
+    console.error('获取薪资月份列表失败:', error)
     return []
   }
 }
 
-// 瀵煎嚭钖祫鏁版嵁涓?Excel 鏍煎紡锛堣繑鍥炴暟鎹緵鍓嶇澶勭悊锛?
 export async function getSalaryExportData(filters?: {
   month?: string
   departmentId?: string
   status?: string
 }) {
   try {
+    await requireAdminUser()
+
     if (!filters?.month) {
       return []
     }
@@ -524,7 +562,7 @@ export async function getSalaryExportData(filters?: {
     const records = await getSalaryRecords(filters)
 
     return records.map((record) => ({
-      '员工编号': record.userId,
+      员工编号: record.userId,
       姓名: record.userName,
       部门: record.departmentName || '',
       岗位: record.positionName || '',
@@ -533,24 +571,24 @@ export async function getSalaryExportData(filters?: {
       薪资: record.netSalary,
       工作日加班工资: record.workdayOvertimePay,
       工作日加班时长: record.workdayOvertimeHours,
-      周末日加班工资: record.weekendOvertimePay,
-      周末日加班时长: record.weekendOvertimeHours,
+      周末加班工资: record.weekendOvertimePay,
+      周末加班时长: record.weekendOvertimeHours,
       法定节假日加班工资: record.holidayOvertimePay,
       加班时长:
         record.workdayOvertimeHours + record.weekendOvertimeHours + record.holidayOvertimeHours,
       调休时长: record.compensatoryHours,
     }))
   } catch (error) {
-    console.error('瀵煎嚭钖祫鏁版嵁澶辫触:', error)
+    console.error('导出薪资数据失败:', error)
     return []
   }
 }
 
-// 鑾峰彇钖祫缁熻
 export async function getSalaryStats(month?: string) {
   try {
-    const where = month ? { month } : {}
+    await requireAdminUser()
 
+    const where: Prisma.SalaryRecordWhereInput = month ? { month } : {}
     const stats = await prisma.salaryRecord.aggregate({
       where,
       _count: true,
@@ -576,14 +614,13 @@ export async function getSalaryStats(month?: string) {
       totalDeduction: stats._sum.deduction || 0,
       totalNetSalary: stats._sum.netSalary || 0,
       totalCompensatoryHours: stats._sum.compensatoryHours || 0,
-      statusBreakdown: statusCounts.map((s) => ({
-        status: s.status,
-        count: s._count,
+      statusBreakdown: statusCounts.map((item) => ({
+        status: item.status,
+        count: item._count,
       })),
     }
   } catch (error) {
-    console.error('鑾峰彇钖祫缁熻澶辫触:', error)
+    console.error('获取薪资统计失败:', error)
     return null
   }
 }
-

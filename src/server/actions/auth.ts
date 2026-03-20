@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { registerSchema } from '@/lib/validations'
+import { requireSessionUser } from '@/lib/action-auth'
 import { revalidatePath } from 'next/cache'
 
 export async function registerUser(formData: FormData) {
@@ -11,9 +12,20 @@ export async function registerUser(formData: FormData) {
       email: formData.get('email'),
       password: formData.get('password'),
       name: formData.get('name'),
-      role: formData.get('role'),
+      role: formData.get('role') || undefined,
       companyId: formData.get('companyId') || null,
     })
+
+    let role = 'EMPLOYEE'
+
+    try {
+      const sessionUser = await requireSessionUser()
+      if (sessionUser.role === 'ADMIN') {
+        role = validatedData.role
+      }
+    } catch {
+      role = 'EMPLOYEE'
+    }
 
     // 检查邮箱是否已存在
     const existingUser = await prisma.user.findUnique({
@@ -33,13 +45,13 @@ export async function registerUser(formData: FormData) {
         email: validatedData.email,
         password: hashedPassword,
         name: validatedData.name,
-        role: validatedData.role,
+        role,
         companyId: validatedData.companyId,
       },
     })
 
     // 如果是员工，创建当年的默认假期余额
-    if (validatedData.role === 'EMPLOYEE') {
+    if (role === 'EMPLOYEE') {
       await prisma.leaveBalance.create({
         data: {
           userId: user.id,
