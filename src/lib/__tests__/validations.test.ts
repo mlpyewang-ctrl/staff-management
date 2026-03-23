@@ -123,9 +123,23 @@ describe('leaveSchema', () => {
       type: 'ANNUAL',
       startDate: '2024-01-15',
       endDate: '2024-01-16',
+      startSession: 'AM',
+      endSession: 'PM',
       reason: 'This is a valid reason for leave request.',
     })
     expect(result.success).toBe(true)
+  })
+
+  it('should reject invalid same-day session order', () => {
+    const result = leaveSchema.safeParse({
+      type: 'ANNUAL',
+      startDate: '2024-01-15',
+      endDate: '2024-01-15',
+      startSession: 'PM',
+      endSession: 'AM',
+      reason: 'This is a valid reason for leave request.',
+    })
+    expect(result.success).toBe(false)
   })
 
   it('should reject reason shorter than 10 characters', () => {
@@ -145,6 +159,8 @@ describe('leaveSchema', () => {
         type,
         startDate: '2024-01-15',
         endDate: '2024-01-16',
+        startSession: 'AM',
+        endSession: 'PM',
         reason: 'This is a valid reason for leave request.',
       })
       expect(result.success).toBe(true)

@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { useSession } from 'next-auth/react'
 import { Badge } from '@/components/ui/badge'
-import { getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getCompensatorySourceHistory } from '@/server/actions/compensatory'
+import { getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
 import { formatDate, formatDateTime } from '@/lib/utils'
 
 const statusMap: Record<string, string> = {
@@ -27,6 +27,18 @@ const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger'
   COMPLETED: 'success',
 }
 
+function getSessionText(session?: string | null) {
+  if (session === 'AM') {
+    return '上午'
+  }
+
+  if (session === 'PM') {
+    return '下午'
+  }
+
+  return '-'
+}
+
 export default function LeavePage() {
   const { data: session } = useSession()
   const [applications, setApplications] = useState<any[]>([])
@@ -42,14 +54,16 @@ export default function LeavePage() {
   }
 
   const fetchBalances = async () => {
-    if (session?.user?.id) {
-      const [balance, sources] = await Promise.all([
-        getLeaveBalances(session.user.id),
-        getCompensatorySourceHistory(session.user.id),
-      ])
-      setBalances(balance)
-      setSourceHistory(sources)
+    if (!session?.user?.id) {
+      return
     }
+
+    const [balance, sources] = await Promise.all([
+      getLeaveBalances(session.user.id),
+      getCompensatorySourceHistory(session.user.id),
+    ])
+    setBalances(balance)
+    setSourceHistory(sources)
   }
 
   useEffect(() => {
@@ -61,10 +75,10 @@ export default function LeavePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">请假管理</h1>
-          <p className="text-gray-600 mt-1">调休作为一种假种统一在此申请，并共用请假审批流程</p>
+          <p className="mt-1 text-gray-600">调休作为一种假种统一在此申请，并共用请假审批流程。</p>
         </div>
         {canCreate && (
           <Button asChild>
@@ -76,23 +90,23 @@ export default function LeavePage() {
       {balances && canCreate && (
         <Card>
           <CardHeader>
-            <CardTitle>假期余额 ({new Date().getFullYear()}年)</CardTitle>
+            <CardTitle>假期余额（{new Date().getFullYear()}年）</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="rounded-lg bg-blue-50 p-4">
                 <div className="text-sm text-gray-600">年假</div>
                 <div className="text-2xl font-bold text-blue-700">{balances.annual} 天</div>
               </div>
-              <div className="p-4 bg-green-50 rounded-lg">
+              <div className="rounded-lg bg-green-50 p-4">
                 <div className="text-sm text-gray-600">病假</div>
                 <div className="text-2xl font-bold text-green-700">{balances.sick} 天</div>
               </div>
-              <div className="p-4 bg-yellow-50 rounded-lg">
+              <div className="rounded-lg bg-yellow-50 p-4">
                 <div className="text-sm text-gray-600">事假</div>
                 <div className="text-2xl font-bold text-yellow-700">{balances.personal} 天</div>
               </div>
-              <div className="p-4 bg-orange-50 rounded-lg">
+              <div className="rounded-lg bg-orange-50 p-4">
                 <div className="text-sm text-gray-600">调休可用</div>
                 <div className="text-2xl font-bold text-orange-700">
                   {(balances.compensatory || 0) - (balances.usedCompensatory || 0)} 小时
@@ -133,8 +147,8 @@ export default function LeavePage() {
                         {item.overtimeType === 'WORKDAY'
                           ? '工作日'
                           : item.overtimeType === 'WEEKEND'
-                          ? '周末'
-                          : '节假日'}
+                            ? '周末'
+                            : '节假日'}
                       </TableCell>
                       <TableCell>{item.hours} 小时</TableCell>
                       <TableCell>{item.salaryMonth || '-'}</TableCell>
@@ -160,6 +174,7 @@ export default function LeavePage() {
                 {session?.user?.role !== 'EMPLOYEE' && <TableHead>申请人</TableHead>}
                 <TableHead>开始日期</TableHead>
                 <TableHead>结束日期</TableHead>
+                <TableHead>开始/结束时段</TableHead>
                 <TableHead>天数</TableHead>
                 <TableHead>调休时长</TableHead>
                 <TableHead>事由</TableHead>
@@ -172,7 +187,7 @@ export default function LeavePage() {
             <TableBody>
               {applications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={12} className="py-8 text-center text-gray-500">
                     暂无申请记录
                   </TableCell>
                 </TableRow>
@@ -183,6 +198,10 @@ export default function LeavePage() {
                     {session?.user?.role !== 'EMPLOYEE' && <TableCell>{app.userName}</TableCell>}
                     <TableCell>{new Date(app.startDate).toLocaleDateString('zh-CN')}</TableCell>
                     <TableCell>{new Date(app.endDate).toLocaleDateString('zh-CN')}</TableCell>
+                    <TableCell>
+                      {getSessionText(app.startSession || app.halfDaySession)} →{' '}
+                      {getSessionText(app.endSession || app.halfDaySession)}
+                    </TableCell>
                     <TableCell>{app.days}</TableCell>
                     <TableCell>{app.type === 'COMPENSATORY' ? `${app.compensatoryHours} 小时` : '-'}</TableCell>
                     <TableCell className="max-w-xs truncate">{app.reason}</TableCell>
@@ -200,7 +219,7 @@ export default function LeavePage() {
                             <Link href={`/dashboard/leave/${app.id}`}>编辑</Link>
                           </Button>
                         ) : (
-                          <span className="text-xs text-gray-400">审批中/已完成</span>
+                          <span className="text-xs text-gray-400">审批中 / 已完成</span>
                         )}
                       </TableCell>
                     )}

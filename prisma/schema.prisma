@@ -90,6 +90,9 @@ model LeaveApplication {
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   type       String   // ANNUAL, SICK, PERSONAL, MARRIAGE, MATERNITY, PATERNITY
+  startSession String? // AM, PM
+  endSession   String? // AM, PM
+  halfDaySession String? // AM, PM
   startDate  DateTime // 开始日期
   endDate    DateTime // 结束日期
   days       Float    // 请假天数

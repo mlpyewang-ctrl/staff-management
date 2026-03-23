@@ -29,10 +29,20 @@ export const overtimeSchema = z.object({
 
 export const leaveSchema = z.object({
   type: z.enum(['ANNUAL', 'SICK', 'PERSONAL', 'MARRIAGE', 'MATERNITY', 'PATERNITY', 'COMPENSATORY']),
+  startSession: z.enum(['AM', 'PM']).optional(),
+  endSession: z.enum(['AM', 'PM']).optional(),
   startDate: z.string(),
   endDate: z.string(),
   destination: z.string().optional(),
   reason: z.string().min(10, '请详细描述请假事由（至少 10 个字符）'),
+}).superRefine((data, ctx) => {
+  if (data.startDate === data.endDate && data.startSession === 'PM' && data.endSession === 'AM') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['endSession'],
+      message: '同一天请假的结束时段不能早于开始时段',
+    })
+  }
 })
 
 export const performanceSchema = z.object({

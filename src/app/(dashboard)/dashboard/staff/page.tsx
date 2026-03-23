@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getDepartments } from '@/server/actions/department'
 import { getPositions } from '@/server/actions/position'
@@ -35,11 +36,19 @@ interface StaffUser {
   position?: PositionOption | null
 }
 
+type EditableRole = 'EMPLOYEE' | 'MANAGER'
+
 const emptyFormState = {
   departmentId: '',
   positionId: '',
   level: '',
+  role: 'EMPLOYEE' as EditableRole,
 }
+
+const roleOptions: Array<{ value: EditableRole; label: string }> = [
+  { value: 'EMPLOYEE', label: '员工' },
+  { value: 'MANAGER', label: '部门主管' },
+]
 
 function getRoleLabel(role: string) {
   if (role === 'ADMIN') {
@@ -99,7 +108,7 @@ export default function StaffDashboardPage() {
       try {
         await loadData(selectedUserId)
       } catch (error) {
-        const text = error instanceof Error ? error.message : '加载人员岗位信息失败'
+        const text = error instanceof Error ? error.message : '加载人员信息失败'
         setMessage({ type: 'error', text })
       } finally {
         setInitialLoading(false)
@@ -122,6 +131,7 @@ export default function StaffDashboardPage() {
       departmentId: selectedUser.departmentId || '',
       positionId: selectedUser.positionId || '',
       level: selectedUser.level || selectedUser.position?.level || '',
+      role: selectedUser.role === 'MANAGER' ? 'MANAGER' : 'EMPLOYEE',
     })
   }, [selectedUser])
 
@@ -142,7 +152,7 @@ export default function StaffDashboardPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!selectedUserId) {
+    if (!selectedUserId || !selectedUser) {
       setMessage({ type: 'error', text: '请先选择需要维护的人员' })
       return
     }
@@ -154,6 +164,9 @@ export default function StaffDashboardPage() {
     submitData.append('departmentId', formState.departmentId)
     submitData.append('positionId', formState.positionId)
     submitData.append('level', formState.level)
+    if (selectedUser.role !== 'ADMIN') {
+      submitData.append('role', formState.role)
+    }
 
     const result = await updateUserJobAssignment(selectedUserId, submitData)
 
@@ -171,7 +184,7 @@ export default function StaffDashboardPage() {
   if (session?.user?.role !== 'ADMIN') {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">人员岗位</h1>
+        <h1 className="text-2xl font-bold text-gray-900">人员管理</h1>
         <p className="text-gray-600">仅管理员可以访问该模块。</p>
       </div>
     )
@@ -180,14 +193,14 @@ export default function StaffDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">人员岗位</h1>
-        <p className="mt-1 text-gray-600">统一维护员工的部门、岗位和岗位职级，避免个人或部门主管自行修改。</p>
+        <h1 className="text-2xl font-bold text-gray-900">人员管理</h1>
+        <p className="mt-1 text-gray-600">统一维护系统角色与岗位信息，可在此指定谁是部门主管（MANAGER）。</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>岗位维护</CardTitle>
+            <CardTitle>角色与岗位配置</CardTitle>
           </CardHeader>
           <CardContent>
             {selectedUser ? (
@@ -195,7 +208,34 @@ export default function StaffDashboardPage() {
                 <div className="rounded-lg border bg-gray-50 px-4 py-3 text-sm text-gray-700">
                   <div className="font-medium text-gray-900">{selectedUser.name}</div>
                   <div>{selectedUser.email}</div>
-                  <div className="mt-1">当前角色：{getRoleLabel(selectedUser.role)}</div>
+                  <div className="mt-1">当前系统角色：{getRoleLabel(selectedUser.role)}</div>
+                  <div className="mt-1 text-gray-500">{selectedUser.department?.name || '未分配部门'} · {selectedUser.position?.name || '未设置岗位'}</div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role">系统角色</Label>
+                  {selectedUser.role === 'ADMIN' ? (
+                    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                      管理员账户的角色不能在此页面修改
+                    </div>
+                  ) : (
+                    <Select
+                      id="role"
+                      value={formState.role}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          role: event.target.value as EditableRole,
+                        }))
+                      }
+                    >
+                      {roleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -279,11 +319,11 @@ export default function StaffDashboardPage() {
                 )}
 
                 <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? '保存中...' : '保存岗位信息'}
+                  {loading ? '保存中...' : '保存角色与岗位'}
                 </Button>
               </form>
             ) : (
-              <div className="text-sm text-gray-500">请选择右侧人员后再维护岗位信息。</div>
+              <div className="text-sm text-gray-500">请选择右侧人员后再配置角色和岗位信息。</div>
             )}
           </CardContent>
         </Card>
@@ -295,7 +335,7 @@ export default function StaffDashboardPage() {
           <CardContent className="space-y-4">
             <Input
               value={keyword}
-              placeholder="搜索姓名、邮箱、部门或岗位"
+              placeholder="搜索姓名、邮箱、部门、岗位或角色"
               onChange={(event) => setKeyword(event.target.value)}
             />
 
@@ -306,7 +346,7 @@ export default function StaffDashboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>姓名</TableHead>
-                    <TableHead>角色</TableHead>
+                    <TableHead>系统角色</TableHead>
                     <TableHead>部门</TableHead>
                     <TableHead>岗位</TableHead>
                     <TableHead>职级</TableHead>

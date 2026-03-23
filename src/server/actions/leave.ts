@@ -90,21 +90,41 @@ async function getHolidayDateBuckets(startDate: Date, endDate: Date) {
 }
 
 function buildLeavePayload(formData: FormData) {
+  const getString = (key: string) => {
+    const value = formData.get(key)
+    return typeof value === 'string' ? value : undefined
+  }
+
+  const legacyHalfDaySession = getString('halfDaySession')
   const validatedData = leaveSchema.parse({
-    type: formData.get('type'),
-    startDate: formData.get('startDate'),
-    endDate: formData.get('endDate'),
-    destination: formData.get('destination'),
-    reason: formData.get('reason'),
+    type: getString('type'),
+    startSession: getString('startSession') ?? legacyHalfDaySession,
+    endSession: getString('endSession') ?? legacyHalfDaySession,
+    startDate: getString('startDate'),
+    endDate: getString('endDate'),
+    destination: getString('destination'),
+    reason: getString('reason'),
   })
 
   const startDateTime = new Date(validatedData.startDate)
   const endDateTime = new Date(validatedData.endDate)
+  const startSession = validatedData.startSession || 'AM'
+  const endSession = validatedData.endSession || 'PM'
+
+  if (
+    formatDateKey(startDateTime) === formatDateKey(endDateTime) &&
+    startSession === 'PM' &&
+    endSession === 'AM'
+  ) {
+    throw new Error('同一天请假的结束时段不能早于开始时段')
+  }
 
   return {
     validatedData,
     startDateTime,
     endDateTime,
+    startSession,
+    endSession,
   }
 }
 
@@ -178,9 +198,16 @@ async function requireLeaveOwnerOrAdmin(id: string) {
   }
 }
 
-export async function getLeaveDurationPreview(startDate?: string, endDate?: string) {
+export async function getLeaveDurationPreview(
+  startDate?: string,
+  endDate?: string,
+  startSession?: string,
+  endSession?: string
+) {
   try {
     await requireSessionUser()
+    const normalizedStartSession = startSession === 'PM' ? 'PM' : 'AM'
+    const normalizedEndSession = endSession === 'AM' ? 'AM' : 'PM'
 
     if (!startDate || !endDate) {
       return { days: 0 }
@@ -194,7 +221,11 @@ export async function getLeaveDurationPreview(startDate?: string, endDate?: stri
     }
 
     const holidayBuckets = await getHolidayDateBuckets(start, end)
-    const days = calculateLeaveDaysExcludingNonWorkingDays(start, end, holidayBuckets)
+    const days = calculateLeaveDaysExcludingNonWorkingDays(start, end, {
+      ...holidayBuckets,
+      startSession: normalizedStartSession,
+      endSession: normalizedEndSession,
+    })
 
     return { days }
   } catch (error) {
@@ -209,7 +240,11 @@ export async function createLeaveApplication(formData: FormData) {
     const action = formData.get('action') === 'submit' ? 'submit' : 'save'
     const payload = buildLeavePayload(formData)
     const holidayBuckets = await getHolidayDateBuckets(payload.startDateTime, payload.endDateTime)
-    const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, holidayBuckets)
+    const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, {
+      ...holidayBuckets,
+      startSession: payload.startSession,
+      endSession: payload.endSession,
+    })
 
     if (days <= 0) {
       return { error: '所选日期不包含有效工作日，请重新选择' }
@@ -232,6 +267,9 @@ export async function createLeaveApplication(formData: FormData) {
       data: {
         userId: sessionUser.id,
         type: payload.validatedData.type,
+        startSession: payload.startSession || null,
+        endSession: payload.endSession || null,
+        halfDaySession: null,
         startDate: payload.startDateTime,
         endDate: payload.endDateTime,
         days,
@@ -339,7 +377,11 @@ export async function updateLeaveApplication(formData: FormData) {
 
     const payload = buildLeavePayload(formData)
     const holidayBuckets = await getHolidayDateBuckets(payload.startDateTime, payload.endDateTime)
-    const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, holidayBuckets)
+    const days = calculateLeaveDaysExcludingNonWorkingDays(payload.startDateTime, payload.endDateTime, {
+      ...holidayBuckets,
+      startSession: payload.startSession,
+      endSession: payload.endSession,
+    })
     const nextStatus = formData.get('action') === 'submit' ? 'PENDING' : 'DRAFT'
 
     if (days <= 0) {
@@ -371,6 +413,9 @@ export async function updateLeaveApplication(formData: FormData) {
         where: { id },
         data: {
           type: payload.validatedData.type,
+          startSession: payload.startSession || null,
+          endSession: payload.endSession || null,
+          halfDaySession: null,
           startDate: payload.startDateTime,
           endDate: payload.endDateTime,
           days,
@@ -426,6 +471,9 @@ export async function getLeaveApplications(_userId?: string, _role?: string) {
       ...application,
       userName: application.user.name,
       leaveTypeText: leaveTypeMap[application.type] || application.type,
+      startSession: application.startSession || application.halfDaySession || null,
+      endSession: application.endSession || application.halfDaySession || null,
+      halfDaySession: application.halfDaySession,
       compensatoryHours:
         application.type === 'COMPENSATORY' ? application.days * SALARY_CONSTANTS.HOURS_PER_DAY : 0,
     }))

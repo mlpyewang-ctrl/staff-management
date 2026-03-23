@@ -48,6 +48,8 @@ export type LeaveType =
   | 'PATERNITY'
   | 'COMPENSATORY'
 
+export type LeaveSession = 'AM' | 'PM'
+
 export type ApplicationType = 'OVERTIME' | 'LEAVE'
 
 export interface OvertimeApplication {
@@ -71,6 +73,9 @@ export interface LeaveApplication {
   id: string
   userId: string
   type: LeaveType
+  startSession?: LeaveSession | null
+  endSession?: LeaveSession | null
+  halfDaySession?: LeaveSession | null
   startDate: Date
   endDate: Date
   days: number

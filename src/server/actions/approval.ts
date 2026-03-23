@@ -155,6 +155,7 @@ export async function approveApplication(formData: FormData) {
       if (
         !canApproveCurrentStep({
           currentStep: workflow.currentStep,
+          approverId: approver.id,
           approverRole: approver.role,
           approverDepartmentId: approver.departmentId,
           applicantDepartmentId: overtimeApplication.user.departmentId,
@@ -284,6 +285,7 @@ export async function approveApplication(formData: FormData) {
     if (
       !canApproveCurrentStep({
         currentStep: workflow.currentStep,
+        approverId: approver.id,
         approverRole: approver.role,
         approverDepartmentId: approver.departmentId,
         applicantDepartmentId: leaveApplication.user.departmentId,
@@ -505,12 +507,13 @@ export async function getPendingApprovals(_approverId?: string) {
         if (
           !workflow.currentStep ||
           workflow.currentStepIndex === null ||
-          !canApproveCurrentStep({
-            currentStep: workflow.currentStep,
-            approverRole: approver.role,
-            approverDepartmentId: approver.departmentId,
-            applicantDepartmentId: application.user.departmentId,
-          })
+        !canApproveCurrentStep({
+          currentStep: workflow.currentStep,
+          approverId: approver.id,
+          approverRole: approver.role,
+          approverDepartmentId: approver.departmentId,
+          applicantDepartmentId: application.user.departmentId,
+        })
         ) {
           return null
         }
@@ -540,12 +543,13 @@ export async function getPendingApprovals(_approverId?: string) {
         if (
           !workflow.currentStep ||
           workflow.currentStepIndex === null ||
-          !canApproveCurrentStep({
-            currentStep: workflow.currentStep,
-            approverRole: approver.role,
-            approverDepartmentId: approver.departmentId,
-            applicantDepartmentId: application.user.departmentId,
-          })
+        !canApproveCurrentStep({
+          currentStep: workflow.currentStep,
+          approverId: approver.id,
+          approverRole: approver.role,
+          approverDepartmentId: approver.departmentId,
+          applicantDepartmentId: application.user.departmentId,
+        })
         ) {
           return null
         }

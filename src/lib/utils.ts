@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from 'clsx'
-import { SALARY_CONSTANTS } from '@/types'
+import { SALARY_CONSTANTS, type LeaveSession } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs)
@@ -37,12 +37,26 @@ export function formatDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+export function getLeaveSessionLabel(session?: LeaveSession | string | null): string {
+  if (session === 'AM') {
+    return '上午'
+  }
+
+  if (session === 'PM') {
+    return '下午'
+  }
+
+  return '-'
+}
+
 export function calculateLeaveDaysExcludingNonWorkingDays(
   start: Date,
   end: Date,
   options?: {
     legalHolidayDates?: string[]
     compensatoryWorkDates?: string[]
+    startSession?: LeaveSession
+    endSession?: LeaveSession
   }
 ): number {
   const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate())
@@ -54,25 +68,59 @@ export function calculateLeaveDaysExcludingNonWorkingDays(
 
   const legalHolidayDates = new Set(options?.legalHolidayDates || [])
   const compensatoryWorkDates = new Set(options?.compensatoryWorkDates || [])
+  const startSession = options?.startSession || 'AM'
+  const endSession = options?.endSession || 'PM'
+  const startDateKey = formatDateKey(startDate)
+  const endDateKey = formatDateKey(endDate)
 
-  let workingDays = 0
-  for (const cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
-    const key = formatDateKey(cursor)
-    const day = cursor.getDay()
+  const isWorkingDay = (date: Date) => {
+    const key = formatDateKey(date)
+    const day = date.getDay()
     const isWeekend = day === 0 || day === 6
     const isLegalHoliday = legalHolidayDates.has(key)
     const isCompensatoryWorkday = compensatoryWorkDates.has(key)
 
-    if (isCompensatoryWorkday || (!isWeekend && !isLegalHoliday)) {
-      workingDays += 1
+    return isCompensatoryWorkday || (!isWeekend && !isLegalHoliday)
+  }
+
+  if (startDateKey === endDateKey) {
+    if (!isWorkingDay(startDate)) {
+      return 0
     }
+
+    if (startSession === 'PM' && endSession === 'AM') {
+      return 0
+    }
+
+    return startSession === endSession ? 0.5 : 1
+  }
+
+  let workingDays = 0
+  for (const cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
+    if (!isWorkingDay(cursor)) {
+      continue
+    }
+
+    const key = formatDateKey(cursor)
+
+    if (key === startDateKey) {
+      workingDays += startSession === 'PM' ? 0.5 : 1
+      continue
+    }
+
+    if (key === endDateKey) {
+      workingDays += endSession === 'AM' ? 0.5 : 1
+      continue
+    }
+
+    workingDays += 1
   }
 
   if (workingDays === 0) {
     return 0
   }
 
-  return formatDateKey(startDate) === formatDateKey(endDate) ? 0.5 : workingDays
+  return Math.round(workingDays * 2) / 2
 }
 
 // ========== 新增：薪资计算相关工具函数 ==========

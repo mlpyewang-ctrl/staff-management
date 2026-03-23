@@ -6,6 +6,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { userJobAssignmentSchema, userProfileSchema } from '@/lib/validations'
 
+const editableRoles = ['EMPLOYEE', 'MANAGER'] as const
+
 async function getSessionUser() {
   const session = await getServerSession(authOptions)
 
@@ -142,10 +144,14 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       level: getString('level'),
     })
 
+    const roleValue = getString('role')
+    const normalizedRole = roleValue?.toUpperCase()
+
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
+        role: true,
         positionId: true,
       },
     })
@@ -176,6 +182,14 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       }
     }
 
+    if (normalizedRole && !editableRoles.includes(normalizedRole as (typeof editableRoles)[number]) && normalizedRole !== 'ADMIN') {
+      return { error: '角色参数无效' }
+    }
+
+    if (normalizedRole === 'ADMIN' && existingUser.role !== 'ADMIN') {
+      return { error: '不能在此页面将人员设置为管理员' }
+    }
+
     const shouldResetSalary = Boolean(
       validated.positionId && validated.positionId !== existingUser.positionId
     )
@@ -186,6 +200,7 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
         departmentId: validated.departmentId || null,
         positionId: validated.positionId || null,
         level: validated.level || null,
+        ...(normalizedRole ? { role: normalizedRole } : {}),
         ...(shouldResetSalary ? { salary: null } : {}),
       },
       select: {
@@ -217,7 +232,7 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
     revalidatePath('/dashboard/profile')
     revalidatePath('/dashboard/salary')
 
-    return { success: '岗位信息已更新', user }
+    return { success: '人员信息已更新', user }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
