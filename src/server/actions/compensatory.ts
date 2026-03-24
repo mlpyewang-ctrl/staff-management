@@ -3,37 +3,16 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireAdminUser, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import { compensatoryUseSchema } from '@/lib/validations'
 import { SALARY_CONSTANTS } from '@/types'
-
-async function getOrCreateLeaveBalance(userId: string) {
-  let leaveBalance = await prisma.leaveBalance.findUnique({
-    where: { userId },
-  })
-
-  if (!leaveBalance) {
-    leaveBalance = await prisma.leaveBalance.create({
-      data: {
-        userId,
-        year: new Date().getFullYear(),
-        annual: 5,
-        sick: 10,
-        personal: 5,
-        compensatory: 0,
-        usedCompensatory: 0,
-      },
-    })
-  }
-
-  return leaveBalance
-}
 
 export async function getCompensatoryInfo(userId: string) {
   try {
     await requireSelfOrAdmin(userId)
 
-    const leaveBalance = await getOrCreateLeaveBalance(userId)
+    const leaveBalance = await ensureLeaveBalance(userId)
     const settledOvertime = await prisma.overtimeSettlement.findMany({
       where: { userId },
       select: { hours: true },
@@ -67,7 +46,7 @@ export async function useCompensatory(formData: FormData) {
     })
 
     const hoursToUse = Number(validatedData.hours)
-    const leaveBalance = await getOrCreateLeaveBalance(sessionUser.id)
+    const leaveBalance = await ensureLeaveBalance(sessionUser.id)
     const availableCompensatory = leaveBalance.compensatory - leaveBalance.usedCompensatory
 
     if (availableCompensatory < hoursToUse) {
@@ -186,7 +165,7 @@ export async function adminAddCompensatory(formData: FormData) {
       return { error: '参数无效' }
     }
 
-    await getOrCreateLeaveBalance(userId)
+    await ensureLeaveBalance(userId)
     await prisma.leaveBalance.update({
       where: { userId },
       data: {

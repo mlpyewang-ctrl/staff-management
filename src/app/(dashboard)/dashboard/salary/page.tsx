@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
@@ -7,15 +7,10 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
+  applySalaryBatchAdjustment,
   deleteSalaryRecord,
   getSalaryExportData,
   getSalaryMonths,
@@ -24,13 +19,25 @@ import {
   updateSalaryStatus,
 } from '@/server/actions/salary'
 import { getDepartments } from '@/server/actions/department'
+import { buildSalaryExcelContent, type SalaryExportRow } from '@/lib/salary-export'
 import { formatCurrency } from '@/lib/utils'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 interface SalaryRecord {
   id: string
   userId: string
   month: string
   baseSalary: number
+  seniorityPay: number
+  otherAdjustment: number
+  adjustmentNote?: string | null
   workdayOvertimeHours: number
   workdayOvertimePay: number
   weekendOvertimeHours: number
@@ -51,6 +58,8 @@ interface SalaryRecord {
 interface SalaryStats {
   totalRecords: number
   totalBaseSalary: number
+  totalSeniorityPay: number
+  totalOtherAdjustment: number
   totalOvertimePay: number
   totalDeduction: number
   totalNetSalary: number
@@ -63,9 +72,12 @@ interface DepartmentOption {
   name: string
 }
 
-interface ExportRow {
-  [key: string]: string | number
-}
+const adjustmentTemplates = [
+  { label: '清明节 +1000', amount: '1000', note: '清明节过节费' },
+  { label: '端午节 +1000', amount: '1000', note: '端午节过节费' },
+  { label: '中秋节 +1000', amount: '1000', note: '中秋节过节费' },
+  { label: '国庆节 +1000', amount: '1000', note: '国庆节过节费' },
+]
 
 export default function SalaryPage() {
   const { data: session } = useSession()
@@ -75,10 +87,15 @@ export default function SalaryPage() {
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [months, setMonths] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [adjusting, setAdjusting] = useState(false)
   const [filters, setFilters] = useState({
     month: '',
     departmentId: '',
     status: '',
+  })
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    amount: '',
+    note: '',
   })
 
   const loadData = async () => {
@@ -90,8 +107,8 @@ export default function SalaryPage() {
       getSalaryMonths(),
     ])
 
-    setRecords(recordsData)
-    setStats(statsData)
+    setRecords(recordsData as SalaryRecord[])
+    setStats(statsData as SalaryStats | null)
     setDepartments(departmentOptions)
     setMonths(monthOptions)
     setLoading(false)
@@ -145,63 +162,19 @@ export default function SalaryPage() {
     alert(result.error)
   }
 
-  const buildExcelContent = (rows: ExportRow[]) => {
-    const headers = Object.keys(rows[0])
-    const escapeCell = (value: string | number) =>
-      String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-
-    const headerHtml = headers
-      .map(
-        (header) =>
-          `<th style="border:1px solid #cbd5e1;background:#eff6ff;padding:8px 12px;text-align:left;">${escapeCell(header)}</th>`
-      )
-      .join('')
-
-    const bodyHtml = rows
-      .map((row) => {
-        const cells = headers
-          .map(
-            (header) =>
-              `<td style="border:1px solid #cbd5e1;padding:8px 12px;">${escapeCell(row[header])}</td>`
-          )
-          .join('')
-
-        return `<tr>${cells}</tr>`
-      })
-      .join('')
-
-    return `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-        <head>
-          <meta charset="utf-8" />
-        </head>
-        <body>
-          <table>
-            <thead><tr>${headerHtml}</tr></thead>
-            <tbody>${bodyHtml}</tbody>
-          </table>
-        </body>
-      </html>
-    `
-  }
-
   const handleExport = async () => {
     if (!filters.month) {
       alert('请先选择要导出的月份')
       return
     }
 
-    const exportData = (await getSalaryExportData(filters)) as ExportRow[]
+    const exportData = (await getSalaryExportData(filters)) as SalaryExportRow[]
     if (exportData.length === 0) {
       alert('当前月份没有可导出的薪资数据')
       return
     }
 
-    const excelContent = buildExcelContent(exportData)
+    const excelContent = buildSalaryExcelContent(exportData)
     const blob = new Blob(['\ufeff', excelContent], {
       type: 'application/vnd.ms-excel;charset=utf-8;',
     })
@@ -214,6 +187,40 @@ export default function SalaryPage() {
     URL.revokeObjectURL(url)
   }
 
+  const handleBatchAdjustment = async () => {
+    if (!filters.month) {
+      alert('请先选择月份')
+      return
+    }
+
+    if (!adjustmentForm.amount) {
+      alert('请输入调整金额')
+      return
+    }
+
+    setAdjusting(true)
+    const formData = new FormData()
+    formData.append('month', filters.month)
+    formData.append('amount', adjustmentForm.amount)
+    if (filters.departmentId) {
+      formData.append('departmentId', filters.departmentId)
+    }
+    if (adjustmentForm.note) {
+      formData.append('note', adjustmentForm.note)
+    }
+
+    const result = await applySalaryBatchAdjustment(formData)
+    setAdjusting(false)
+
+    if (result.success) {
+      alert(result.success)
+      await loadData()
+      return
+    }
+
+    alert(result.error)
+  }
+
   if (loading) {
     return <div className="p-6">加载中...</div>
   }
@@ -223,20 +230,24 @@ export default function SalaryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">薪资管理</h1>
-          <p className="mt-1 text-sm text-gray-600">支持按月导出 Excel，包含薪资、加班工资、加班时长和调休时长。</p>
+          <p className="mt-1 text-sm text-gray-600">支持工龄工资、批量补贴调整和按月导出 Excel。</p>
         </div>
         <div className="flex gap-2">
           <Link href="/dashboard/salary/generate">
             <Button>生成薪资</Button>
           </Link>
-          <Button variant="outline" onClick={handleExport} disabled={!filters.month}>
+          <Button
+            onClick={handleExport}
+            disabled={!filters.month}
+            className="border border-emerald-700 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:border-emerald-300 disabled:bg-emerald-300"
+          >
             按月导出 Excel
           </Button>
         </div>
       </div>
 
       {stats && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <Card>
             <CardContent className="pt-4">
               <div className="text-sm text-gray-500">记录数</div>
@@ -251,14 +262,20 @@ export default function SalaryPage() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-sm text-gray-500">加班费合计</div>
-              <div className="text-2xl font-bold">{formatCurrency(stats.totalOvertimePay)}</div>
+              <div className="text-sm text-gray-500">工龄工资合计</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.totalSeniorityPay)}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-sm text-gray-500">扣款合计</div>
-              <div className="text-2xl font-bold">{formatCurrency(stats.totalDeduction)}</div>
+              <div className="text-sm text-gray-500">其他调整合计</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.totalOtherAdjustment)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="text-sm text-gray-500">加班费合计</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.totalOvertimePay)}</div>
             </CardContent>
           </Card>
           <Card>
@@ -317,8 +334,40 @@ export default function SalaryPage() {
               </select>
             </div>
           </div>
+
           <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            导出字段：薪资、工作日加班工资、工作日加班时长、周末日加班工资、周末日加班时长、法定节假日加班工资、加班时长、调休时长。
+            导出字段包含基本工资、工龄工资、其他调整、加班费、扣款、应发工资与调整说明。
+          </div>
+
+          <div className="mt-4 grid gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 md:grid-cols-[180px_1fr_auto]">
+            <Input
+              type="number"
+              placeholder="调整金额，如 1000"
+              value={adjustmentForm.amount}
+              onChange={(event) => setAdjustmentForm({ ...adjustmentForm, amount: event.target.value })}
+            />
+            <Textarea
+              rows={2}
+              placeholder="调整说明，如：4月清明节过节费"
+              value={adjustmentForm.note}
+              onChange={(event) => setAdjustmentForm({ ...adjustmentForm, note: event.target.value })}
+            />
+            <Button onClick={handleBatchAdjustment} disabled={adjusting || !filters.month}>
+              {adjusting ? '调整中...' : '批量调整'}
+            </Button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {adjustmentTemplates.map((template) => (
+              <Button
+                key={template.label}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAdjustmentForm({ amount: template.amount, note: template.note })}
+              >
+                {template.label}
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -332,8 +381,9 @@ export default function SalaryPage() {
                 <TableHead>部门</TableHead>
                 <TableHead>月份</TableHead>
                 <TableHead>基本工资</TableHead>
+                <TableHead>工龄工资</TableHead>
+                <TableHead>其他调整</TableHead>
                 <TableHead>加班费</TableHead>
-                <TableHead>调休时长</TableHead>
                 <TableHead>扣款</TableHead>
                 <TableHead>应发工资</TableHead>
                 <TableHead>状态</TableHead>
@@ -343,7 +393,7 @@ export default function SalaryPage() {
             <TableBody>
               {records.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-gray-500">
+                  <TableCell colSpan={11} className="text-center text-gray-500">
                     暂无数据
                   </TableCell>
                 </TableRow>
@@ -354,8 +404,11 @@ export default function SalaryPage() {
                     <TableCell>{record.departmentName || '-'}</TableCell>
                     <TableCell>{record.month}</TableCell>
                     <TableCell>{formatCurrency(record.baseSalary)}</TableCell>
+                    <TableCell>{formatCurrency(record.seniorityPay)}</TableCell>
+                    <TableCell title={record.adjustmentNote || undefined}>
+                      {formatCurrency(record.otherAdjustment)}
+                    </TableCell>
                     <TableCell>{formatCurrency(record.totalOvertimePay)}</TableCell>
-                    <TableCell>{record.compensatoryHours}h</TableCell>
                     <TableCell>{formatCurrency(record.deduction)}</TableCell>
                     <TableCell className="font-semibold">{formatCurrency(record.netSalary)}</TableCell>
                     <TableCell>{getStatusBadge(record.status)}</TableCell>

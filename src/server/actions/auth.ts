@@ -1,5 +1,6 @@
 'use server'
 
+import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { registerSchema } from '@/lib/validations'
@@ -52,12 +53,7 @@ export async function registerUser(formData: FormData) {
 
     // 如果是员工，创建当年的默认假期余额
     if (role === 'EMPLOYEE') {
-      await prisma.leaveBalance.create({
-        data: {
-          userId: user.id,
-          year: new Date().getFullYear(),
-        },
-      })
+      await ensureLeaveBalance(user.id)
     }
 
     revalidatePath('/auth/login')

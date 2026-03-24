@@ -7,10 +7,11 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: vi.fn(),
       create: vi.fn(),
     },
-    leaveBalance: {
-      create: vi.fn(),
-    },
   },
+}))
+
+vi.mock('@/lib/leave-balance', () => ({
+  ensureLeaveBalance: vi.fn(),
 }))
 
 vi.mock('bcryptjs', () => ({
@@ -29,12 +30,14 @@ vi.mock('next/cache', () => ({
 
 import { getServerSession } from 'next-auth'
 
+import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
 import { createInitialAdmin, registerUser } from '../auth'
 
 const mockPrisma = vi.mocked(prisma)
+const mockEnsureLeaveBalance = vi.mocked(ensureLeaveBalance)
 const mockBcrypt = vi.mocked(bcrypt)
 const mockGetServerSession = vi.mocked(getServerSession)
 
@@ -42,6 +45,7 @@ describe('registerUser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGetServerSession.mockResolvedValue(null)
+    mockEnsureLeaveBalance.mockResolvedValue({} as never)
   })
 
   it('should register a new employee successfully', async () => {
@@ -55,8 +59,6 @@ describe('registerUser', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     } as never)
-    mockPrisma.leaveBalance.create.mockResolvedValue({} as never)
-
     const formData = new FormData()
     formData.append('email', 'test@example.com')
     formData.append('password', 'password123')
@@ -76,7 +78,7 @@ describe('registerUser', () => {
         role: 'EMPLOYEE',
       }),
     })
-    expect(mockPrisma.leaveBalance.create).toHaveBeenCalled()
+    expect(mockEnsureLeaveBalance).toHaveBeenCalledWith('1')
   })
 
   it('should prevent unauthenticated users from self-registering as admin', async () => {
@@ -90,8 +92,6 @@ describe('registerUser', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     } as never)
-    mockPrisma.leaveBalance.create.mockResolvedValue({} as never)
-
     const formData = new FormData()
     formData.append('email', 'admin@example.com')
     formData.append('password', 'password123')
@@ -106,7 +106,7 @@ describe('registerUser', () => {
         role: 'EMPLOYEE',
       }),
     })
-    expect(mockPrisma.leaveBalance.create).toHaveBeenCalled()
+    expect(mockEnsureLeaveBalance).toHaveBeenCalledWith('1')
   })
 
   it('should allow admins to create non-employee accounts', async () => {
@@ -144,7 +144,7 @@ describe('registerUser', () => {
         role: 'MANAGER',
       }),
     })
-    expect(mockPrisma.leaveBalance.create).not.toHaveBeenCalled()
+    expect(mockEnsureLeaveBalance).not.toHaveBeenCalled()
   })
 
   it('should return error if email already exists', async () => {

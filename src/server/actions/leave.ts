@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
 import { requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import { calculateLeaveDaysExcludingNonWorkingDays, formatDateKey } from '@/lib/utils'
 import { leaveSchema } from '@/lib/validations'
@@ -17,32 +18,6 @@ const leaveTypeMap: Record<string, string> = {
   MATERNITY: '产假',
   PATERNITY: '陪产假',
   COMPENSATORY: '调休',
-}
-
-function getCurrentYear() {
-  return new Date().getFullYear()
-}
-
-async function getOrCreateLeaveBalance(userId: string) {
-  let balance = await prisma.leaveBalance.findUnique({
-    where: { userId },
-  })
-
-  if (!balance) {
-    balance = await prisma.leaveBalance.create({
-      data: {
-        userId,
-        year: getCurrentYear(),
-        annual: 5,
-        sick: 10,
-        personal: 5,
-        compensatory: 0,
-        usedCompensatory: 0,
-      },
-    })
-  }
-
-  return balance
 }
 
 async function getPendingCompensatoryHours(userId: string, excludeId?: string) {
@@ -135,7 +110,7 @@ async function validateLeaveBalance(params: {
   isCompensatory: boolean
   excludeId?: string
 }) {
-  const balance = await getOrCreateLeaveBalance(params.userId)
+  const balance = await ensureLeaveBalance(params.userId)
 
   if (params.isCompensatory) {
     const pendingCompensatoryHours = await getPendingCompensatoryHours(params.userId, params.excludeId)
@@ -500,7 +475,7 @@ export async function getLeaveBalances(userId: string) {
       return null
     }
 
-    return await getOrCreateLeaveBalance(userId)
+    return await ensureLeaveBalance(userId)
   } catch (error) {
     console.error('获取假期余额失败:', error)
     return null

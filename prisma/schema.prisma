@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,24 +8,24 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      String   @default("EMPLOYEE") // ADMIN, MANAGER, EMPLOYEE
-  // 个人信息扩展
-  idCard     String?
-  phone      String?
-  salary     Float?
-  level      String?
-  departmentId String?
-  positionId  String?
-  startDate  DateTime?
-
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String
+  password           String
+  role               String   @default("EMPLOYEE")
+  idCard             String?
+  phone              String?
+  salary             Float?
+  level              String?
+  departmentId       String?
+  positionId         String?
+  startDate          DateTime?
+  seniorityStartDate DateTime?
+  seniorityEndDate   DateTime?
+  companyId          String?
+  company            Company? @relation(fields: [companyId], references: [id])
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   overtimeApplications OvertimeApplication[]
   leaveApplications    LeaveApplication[]
@@ -46,18 +43,17 @@ model User {
 }
 
 model Company {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  address   String?
-  contact   String?
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  users     User[]
+  id          String       @id @default(cuid())
+  name        String
+  code        String       @unique
+  address     String?
+  contact     String?
+  phone       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  users       User[]
   departments Department[]
-  
+
   @@map("companies")
 }
 
@@ -65,122 +61,123 @@ model OvertimeApplication {
   id         String   @id @default(cuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date       DateTime // 加班日期
-  startTime  DateTime // 开始时间
-  endTime    DateTime // 结束时间
-  hours      Float    // 加班时长 (小时)
-  type       String   @default("WORKDAY") // WORKDAY, WEEKEND, HOLIDAY
-  reason     String   // 加班事由
-  status     String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
+  date       DateTime
+  startTime  DateTime
+  endTime    DateTime
+  hours      Float
+  type       String   @default("WORKDAY")
+  reason     String
+  status     String   @default("DRAFT")
   approverId String?
   approvedAt DateTime?
-  remark     String?  // 审批意见
+  remark     String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  
+
   overtimeSettlements OvertimeSettlement[]
-  
+
   @@index([userId, status, date])
   @@index([status, createdAt])
   @@map("overtime_applications")
 }
 
 model LeaveApplication {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type       String   // ANNUAL, SICK, PERSONAL, MARRIAGE, MATERNITY, PATERNITY
-  startSession String? // AM, PM
-  endSession   String? // AM, PM
-  halfDaySession String? // AM, PM
-  startDate  DateTime // 开始日期
-  endDate    DateTime // 结束日期
-  days       Float    // 请假天数
-  reason     String   // 请假事由
-  destination String? // 请假前往地点
-  status     String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
-  approverId String?
-  approvedAt DateTime?
-  remark     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String
+  startSession   String?
+  endSession     String?
+  halfDaySession String?
+  startDate      DateTime
+  endDate        DateTime
+  days           Float
+  reason         String
+  destination    String?
+  status         String   @default("DRAFT")
+  approverId     String?
+  approvedAt     DateTime?
+  remark         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   @@index([userId, status, startDate])
   @@index([status, createdAt])
   @@map("leave_applications")
 }
 
 model LeaveBalance {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  year             Int      // 年份
-  annual           Float    @default(5)   // 年假余额
-  sick             Float    @default(10)  // 病假余额
-  personal         Float    @default(5)   // 事假余额
-  compensatory     Float    @default(0)   // 调休余额（小时）
-  usedCompensatory Float    @default(0)   // 已使用调休（小时）
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year              Int
+  annual            Float    @default(5)
+  annualEntitlement Float    @default(5)
+  sick              Float    @default(10)
+  personal          Float    @default(5)
+  compensatory      Float    @default(0)
+  usedCompensatory  Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
   @@index([year])
   @@map("leave_balances")
 }
 
-// 法定节假日
 model Holiday {
   id        String   @id @default(cuid())
-  name      String            // 节假日名称
-  date      DateTime          // 日期
-  year      Int               // 年份
-  type      String            // LEGAL_HOLIDAY（法定节假日）/ COMPENSATORY（调休工作日）
+  name      String
+  date      DateTime
+  year      Int
+  type      String
   createdAt DateTime @default(now())
-  
+
   @@index([year])
   @@index([date])
   @@map("holidays")
 }
 
-// 薪资记录
 model SalaryRecord {
   id                   String   @id @default(cuid())
   userId               String
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month                String                         // 薪资月份 YYYY-MM
-  baseSalary           Float                          // 基本工资
-  workdayOvertimeHours Float    @default(0)           // 工作日加班小时
-  workdayOvertimePay   Float    @default(0)           // 工作日加班费
-  weekendOvertimeHours Float    @default(0)           // 周末加班小时
-  weekendOvertimePay   Float    @default(0)           // 周末加班费
-  holidayOvertimeHours Float    @default(0)           // 节假日加班小时
-  holidayOvertimePay   Float    @default(0)           // 节假日加班费
-  totalOvertimePay     Float    @default(0)           // 加班费合计
-  compensatoryHours    Float    @default(0)           // 转调休时长（小时）
-  deduction            Float    @default(0)           // 请假扣款
-  netSalary            Float                          // 应发工资
-  status               String   @default("DRAFT")     // DRAFT/CONFIRMED/PAID
-  paidAt               DateTime?                      // 发放时间
+  month                String
+  baseSalary           Float
+  seniorityPay         Float    @default(0)
+  otherAdjustment      Float    @default(0)
+  adjustmentNote       String?
+  workdayOvertimeHours Float    @default(0)
+  workdayOvertimePay   Float    @default(0)
+  weekendOvertimeHours Float    @default(0)
+  weekendOvertimePay   Float    @default(0)
+  holidayOvertimeHours Float    @default(0)
+  holidayOvertimePay   Float    @default(0)
+  totalOvertimePay     Float    @default(0)
+  compensatoryHours    Float    @default(0)
+  deduction            Float    @default(0)
+  netSalary            Float
+  status               String   @default("DRAFT")
+  paidAt               DateTime?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  overtimeSettlements  OvertimeSettlement[]
+  overtimeSettlements OvertimeSettlement[]
 
   @@unique([userId, month])
   @@index([month, status])
   @@map("salary_records")
 }
 
-// 加班清算记录（记录每笔加班是计薪还是转调休）
 model OvertimeSettlement {
-  id             String   @id @default(cuid())
+  id             String               @id @default(cuid())
   userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   overtimeId     String
-  overtime       OvertimeApplication @relation(fields: [overtimeId], references: [id], onDelete: Cascade)
+  overtime       OvertimeApplication  @relation(fields: [overtimeId], references: [id], onDelete: Cascade)
   salaryRecordId String?
-  salaryRecord   SalaryRecord? @relation(fields: [salaryRecordId], references: [id], onDelete: SetNull)
-  hours          Float                          // 清算的小时数
-  settlementType String                         // SALARY（计薪）/ COMPENSATORY（转调休）
+  salaryRecord   SalaryRecord?        @relation(fields: [salaryRecordId], references: [id], onDelete: SetNull)
+  hours          Float
+  settlementType String
   createdAt      DateTime @default(now())
 
   @@index([overtimeId, settlementType])
@@ -190,24 +187,24 @@ model OvertimeSettlement {
 }
 
 model PerformanceReview {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation("Reviewee", fields: [userId], references: [id], onDelete: Cascade)
-  period     String   // 绩效期间 (如：2024-01)
-  quality    Int      // 工作质量 (1-5 分)
-  efficiency Int      // 工作效率 (1-5 分)
-  attitude   Int      // 工作态度 (1-5 分)
-  skill      Int      // 专业技能 (1-5 分)
-  teamwork   Int      // 团队协作 (1-5 分)
-  totalScore Float    // 总分
-  comment    String?  // 评价说明
-  selfComment String? // 自评
-  reviewerId String?
-  reviewer   User?    @relation("Reviewer", fields: [reviewerId], references: [id])
-  status     String   @default("DRAFT") // DRAFT, PENDING, APPROVED, REJECTED
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("Reviewee", fields: [userId], references: [id], onDelete: Cascade)
+  period      String
+  quality     Int
+  efficiency  Int
+  attitude    Int
+  skill       Int
+  teamwork    Int
+  totalScore  Float
+  comment     String?
+  selfComment String?
+  reviewerId  String?
+  reviewer    User?    @relation("Reviewer", fields: [reviewerId], references: [id])
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   @@unique([userId, period])
   @@index([status, period])
   @@map("performance_reviews")
@@ -233,8 +230,8 @@ model ApprovalFlow {
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   name         String
-  types        String     // 申请类型（JSON数组）：["OVERTIME", "LEAVE", "PERFORMANCE"]
-  config       String     // 审批步骤配置（JSON 字符串）
+  types        String
+  config       String
   isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -246,14 +243,14 @@ model ApprovalFlow {
 model Approval {
   id              String   @id @default(cuid())
   applicationId   String
-  applicationType String   // OVERTIME, LEAVE, PERFORMANCE
-  applicantId     String   // 申请人 ID
-  approverId      String   // 审批人 ID
+  applicationType String
+  applicantId     String
+  approverId      String
   approver        User     @relation(fields: [approverId], references: [id])
-  status          String   // PENDING, APPROVED, REJECTED
+  status          String
   remark          String?
   createdAt       DateTime @default(now())
-  
+
   @@index([applicationType, applicationId, createdAt])
   @@index([approverId, createdAt])
   @@index([applicantId, createdAt])
@@ -262,13 +259,13 @@ model Approval {
 
 model Position {
   id        String   @id @default(cuid())
-  name      String   @unique    // 岗位名称
-  salary    Float               // 基础薪资
-  level     String?             // 职级
+  name      String   @unique
+  salary    Float
+  level     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
+  users User[]
 
   @@map("positions")
 }

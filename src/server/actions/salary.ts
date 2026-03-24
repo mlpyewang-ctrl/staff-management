@@ -5,32 +5,113 @@ import { revalidatePath } from 'next/cache'
 
 import { requireAdminUser } from '@/lib/action-auth'
 import { prisma } from '@/lib/prisma'
+import { buildSalaryExportRows } from '@/lib/salary-export'
+import { calculateSeniorityPay } from '@/lib/seniority'
 import {
   calculateHourlyRate,
   calculateOvertimeAllocation,
   canGenerateSalary,
 } from '@/lib/utils'
-import { salaryGenerateSchema, salaryStatusSchema } from '@/lib/validations'
+import {
+  salaryBatchAdjustmentSchema,
+  salaryGenerateSchema,
+  salarySingleAdjustmentSchema,
+  salaryStatusSchema,
+} from '@/lib/validations'
 import { SALARY_CONSTANTS } from '@/types'
 
 function buildSalaryRecordSummary<T extends {
   baseSalary: number
+  seniorityPay: number
+  otherAdjustment: number
   workdayOvertimeHours: number
   weekendOvertimeHours: number
   holidayOvertimeHours: number
   compensatoryHours: number
+  totalOvertimePay: number
+  deduction: number
 }>(record: T, compensatoryHoursOverride?: number) {
-  const hourlySalary = Math.round(calculateHourlyRate(record.baseSalary) * 100) / 100
+  const salaryBase = record.baseSalary + record.seniorityPay
+  const hourlySalary = Math.round(calculateHourlyRate(salaryBase) * 100) / 100
   const paidOvertimeHours =
     record.workdayOvertimeHours + record.weekendOvertimeHours + record.holidayOvertimeHours
   const compensatoryOvertimeHours = compensatoryHoursOverride ?? record.compensatoryHours
   const totalOvertimeHours = paidOvertimeHours + compensatoryOvertimeHours
+  const netSalary = salaryBase + record.otherAdjustment + record.totalOvertimePay - record.deduction
 
   return {
+    salaryBase,
     hourlySalary,
     paidOvertimeHours,
     compensatoryOvertimeHours,
     totalOvertimeHours,
+    netSalary,
+  }
+}
+
+function buildNetSalary(params: {
+  baseSalary: number
+  seniorityPay: number
+  otherAdjustment: number
+  totalOvertimePay: number
+  deduction: number
+}) {
+  return params.baseSalary + params.seniorityPay + params.otherAdjustment + params.totalOvertimePay - params.deduction
+}
+
+function getMonthEndDate(month: string) {
+  const [year, monthNum] = month.split('-').map(Number)
+  return new Date(year, monthNum, 0, 23, 59, 59)
+}
+
+function normalizeSalaryRecord<T extends {
+  month: string
+  baseSalary: number
+  seniorityPay?: number | null
+  otherAdjustment?: number | null
+  totalOvertimePay: number
+  deduction: number
+  user?: {
+    startDate?: Date | null
+    salary?: number | null
+    position?: {
+      salary?: number | null
+    } | null
+  } | null
+}>(record: T) {
+  const expectedBaseSalary = record.user?.position?.salary ?? record.user?.salary ?? record.baseSalary
+  const expectedSeniorityPay = calculateSeniorityPay(record.user?.startDate, getMonthEndDate(record.month))
+  const currentSeniorityPay = record.seniorityPay ?? 0
+  let baseSalary = record.baseSalary
+  let seniorityPay = currentSeniorityPay
+
+  if (currentSeniorityPay === 0 && expectedSeniorityPay > 0) {
+    const combinedBaseSalary = expectedBaseSalary + expectedSeniorityPay
+
+    if (Math.abs(record.baseSalary - combinedBaseSalary) < 0.01) {
+      baseSalary = expectedBaseSalary
+      seniorityPay = expectedSeniorityPay
+    } else if (Math.abs(record.baseSalary - expectedBaseSalary) < 0.01) {
+      baseSalary = expectedBaseSalary
+      seniorityPay = expectedSeniorityPay
+    }
+  }
+
+  const otherAdjustment = record.otherAdjustment ?? 0
+  const netSalary = buildNetSalary({
+    baseSalary,
+    seniorityPay,
+    otherAdjustment,
+    totalOvertimePay: record.totalOvertimePay,
+    deduction: record.deduction,
+  })
+
+  return {
+    ...record,
+    baseSalary,
+    seniorityPay,
+    otherAdjustment,
+    netSalary,
   }
 }
 
@@ -79,12 +160,14 @@ export async function getSalaryRecords(filters?: {
           select: {
             name: true,
             email: true,
+            startDate: true,
+            salary: true,
             level: true,
             department: {
               select: { name: true },
             },
             position: {
-              select: { name: true },
+              select: { name: true, salary: true },
             },
           },
         },
@@ -92,12 +175,16 @@ export async function getSalaryRecords(filters?: {
       orderBy: [{ month: 'desc' }, { createdAt: 'desc' }],
     })
 
-    return records.map((record) => ({
-      ...record,
-      userName: record.user.name,
-      departmentName: record.user.department?.name,
-      positionName: record.user.position?.name,
-    }))
+    return records.map((record) => {
+      const normalizedRecord = normalizeSalaryRecord(record)
+
+      return {
+        ...normalizedRecord,
+        userName: record.user.name,
+        departmentName: record.user.department?.name,
+        positionName: record.user.position?.name,
+      }
+    })
   } catch (error) {
     console.error('获取薪资记录失败:', error)
     return []
@@ -115,12 +202,14 @@ export async function getSalaryRecord(id: string) {
           select: {
             name: true,
             email: true,
+            startDate: true,
+            salary: true,
             level: true,
             department: {
               select: { name: true },
             },
             position: {
-              select: { name: true },
+              select: { name: true, salary: true },
             },
           },
         },
@@ -140,13 +229,15 @@ export async function getSalaryRecord(id: string) {
       .filter((settlement) => settlement.settlementType === 'COMPENSATORY')
       .reduce((sum, settlement) => sum + settlement.hours, 0)
 
+    const normalizedRecord = normalizeSalaryRecord(record)
+
     return {
-      ...record,
+      ...normalizedRecord,
       userName: record.user.name,
       departmentName: record.user.department?.name,
       positionName: record.user.position?.name,
       ...buildSalaryRecordSummary(
-        record,
+        normalizedRecord,
         compensatorySettledHours > 0 ? compensatorySettledHours : undefined
       ),
     }
@@ -210,11 +301,15 @@ export async function generateSalaryRecords(formData: FormData) {
           return 'skipped' as const
         }
 
-        const baseSalary = user.position?.salary ?? user.salary ?? 0
-        if (!baseSalary) {
+        const baseMonthlySalary = user.position?.salary ?? user.salary ?? 0
+        if (!baseMonthlySalary) {
           console.log(`用户 ${user.name} 未设置薪资，已跳过`)
           return 'skipped' as const
         }
+
+        const seniorityPay = calculateSeniorityPay(user.startDate, endDate)
+        const baseSalary = baseMonthlySalary
+        const otherAdjustment = 0
 
         const overtimeApplications = await tx.overtimeApplication.findMany({
           where: {
@@ -239,7 +334,8 @@ export async function generateSalaryRecords(formData: FormData) {
           overtimeByType[overtimeApplication.type as keyof typeof overtimeByType] += overtimeApplication.hours
         }
 
-        const hourlyRate = calculateHourlyRate(baseSalary)
+        const salaryBase = baseSalary + seniorityPay
+        const hourlyRate = calculateHourlyRate(salaryBase)
         const overtimeData = [
           { type: 'HOLIDAY' as const, hours: overtimeByType.HOLIDAY },
           { type: 'WEEKEND' as const, hours: overtimeByType.WEEKEND },
@@ -261,16 +357,25 @@ export async function generateSalaryRecords(formData: FormData) {
           },
         })
 
-        const dailyRate = baseSalary / SALARY_CONSTANTS.WORKDAYS_PER_MONTH
+        const dailyRate = salaryBase / SALARY_CONSTANTS.WORKDAYS_PER_MONTH
         const personalLeaveDays = leaveApplications.reduce((sum, application) => sum + application.days, 0)
         const deduction = Math.round(personalLeaveDays * dailyRate * 100) / 100
-        const netSalary = baseSalary + allocation.totalPay - deduction
+        const netSalary = buildNetSalary({
+          baseSalary,
+          seniorityPay,
+          otherAdjustment,
+          totalOvertimePay: allocation.totalPay,
+          deduction,
+        })
 
         const salaryRecord = await tx.salaryRecord.create({
           data: {
             userId: user.id,
             month,
             baseSalary,
+            seniorityPay,
+            otherAdjustment,
+            adjustmentNote: null,
             workdayOvertimeHours: allocation.paidHours
               .filter((item) => item.type === 'WORKDAY')
               .reduce((sum, item) => sum + item.hours, 0),
@@ -407,6 +512,133 @@ export async function generateSalaryRecords(formData: FormData) {
       return { error: error.message }
     }
     return { error: '生成失败，请稍后重试' }
+  }
+}
+
+export async function applySalaryBatchAdjustment(formData: FormData) {
+  try {
+    await requireAdminUser()
+
+    const validatedData = salaryBatchAdjustmentSchema.parse({
+      month: formData.get('month'),
+      departmentId: formData.get('departmentId') || undefined,
+      amount: formData.get('amount'),
+      note: formData.get('note'),
+    })
+
+    const amount = Number(validatedData.amount)
+    const where: Prisma.SalaryRecordWhereInput = {
+      month: validatedData.month,
+      status: 'DRAFT',
+      ...(validatedData.departmentId
+        ? {
+            user: {
+              departmentId: validatedData.departmentId,
+            },
+          }
+        : {}),
+    }
+
+    const records = await prisma.salaryRecord.findMany({
+      where,
+      select: {
+        id: true,
+        baseSalary: true,
+        seniorityPay: true,
+        otherAdjustment: true,
+        totalOvertimePay: true,
+        deduction: true,
+      },
+    })
+
+    if (records.length === 0) {
+      return { error: '未找到可调整的草稿薪资记录，请先生成对应月份薪资' }
+    }
+
+    await prisma.$transaction(
+      records.map((record) =>
+        prisma.salaryRecord.update({
+          where: { id: record.id },
+          data: {
+            otherAdjustment: record.otherAdjustment + amount,
+            adjustmentNote: validatedData.note || null,
+            netSalary: buildNetSalary({
+              baseSalary: record.baseSalary,
+              seniorityPay: record.seniorityPay,
+              otherAdjustment: record.otherAdjustment + amount,
+              totalOvertimePay: record.totalOvertimePay,
+              deduction: record.deduction,
+            }),
+          },
+        })
+      )
+    )
+
+    revalidatePath('/dashboard/salary')
+    return { success: `已批量调整 ${records.length} 条薪资记录` }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '批量调整失败，请稍后重试' }
+  }
+}
+
+export async function updateSalaryAdjustment(formData: FormData) {
+  try {
+    await requireAdminUser()
+
+    const validatedData = salarySingleAdjustmentSchema.parse({
+      salaryId: formData.get('salaryId'),
+      amount: formData.get('amount'),
+      note: formData.get('note'),
+    })
+
+    const amount = Number(validatedData.amount)
+    const record = await prisma.salaryRecord.findUnique({
+      where: { id: validatedData.salaryId },
+      select: {
+        id: true,
+        status: true,
+        baseSalary: true,
+        seniorityPay: true,
+        otherAdjustment: true,
+        totalOvertimePay: true,
+        deduction: true,
+      },
+    })
+
+    if (!record) {
+      return { error: '薪资记录不存在' }
+    }
+
+    if (record.status !== 'DRAFT') {
+      return { error: '仅草稿状态的薪资记录可以调整' }
+    }
+
+    await prisma.salaryRecord.update({
+      where: { id: record.id },
+      data: {
+        otherAdjustment: amount,
+        adjustmentNote: validatedData.note || null,
+        netSalary: buildNetSalary({
+          baseSalary: record.baseSalary,
+          seniorityPay: record.seniorityPay,
+          otherAdjustment: amount,
+          totalOvertimePay: record.totalOvertimePay,
+          deduction: record.deduction,
+        }),
+      },
+    })
+
+    revalidatePath('/dashboard/salary')
+    revalidatePath(`/dashboard/salary/${record.id}`)
+    return { success: '薪资调整已更新' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '更新薪资调整失败，请稍后重试' }
   }
 }
 
@@ -560,24 +792,7 @@ export async function getSalaryExportData(filters?: {
     }
 
     const records = await getSalaryRecords(filters)
-
-    return records.map((record) => ({
-      员工编号: record.userId,
-      姓名: record.userName,
-      部门: record.departmentName || '',
-      岗位: record.positionName || '',
-      职级: record.user.level || '',
-      月份: record.month,
-      薪资: record.netSalary,
-      工作日加班工资: record.workdayOvertimePay,
-      工作日加班时长: record.workdayOvertimeHours,
-      周末加班工资: record.weekendOvertimePay,
-      周末加班时长: record.weekendOvertimeHours,
-      法定节假日加班工资: record.holidayOvertimePay,
-      加班时长:
-        record.workdayOvertimeHours + record.weekendOvertimeHours + record.holidayOvertimeHours,
-      调休时长: record.compensatoryHours,
-    }))
+    return buildSalaryExportRows(records)
   } catch (error) {
     console.error('导出薪资数据失败:', error)
     return []
@@ -589,17 +804,47 @@ export async function getSalaryStats(month?: string) {
     await requireAdminUser()
 
     const where: Prisma.SalaryRecordWhereInput = month ? { month } : {}
-    const stats = await prisma.salaryRecord.aggregate({
+    const records = await prisma.salaryRecord.findMany({
       where,
-      _count: true,
-      _sum: {
-        baseSalary: true,
-        totalOvertimePay: true,
-        deduction: true,
-        netSalary: true,
-        compensatoryHours: true,
+      include: {
+        user: {
+          select: {
+            startDate: true,
+            salary: true,
+            position: {
+              select: {
+                salary: true,
+              },
+            },
+          },
+        },
       },
     })
+
+    const normalizedRecords = records.map((record) => normalizeSalaryRecord(record))
+
+    const stats = normalizedRecords.reduce(
+      (summary, record) => ({
+        totalRecords: summary.totalRecords + 1,
+        totalBaseSalary: summary.totalBaseSalary + record.baseSalary,
+        totalSeniorityPay: summary.totalSeniorityPay + (record.seniorityPay ?? 0),
+        totalOtherAdjustment: summary.totalOtherAdjustment + (record.otherAdjustment ?? 0),
+        totalOvertimePay: summary.totalOvertimePay + record.totalOvertimePay,
+        totalDeduction: summary.totalDeduction + record.deduction,
+        totalNetSalary: summary.totalNetSalary + record.netSalary,
+        totalCompensatoryHours: summary.totalCompensatoryHours + record.compensatoryHours,
+      }),
+      {
+        totalRecords: 0,
+        totalBaseSalary: 0,
+        totalSeniorityPay: 0,
+        totalOtherAdjustment: 0,
+        totalOvertimePay: 0,
+        totalDeduction: 0,
+        totalNetSalary: 0,
+        totalCompensatoryHours: 0,
+      }
+    )
 
     const statusCounts = await prisma.salaryRecord.groupBy({
       by: ['status'],
@@ -608,12 +853,14 @@ export async function getSalaryStats(month?: string) {
     })
 
     return {
-      totalRecords: stats._count,
-      totalBaseSalary: stats._sum.baseSalary || 0,
-      totalOvertimePay: stats._sum.totalOvertimePay || 0,
-      totalDeduction: stats._sum.deduction || 0,
-      totalNetSalary: stats._sum.netSalary || 0,
-      totalCompensatoryHours: stats._sum.compensatoryHours || 0,
+      totalRecords: stats.totalRecords,
+      totalBaseSalary: stats.totalBaseSalary,
+      totalSeniorityPay: stats.totalSeniorityPay,
+      totalOtherAdjustment: stats.totalOtherAdjustment,
+      totalOvertimePay: stats.totalOvertimePay,
+      totalDeduction: stats.totalDeduction,
+      totalNetSalary: stats.totalNetSalary,
+      totalCompensatoryHours: stats.totalCompensatoryHours,
       statusBreakdown: statusCounts.map((item) => ({
         status: item.status,
         count: item._count,

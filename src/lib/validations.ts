@@ -70,6 +70,8 @@ export const userProfileSchema = z.object({
   idCard: optionalText,
   phone: optionalText,
   startDate: optionalText,
+  seniorityStartDate: optionalText,
+  seniorityEndDate: optionalText,
 })
 
 export const userJobAssignmentSchema = z.object({
@@ -97,6 +99,23 @@ export const salaryGenerateSchema = z.object({
 export const salaryStatusSchema = z.object({
   salaryId: z.string(),
   status: z.enum(['CONFIRMED', 'PAID']),
+})
+
+export const salaryBatchAdjustmentSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, '请选择有效的月份'),
+  departmentId: optionalText,
+  amount: z
+    .string()
+    .refine((value) => value.trim().length > 0 && !Number.isNaN(Number(value)), '请输入有效的调整金额'),
+  note: optionalText,
+})
+
+export const salarySingleAdjustmentSchema = z.object({
+  salaryId: z.string().min(1, '缺少薪资记录 ID'),
+  amount: z
+    .string()
+    .refine((value) => value.trim().length > 0 && !Number.isNaN(Number(value)), '请输入有效的调整金额'),
+  note: optionalText,
 })
 
 export const compensatoryUseSchema = z.object({

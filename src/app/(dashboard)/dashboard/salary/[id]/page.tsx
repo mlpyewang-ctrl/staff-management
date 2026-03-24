@@ -7,7 +7,14 @@ import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { getSalaryRecord, updateSalaryStatus, deleteSalaryRecord } from '@/server/actions/salary'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  deleteSalaryRecord,
+  getSalaryRecord,
+  updateSalaryAdjustment,
+  updateSalaryStatus,
+} from '@/server/actions/salary'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 
 interface SalaryRecordDetail {
@@ -15,6 +22,10 @@ interface SalaryRecordDetail {
   userId: string
   month: string
   baseSalary: number
+  seniorityPay: number
+  otherAdjustment: number
+  adjustmentNote?: string | null
+  salaryBase: number
   workdayOvertimeHours: number
   workdayOvertimePay: number
   weekendOvertimeHours: number
@@ -61,6 +72,11 @@ export default function SalaryDetailPage() {
 
   const [record, setRecord] = useState<SalaryRecordDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [savingAdjustment, setSavingAdjustment] = useState(false)
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    amount: '',
+    note: '',
+  })
 
   useEffect(() => {
     if (session?.user?.role !== 'ADMIN') {
@@ -70,7 +86,13 @@ export default function SalaryDetailPage() {
 
     const loadRecord = async () => {
       const data = await getSalaryRecord(salaryId)
-      setRecord(data)
+      setRecord(data as SalaryRecordDetail | null)
+      if (data) {
+        setAdjustmentForm({
+          amount: String((data as SalaryRecordDetail).otherAdjustment ?? 0),
+          note: (data as SalaryRecordDetail).adjustmentNote || '',
+        })
+      }
       setLoading(false)
     }
 
@@ -86,7 +108,7 @@ export default function SalaryDetailPage() {
     const result = await updateSalaryStatus(formData)
     if (result.success) {
       const data = await getSalaryRecord(salaryId)
-      setRecord(data)
+      setRecord(data as SalaryRecordDetail | null)
     } else {
       alert(result.error)
     }
@@ -100,6 +122,28 @@ export default function SalaryDetailPage() {
     } else {
       alert(result.error)
     }
+  }
+
+  const handleAdjustmentSave = async () => {
+    setSavingAdjustment(true)
+    const formData = new FormData()
+    formData.append('salaryId', salaryId)
+    formData.append('amount', adjustmentForm.amount)
+    if (adjustmentForm.note) {
+      formData.append('note', adjustmentForm.note)
+    }
+
+    const result = await updateSalaryAdjustment(formData)
+    setSavingAdjustment(false)
+
+    if (result.success) {
+      const data = await getSalaryRecord(salaryId)
+      setRecord(data as SalaryRecordDetail | null)
+      alert(result.success)
+      return
+    }
+
+    alert(result.error)
   }
 
   const getStatusBadge = (status: string) => {
@@ -120,7 +164,7 @@ export default function SalaryDetailPage() {
     return (
       <div className="p-6">
         <div className="text-center text-gray-500">薪资记录不存在</div>
-        <div className="text-center mt-4">
+        <div className="mt-4 text-center">
           <Link href="/dashboard/salary">
             <Button>返回列表</Button>
           </Link>
@@ -131,7 +175,7 @@ export default function SalaryDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/dashboard/salary">
             <Button variant="ghost">&larr; 返回</Button>
@@ -154,7 +198,6 @@ export default function SalaryDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* 员工信息 */}
         <Card>
           <CardHeader>
             <CardTitle>员工信息</CardTitle>
@@ -185,7 +228,6 @@ export default function SalaryDetailPage() {
           </CardContent>
         </Card>
 
-        {/* 薪资信息 */}
         <Card>
           <CardHeader>
             <CardTitle>薪资信息</CardTitle>
@@ -201,20 +243,24 @@ export default function SalaryDetailPage() {
                 <dd>{getStatusBadge(record.status)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">小时薪资</dt>
+                <dt className="text-gray-500">计薪基数</dt>
+                <dd>{formatCurrency(record.salaryBase)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">小时工资</dt>
                 <dd>{formatCurrency(record.hourlySalary)}/小时</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">转加班费时长</dt>
-                <dd>{record.paidOvertimeHours}小时</dd>
+                <dt className="text-gray-500">计薪加班时长</dt>
+                <dd>{record.paidOvertimeHours} 小时</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">计调休加班时长</dt>
-                <dd>{record.compensatoryOvertimeHours}小时</dd>
+                <dt className="text-gray-500">调休加班时长</dt>
+                <dd>{record.compensatoryOvertimeHours} 小时</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">总加班时长</dt>
-                <dd>{record.totalOvertimeHours}小时</dd>
+                <dd>{record.totalOvertimeHours} 小时</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">创建时间</dt>
@@ -230,7 +276,6 @@ export default function SalaryDetailPage() {
           </CardContent>
         </Card>
 
-        {/* 加班费明细 */}
         <Card>
           <CardHeader>
             <CardTitle>加班费明细</CardTitle>
@@ -239,21 +284,15 @@ export default function SalaryDetailPage() {
             <dl className="space-y-3">
               <div className="flex justify-between border-b pb-2">
                 <dt className="text-gray-500">工作日加班</dt>
-                <dd>
-                  {record.workdayOvertimeHours}小时 = {formatCurrency(record.workdayOvertimePay)}
-                </dd>
+                <dd>{record.workdayOvertimeHours} 小时 = {formatCurrency(record.workdayOvertimePay)}</dd>
               </div>
               <div className="flex justify-between border-b pb-2">
                 <dt className="text-gray-500">周末加班</dt>
-                <dd>
-                  {record.weekendOvertimeHours}小时 = {formatCurrency(record.weekendOvertimePay)}
-                </dd>
+                <dd>{record.weekendOvertimeHours} 小时 = {formatCurrency(record.weekendOvertimePay)}</dd>
               </div>
               <div className="flex justify-between border-b pb-2">
                 <dt className="text-gray-500">节假日加班</dt>
-                <dd>
-                  {record.holidayOvertimeHours}小时 = {formatCurrency(record.holidayOvertimePay)}
-                </dd>
+                <dd>{record.holidayOvertimeHours} 小时 = {formatCurrency(record.holidayOvertimePay)}</dd>
               </div>
               <div className="flex justify-between font-semibold">
                 <dt>加班费合计</dt>
@@ -263,7 +302,6 @@ export default function SalaryDetailPage() {
           </CardContent>
         </Card>
 
-        {/* 薪资汇总 */}
         <Card>
           <CardHeader>
             <CardTitle>薪资汇总</CardTitle>
@@ -272,8 +310,23 @@ export default function SalaryDetailPage() {
             <dl className="space-y-3">
               <div className="flex justify-between border-b pb-2">
                 <dt className="text-gray-500">基本工资</dt>
-                <dd className="text-lg">{formatCurrency(record.baseSalary)}</dd>
+                <dd>{formatCurrency(record.baseSalary)}</dd>
               </div>
+              <div className="flex justify-between border-b pb-2">
+                <dt className="text-gray-500">工龄工资</dt>
+                <dd className="text-green-600">+{formatCurrency(record.seniorityPay)}</dd>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <dt className="text-gray-500">其他调整</dt>
+                <dd className={record.otherAdjustment >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  {record.otherAdjustment >= 0 ? '+' : ''}{formatCurrency(record.otherAdjustment)}
+                </dd>
+              </div>
+              {record.adjustmentNote && (
+                <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                  调整说明：{record.adjustmentNote}
+                </div>
+              )}
               <div className="flex justify-between border-b pb-2">
                 <dt className="text-gray-500">加班费</dt>
                 <dd className="text-green-600">+{formatCurrency(record.totalOvertimePay)}</dd>
@@ -285,10 +338,10 @@ export default function SalaryDetailPage() {
               {record.compensatoryHours > 0 && (
                 <div className="flex justify-between border-b pb-2">
                   <dt className="text-gray-500">转调休</dt>
-                  <dd>{record.compensatoryHours}小时</dd>
+                  <dd>{record.compensatoryHours} 小时</dd>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-lg pt-2">
+              <div className="flex justify-between pt-2 text-lg font-bold">
                 <dt>应发工资</dt>
                 <dd className="text-blue-600">{formatCurrency(record.netSalary)}</dd>
               </div>
@@ -297,7 +350,40 @@ export default function SalaryDetailPage() {
         </Card>
       </div>
 
-      {/* 加班清算明细 */}
+      {record.status === 'DRAFT' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>手动微调</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-[220px_1fr_auto]">
+              <Input
+                type="number"
+                value={adjustmentForm.amount}
+                onChange={(event) =>
+                  setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))
+                }
+                placeholder="输入调整金额"
+              />
+              <Textarea
+                rows={2}
+                value={adjustmentForm.note}
+                onChange={(event) =>
+                  setAdjustmentForm((current) => ({ ...current, note: event.target.value }))
+                }
+                placeholder="输入调整说明"
+              />
+              <Button onClick={handleAdjustmentSave} disabled={savingAdjustment}>
+                {savingAdjustment ? '保存中...' : '保存调整'}
+              </Button>
+            </div>
+            <div className="text-sm text-gray-500">
+              支持正负数。正数表示补贴，负数表示扣减。
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {record.overtimeSettlements.length > 0 && (
         <Card>
           <CardHeader>
@@ -325,8 +411,8 @@ export default function SalaryDetailPage() {
                         ? '周末'
                         : '节假日'}
                     </td>
-                    <td className="px-4 py-2 text-sm">{settlement.overtime.hours}小时</td>
-                    <td className="px-4 py-2 text-sm">{settlement.hours}小时</td>
+                    <td className="px-4 py-2 text-sm">{settlement.overtime.hours} 小时</td>
+                    <td className="px-4 py-2 text-sm">{settlement.hours} 小时</td>
                     <td className="px-4 py-2 text-sm">
                       <Badge variant={settlement.settlementType === 'SALARY' ? 'success' : 'default'}>
                         {settlement.settlementType === 'SALARY' ? '计薪' : '转调休'}

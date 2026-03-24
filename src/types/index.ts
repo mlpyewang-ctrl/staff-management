@@ -95,6 +95,7 @@ export interface LeaveBalance {
   userId: string
   year: number
   annual: number
+  annualEntitlement: number
   sick: number
   personal: number
   compensatory?: number
@@ -155,6 +156,9 @@ export interface SalaryRecord {
   userId: string
   month: string
   baseSalary: number
+  seniorityPay: number
+  otherAdjustment: number
+  adjustmentNote?: string | null
   workdayOvertimeHours: number
   workdayOvertimePay: number
   weekendOvertimeHours: number

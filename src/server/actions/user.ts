@@ -3,10 +3,25 @@
 import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
+import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import { userJobAssignmentSchema, userProfileSchema } from '@/lib/validations'
 
 const editableRoles = ['EMPLOYEE', 'MANAGER'] as const
+
+function parseOptionalDate(value: string | undefined, label: string) {
+  if (!value) {
+    return null
+  }
+
+  const [year, month, day] = value.split('-').map(Number)
+  const parsedDate = new Date(year, (month || 1) - 1, day || 1)
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new Error(`${label}格式无效`)
+  }
+
+  return parsedDate
+}
 
 async function getSessionUser() {
   const session = await getServerSession(authOptions)
@@ -69,9 +84,17 @@ export async function updateUserProfile(userId: string, formData: FormData) {
       idCard: getString('idCard'),
       phone: getString('phone'),
       startDate: getString('startDate'),
+      seniorityStartDate: getString('seniorityStartDate'),
+      seniorityEndDate: getString('seniorityEndDate'),
     })
 
-    const startDate = validated.startDate ? new Date(validated.startDate) : null
+    const startDate = parseOptionalDate(validated.startDate, '入职日期')
+    const seniorityStartDate = parseOptionalDate(validated.seniorityStartDate, '工龄起始日期')
+    const seniorityEndDate = parseOptionalDate(validated.seniorityEndDate, '工龄截止日期')
+
+    if (seniorityStartDate && seniorityEndDate && seniorityEndDate < seniorityStartDate) {
+      return { error: '工龄截止日期不能早于工龄起始日期' }
+    }
 
     const user = await prisma.user.update({
       where: { id: userId },
@@ -80,6 +103,8 @@ export async function updateUserProfile(userId: string, formData: FormData) {
         idCard: validated.idCard || null,
         phone: validated.phone || null,
         startDate,
+        seniorityStartDate,
+        seniorityEndDate,
       },
       include: {
         department: true,
@@ -87,7 +112,10 @@ export async function updateUserProfile(userId: string, formData: FormData) {
       },
     })
 
+    await ensureLeaveBalance(userId)
+
     revalidatePath('/dashboard/profile')
+    revalidatePath('/dashboard/leave')
 
     return { success: '个人信息已更新', user }
   } catch (error) {
