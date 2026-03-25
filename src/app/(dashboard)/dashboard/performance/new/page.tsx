@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createPerformanceReview } from '@/server/actions/performance'
 
+type CreatePerformanceReviewResult = Awaited<ReturnType<typeof createPerformanceReview>>
+
 export default function PerformanceNewPage() {
   const router = useRouter()
   const { data: session } = useSession()
@@ -40,12 +42,12 @@ export default function PerformanceNewPage() {
     formData.set('teamwork', scores.teamwork.toString())
     formData.set('action', submitIntentRef.current)
 
-    const result = await createPerformanceReview(formData)
+    const result: CreatePerformanceReviewResult = await createPerformanceReview(formData)
     if (result.error) setMessage({ type: 'error', text: result.error })
     if (result.success) {
       setMessage({ type: 'success', text: result.success })
-      if (submitIntentRef.current === 'save' && (result as any).id) {
-        router.push(`/dashboard/performance/${(result as any).id}`)
+      if (submitIntentRef.current === 'save' && 'id' in result && result.id) {
+        router.push(`/dashboard/performance/${result.id}`)
       } else {
         router.push('/dashboard/performance')
       }

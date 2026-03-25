@@ -18,6 +18,8 @@ import {
 } from '@/server/actions/leave'
 import { getLeaveSessionLabel } from '@/lib/utils'
 
+type LeaveApplicationDetail = Awaited<ReturnType<typeof getLeaveApplication>>
+
 export default function LeaveEditPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
@@ -26,7 +28,7 @@ export default function LeaveEditPage() {
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
-  const [initial, setInitial] = useState<any | null>(null)
+  const [initial, setInitial] = useState<LeaveApplicationDetail>(null)
   const [leaveType, setLeaveType] = useState('ANNUAL')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -41,7 +43,7 @@ export default function LeaveEditPage() {
 
   useEffect(() => {
     const load = async () => {
-      const app = (await getLeaveApplication(id)) as any
+      const app = await getLeaveApplication(id)
       setInitial(app)
 
       if (app?.type) {

@@ -255,8 +255,7 @@ export function canGenerateSalary(month: string): { canGenerate: boolean; messag
   const currentDay = now.getDate()
   
   // 解析目标月份
-  const [year, monthNum] = month.split('-').map(Number)
-  const targetMonth = new Date(year, monthNum - 1, 1)
+  const [_year, _monthNum] = month.split('-').map(Number)
   
   // 上个月份
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)

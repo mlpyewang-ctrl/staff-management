@@ -12,6 +12,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { createLeaveApplication, getLeaveDurationPreview } from '@/server/actions/leave'
 import { getLeaveSessionLabel } from '@/lib/utils'
 
+type CreateLeaveApplicationResult = Awaited<ReturnType<typeof createLeaveApplication>>
+
 export default function LeaveNewPage() {
   const router = useRouter()
   const { data: session } = useSession()
@@ -50,15 +52,15 @@ export default function LeaveNewPage() {
     formData.set('startSession', startSession)
     formData.set('endSession', endSession)
 
-    const result = await createLeaveApplication(formData)
+    const result: CreateLeaveApplicationResult = await createLeaveApplication(formData)
     if (result.error) {
       setMessage({ type: 'error', text: result.error })
     }
 
     if (result.success) {
       setMessage({ type: 'success', text: result.success })
-      if (action === 'save' && (result as any).id) {
-        router.push(`/dashboard/leave/${(result as any).id}`)
+      if (action === 'save' && 'id' in result && result.id) {
+        router.push(`/dashboard/leave/${result.id}`)
       } else {
         router.push('/dashboard/leave')
       }

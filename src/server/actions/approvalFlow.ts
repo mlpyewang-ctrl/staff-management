@@ -43,7 +43,7 @@ export async function saveApprovalFlow(formData: FormData) {
     }
 
     // 简单校验 JSON 配置
-    let parsedConfig: any = {}
+    let parsedConfig: unknown = {}
     if (configStr) {
       try {
         parsedConfig = JSON.parse(configStr)

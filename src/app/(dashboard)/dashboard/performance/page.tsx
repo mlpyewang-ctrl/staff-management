@@ -25,9 +25,11 @@ import { TimeRange, isWithinTimeRange, timeRangeOptions } from '@/lib/time-range
 import { formatDateTime } from '@/lib/utils'
 import { getPerformanceReviews } from '@/server/actions/performance'
 
+type PerformanceReviewItem = Awaited<ReturnType<typeof getPerformanceReviews>>[number]
+
 export default function PerformancePage() {
   const { data: session } = useSession()
-  const [reviews, setReviews] = useState<any[]>([])
+  const [reviews, setReviews] = useState<PerformanceReviewItem[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')

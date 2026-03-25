@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createOvertimeApplication } from '@/server/actions/overtime'
 
+type CreateOvertimeApplicationResult = Awaited<ReturnType<typeof createOvertimeApplication>>
+
 export default function OvertimeNewPage() {
   const router = useRouter()
   const { data: session } = useSession()
@@ -26,12 +28,12 @@ export default function OvertimeNewPage() {
     formData.set('userId', session?.user?.id || '')
     formData.set('action', submitIntentRef.current)
 
-    const result = await createOvertimeApplication(formData)
+    const result: CreateOvertimeApplicationResult = await createOvertimeApplication(formData)
     if (result.error) setMessage({ type: 'error', text: result.error })
     if (result.success) {
       setMessage({ type: 'success', text: result.success })
-      if (submitIntentRef.current === 'save' && (result as any).id) {
-        router.push(`/dashboard/overtime/${(result as any).id}`)
+      if (submitIntentRef.current === 'save' && 'id' in result && result.id) {
+        router.push(`/dashboard/overtime/${result.id}`)
       } else {
         router.push('/dashboard/overtime')
       }

@@ -9,10 +9,12 @@ import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { getPositions, createPosition, updatePosition, deletePosition } from '@/server/actions/position'
 
+type PositionItem = Awaited<ReturnType<typeof getPositions>>[number]
+
 export default function PositionsDashboardPage() {
   const { data: session } = useSession()
-  const [positions, setPositions] = useState<any[]>([])
-  const [editingPosition, setEditingPosition] = useState<any | null>(null)
+  const [positions, setPositions] = useState<PositionItem[]>([])
+  const [editingPosition, setEditingPosition] = useState<PositionItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
 

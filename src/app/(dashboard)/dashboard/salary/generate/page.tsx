@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button'
 import { getDepartments } from '@/server/actions/department'
 import { generateSalaryRecords, getAvailableMonths } from '@/server/actions/salary'
 
+type DepartmentItem = Awaited<ReturnType<typeof getDepartments>>[number]
+
 export default function GenerateSalaryPage() {
   const { data: session } = useSession()
   const router = useRouter()
-  const [departments, setDepartments] = useState<any[]>([])
+  const [departments, setDepartments] = useState<DepartmentItem[]>([])
   const [availableMonths, setAvailableMonths] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({

@@ -9,10 +9,12 @@ import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { getDepartments, createDepartment, updateDepartment } from '@/server/actions/department'
 
+type DepartmentItem = Awaited<ReturnType<typeof getDepartments>>[number]
+
 export default function DepartmentsDashboardPage() {
   const { data: session } = useSession()
-  const [departments, setDepartments] = useState<any[]>([])
-  const [editingDept, setEditingDept] = useState<any | null>(null)
+  const [departments, setDepartments] = useState<DepartmentItem[]>([])
+  const [editingDept, setEditingDept] = useState<DepartmentItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | '' ; text: string }>({ type: '', text: '' })
 

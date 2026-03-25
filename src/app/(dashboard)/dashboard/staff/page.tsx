@@ -106,7 +106,7 @@ export default function StaffDashboardPage() {
       }
 
       try {
-        await loadData(selectedUserId)
+        await loadData()
       } catch (error) {
         const text = error instanceof Error ? error.message : '加载人员信息失败'
         setMessage({ type: 'error', text })

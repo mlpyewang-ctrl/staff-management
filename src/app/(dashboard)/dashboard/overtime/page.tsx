@@ -24,6 +24,8 @@ import {
 import { TimeRange, isWithinTimeRange, timeRangeOptions } from '@/lib/time-range'
 import { getOvertimeApplications } from '@/server/actions/overtime'
 
+type OvertimeApplicationItem = Awaited<ReturnType<typeof getOvertimeApplications>>[number]
+
 const statusMap: Record<string, string> = {
   DRAFT: '草稿',
   PENDING: '待审批',
@@ -42,7 +44,7 @@ const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger'
 
 export default function OvertimePage() {
   const { data: session } = useSession()
-  const [applications, setApplications] = useState<any[]>([])
+  const [applications, setApplications] = useState<OvertimeApplicationItem[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')

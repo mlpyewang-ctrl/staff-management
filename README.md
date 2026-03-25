@@ -85,6 +85,7 @@ npm run dev
 | `npm run dev` | 启动开发环境 |
 | `npm run build` | 构建生产版本 |
 | `npm run start` | 启动生产服务 |
+| `npm run lint` | 运行 ESLint 检查 |
 | `npm run test` | 运行测试 |
 | `npm run db:push` | 同步 Prisma Schema 到数据库 |
 | `npm run db:seed` | 初始化示例数据 |

@@ -13,12 +13,14 @@ import { getOvertimeStats } from '@/server/actions/overtime'
 import { getLeaveStats } from '@/server/actions/leave'
 import { getDepartments } from '@/server/actions/department'
 
+type DepartmentItem = Awaited<ReturnType<typeof getDepartments>>[number]
+
 export default function DashboardPage() {
   const { data: session } = useSession()
   const [overtimeHours, setOvertimeHours] = useState(0)
   const [leaveDays, setLeaveDays] = useState(0)
   const [statsMonthLabel, setStatsMonthLabel] = useState('本月')
-  const [departments, setDepartments] = useState<any[]>([])
+  const [departments, setDepartments] = useState<DepartmentItem[]>([])
   const [selectedDepartment, setSelectedDepartment] = useState('')
   const [loading, setLoading] = useState(true)
 

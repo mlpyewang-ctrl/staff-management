@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { getHolidaysByMonth } from '@/server/actions/holiday'
-import { formatDate } from '@/lib/utils'
 
 interface Holiday {
   id: string

@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { deletePerformanceReview, getPerformanceReview, updatePerformanceReview } from '@/server/actions/performance'
 
+type PerformanceReviewDetail = Awaited<ReturnType<typeof getPerformanceReview>>
+
 export default function PerformanceEditPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
@@ -18,7 +20,7 @@ export default function PerformanceEditPage() {
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
-  const [initial, setInitial] = useState<any | null>(null)
+  const [initial, setInitial] = useState<PerformanceReviewDetail>(null)
   const submitIntentRef = useRef<'save' | 'submit'>('save')
 
   const [scores, setScores] = useState({

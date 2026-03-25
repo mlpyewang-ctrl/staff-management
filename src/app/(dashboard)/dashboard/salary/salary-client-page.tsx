@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
@@ -91,7 +91,7 @@ export function SalaryClientPage({
     setMonths(initialMonths)
   }, [initialMonths])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     const [recordsData, statsData, departmentOptions, monthOptions] = await Promise.all([
       getSalaryRecords(filters),
@@ -105,7 +105,7 @@ export function SalaryClientPage({
     setDepartments(departmentOptions)
     setMonths(monthOptions)
     setLoading(false)
-  }
+  }, [filters])
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -114,7 +114,7 @@ export function SalaryClientPage({
     }
 
     void loadData()
-  }, [filters])
+  }, [loadData])
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { variant: 'default' | 'success' | 'warning' | 'danger'; text: string }> = {

@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { deleteOvertimeApplication, getOvertimeApplication, updateOvertimeApplication } from '@/server/actions/overtime'
 
+type OvertimeApplicationDetail = Awaited<ReturnType<typeof getOvertimeApplication>>
+
 export default function OvertimeEditPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
@@ -18,7 +20,7 @@ export default function OvertimeEditPage() {
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
-  const [initial, setInitial] = useState<any | null>(null)
+  const [initial, setInitial] = useState<OvertimeApplicationDetail>(null)
   const submitIntentRef = useRef<'save' | 'submit'>('save')
 
   useEffect(() => {

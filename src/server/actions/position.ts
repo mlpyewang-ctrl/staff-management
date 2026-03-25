@@ -64,8 +64,8 @@ export async function createPosition(formData: FormData) {
     })
 
     return { success: '岗位已创建', position }
-  } catch (error: any) {
-    if (error.code === 'P2002') {
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
       return { error: '岗位名称已存在' }
     }
     if (error instanceof Error) {
@@ -102,8 +102,8 @@ export async function updatePosition(id: string, formData: FormData) {
     })
 
     return { success: '岗位已更新', position }
-  } catch (error: any) {
-    if (error.code === 'P2002') {
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
       return { error: '岗位名称已存在' }
     }
     if (error instanceof Error) {
