@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
 const adminOnlyPaths = [
@@ -9,7 +9,7 @@ const adminOnlyPaths = [
   '/dashboard/staff',
 ]
 
-export async function middleware(req: any) {
+export async function middleware(req: NextRequest) {
   const { nextUrl } = req
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
 
@@ -30,7 +30,7 @@ export async function middleware(req: any) {
   }
 
   if (isDashboardPage && token) {
-    const role = (token as any).role as string
+    const role = typeof token.role === 'string' ? token.role : ''
 
     if (nextUrl.pathname.startsWith('/dashboard/approvals') && !['ADMIN', 'MANAGER'].includes(role)) {
       return NextResponse.redirect(new URL('/dashboard', nextUrl))

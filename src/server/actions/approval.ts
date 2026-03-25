@@ -1,5 +1,6 @@
 'use server'
 
+import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
 import {
@@ -79,6 +80,10 @@ function normalizeApprovalStatuses(
     .map((approval) => ({
       status: approval.status as 'APPROVED' | 'REJECTED',
     }))
+}
+
+function isDefined<T>(value: T | null): value is T {
+  return value !== null
 }
 
 export async function approveApplication(formData: FormData) {
@@ -421,9 +426,41 @@ export async function getPendingApprovals(_approverId?: string) {
       return { overtime: [], leave: [] }
     }
 
-    const [overtimeApplications, leaveApplications, flows, approvalHistory] = await Promise.all([
+    const overtimeWhere: Prisma.OvertimeApplicationWhereInput =
+      approver.role === 'MANAGER' && approver.departmentId
+        ? {
+            status: 'PENDING',
+            user: {
+              departmentId: approver.departmentId,
+            },
+          }
+        : {
+            status: 'PENDING',
+          }
+    const leaveWhere: Prisma.LeaveApplicationWhereInput =
+      approver.role === 'MANAGER' && approver.departmentId
+        ? {
+            status: 'PENDING',
+            user: {
+              departmentId: approver.departmentId,
+            },
+          }
+        : {
+            status: 'PENDING',
+          }
+    const flowWhere: Prisma.ApprovalFlowWhereInput =
+      approver.role === 'MANAGER' && approver.departmentId
+        ? {
+            isActive: true,
+            departmentId: approver.departmentId,
+          }
+        : {
+            isActive: true,
+          }
+
+    const [overtimeApplications, leaveApplications, flows] = await Promise.all([
       prisma.overtimeApplication.findMany({
-        where: { status: 'PENDING' },
+        where: overtimeWhere,
         include: {
           user: {
             select: {
@@ -441,7 +478,7 @@ export async function getPendingApprovals(_approverId?: string) {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.leaveApplication.findMany({
-        where: { status: 'PENDING' },
+        where: leaveWhere,
         include: {
           user: {
             select: {
@@ -459,19 +496,45 @@ export async function getPendingApprovals(_approverId?: string) {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.approvalFlow.findMany({
-        where: {
-          isActive: true,
-        },
+        where: flowWhere,
         orderBy: {
           updatedAt: 'desc',
         },
       }),
-      prisma.approval.findMany({
-        orderBy: {
-          createdAt: 'asc',
-        },
-      }),
     ])
+
+    const approvalHistoryConditions: Prisma.ApprovalWhereInput[] = []
+    const overtimeIds = overtimeApplications.map((application) => application.id)
+    const leaveIds = leaveApplications.map((application) => application.id)
+
+    if (overtimeIds.length > 0) {
+      approvalHistoryConditions.push({
+        applicationType: 'OVERTIME',
+        applicationId: {
+          in: overtimeIds,
+        },
+      })
+    }
+
+    if (leaveIds.length > 0) {
+      approvalHistoryConditions.push({
+        applicationType: 'LEAVE',
+        applicationId: {
+          in: leaveIds,
+        },
+      })
+    }
+
+    const approvalHistory = approvalHistoryConditions.length
+      ? await prisma.approval.findMany({
+          where: {
+            OR: approvalHistoryConditions,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        })
+      : []
 
     const flowStepMap = new Map<string, ApprovalFlowStep[]>()
     for (const flow of flows) {
@@ -527,7 +590,7 @@ export async function getPendingApprovals(_approverId?: string) {
           approvalProgress: buildProgressText(workflow.completedSteps, workflow.totalSteps),
         }
       })
-      .filter(Boolean)
+      .filter(isDefined)
 
     const leave = leaveApplications
       .map((application) => {
@@ -564,7 +627,7 @@ export async function getPendingApprovals(_approverId?: string) {
           approvalProgress: buildProgressText(workflow.completedSteps, workflow.totalSteps),
         }
       })
-      .filter(Boolean)
+      .filter(isDefined)
 
     return {
       overtime,
