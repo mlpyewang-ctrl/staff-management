@@ -6,7 +6,13 @@ import { useSession } from 'next-auth/react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Select } from '@/components/ui/select'
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+  getPaginationState,
+} from '@/lib/pagination'
 import {
   Table,
   TableBody,
@@ -22,6 +28,8 @@ import { getPerformanceReviews } from '@/server/actions/performance'
 export default function PerformancePage() {
   const { data: session } = useSession()
   const [reviews, setReviews] = useState<any[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
 
   const canCreate = !!session?.user?.id
@@ -43,6 +51,24 @@ export default function PerformancePage() {
     () => reviews.filter((review) => isWithinTimeRange(review.createdAt, timeRange)),
     [reviews, timeRange]
   )
+  const pagination = useMemo(
+    () => getPaginationState(filteredReviews.length, currentPage, pageSize),
+    [currentPage, filteredReviews.length, pageSize]
+  )
+  const paginatedReviews = useMemo(
+    () => filteredReviews.slice(pagination.startIndex, pagination.endIndex),
+    [filteredReviews, pagination.endIndex, pagination.startIndex]
+  )
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [timeRange, pageSize])
+
+  useEffect(() => {
+    if (pagination.currentPage !== currentPage) {
+      setCurrentPage(pagination.currentPage)
+    }
+  }, [currentPage, pagination.currentPage])
 
   const emptyColSpan = 10 + (showEmployeeColumn ? 1 : 0) + (canEdit ? 1 : 0)
 
@@ -104,7 +130,7 @@ export default function PerformancePage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredReviews.map((review) => (
+                paginatedReviews.map((review) => (
                   <TableRow key={review.id}>
                     <TableCell>{review.period}</TableCell>
                     {showEmployeeColumn && <TableCell>{review.userName}</TableCell>}
@@ -137,6 +163,18 @@ export default function PerformancePage() {
               )}
             </TableBody>
           </Table>
+        </CardContent>
+        <CardContent className="pt-0">
+          <PaginationControls
+            currentPage={pagination.currentPage}
+            itemLabel="条记录"
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            totalItems={filteredReviews.length}
+            totalPages={pagination.totalPages}
+          />
         </CardContent>
       </Card>
     </div>

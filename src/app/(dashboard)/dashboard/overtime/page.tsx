@@ -6,7 +6,13 @@ import { useSession } from 'next-auth/react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Select } from '@/components/ui/select'
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+  getPaginationState,
+} from '@/lib/pagination'
 import {
   Table,
   TableBody,
@@ -37,6 +43,8 @@ const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger'
 export default function OvertimePage() {
   const { data: session } = useSession()
   const [applications, setApplications] = useState<any[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
 
   const canCreate = !!session?.user?.id
@@ -58,6 +66,24 @@ export default function OvertimePage() {
     () => applications.filter((application) => isWithinTimeRange(application.date, timeRange)),
     [applications, timeRange]
   )
+  const pagination = useMemo(
+    () => getPaginationState(filteredApplications.length, currentPage, pageSize),
+    [currentPage, filteredApplications.length, pageSize]
+  )
+  const paginatedApplications = useMemo(
+    () => filteredApplications.slice(pagination.startIndex, pagination.endIndex),
+    [filteredApplications, pagination.endIndex, pagination.startIndex]
+  )
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [timeRange, pageSize])
+
+  useEffect(() => {
+    if (pagination.currentPage !== currentPage) {
+      setCurrentPage(pagination.currentPage)
+    }
+  }, [currentPage, pagination.currentPage])
 
   const emptyColSpan = 7 + (showApplicant ? 1 : 0) + (showActions ? 1 : 0)
 
@@ -116,7 +142,7 @@ export default function OvertimePage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredApplications.map((application) => (
+                paginatedApplications.map((application) => (
                   <TableRow key={application.id}>
                     <TableCell>{new Date(application.date).toLocaleDateString('zh-CN')}</TableCell>
                     {showApplicant && <TableCell>{application.userName}</TableCell>}
@@ -156,6 +182,18 @@ export default function OvertimePage() {
               )}
             </TableBody>
           </Table>
+        </CardContent>
+        <CardContent className="pt-0">
+          <PaginationControls
+            currentPage={pagination.currentPage}
+            itemLabel="条记录"
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            totalItems={filteredApplications.length}
+            totalPages={pagination.totalPages}
+          />
         </CardContent>
       </Card>
     </div>

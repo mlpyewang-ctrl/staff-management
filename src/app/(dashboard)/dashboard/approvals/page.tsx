@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Select } from '@/components/ui/select'
 import {
   Table,
@@ -15,6 +16,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+  getPaginationState,
+} from '@/lib/pagination'
 import { TimeRange, isWithinTimeRange, timeRangeOptions } from '@/lib/time-range'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import {
@@ -35,6 +41,12 @@ export default function ApprovalsPage() {
   const [remark, setRemark] = useState('')
   const [selectedApp, setSelectedApp] = useState<any>(null)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
+  const [overtimePage, setOvertimePage] = useState(1)
+  const [leavePage, setLeavePage] = useState(1)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [overtimePageSize, setOvertimePageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [leavePageSize, setLeavePageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [historyPageSize, setHistoryPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   useEffect(() => {
     const fetchPendingApprovals = async () => {
@@ -65,6 +77,54 @@ export default function ApprovalsPage() {
     () => history.filter((item) => isWithinTimeRange(item.createdAt, timeRange)),
     [history, timeRange]
   )
+  const overtimePagination = useMemo(
+    () => getPaginationState(filteredPendingOvertime.length, overtimePage, overtimePageSize),
+    [filteredPendingOvertime.length, overtimePage, overtimePageSize]
+  )
+  const leavePagination = useMemo(
+    () => getPaginationState(filteredPendingLeave.length, leavePage, leavePageSize),
+    [filteredPendingLeave.length, leavePage, leavePageSize]
+  )
+  const historyPagination = useMemo(
+    () => getPaginationState(filteredHistory.length, historyPage, historyPageSize),
+    [filteredHistory.length, historyPage, historyPageSize]
+  )
+  const paginatedPendingOvertime = useMemo(
+    () => filteredPendingOvertime.slice(overtimePagination.startIndex, overtimePagination.endIndex),
+    [filteredPendingOvertime, overtimePagination.endIndex, overtimePagination.startIndex]
+  )
+  const paginatedPendingLeave = useMemo(
+    () => filteredPendingLeave.slice(leavePagination.startIndex, leavePagination.endIndex),
+    [filteredPendingLeave, leavePagination.endIndex, leavePagination.startIndex]
+  )
+  const paginatedHistory = useMemo(
+    () => filteredHistory.slice(historyPagination.startIndex, historyPagination.endIndex),
+    [filteredHistory, historyPagination.endIndex, historyPagination.startIndex]
+  )
+
+  useEffect(() => {
+    setOvertimePage(1)
+    setLeavePage(1)
+    setHistoryPage(1)
+  }, [timeRange, overtimePageSize, leavePageSize, historyPageSize])
+
+  useEffect(() => {
+    if (overtimePagination.currentPage !== overtimePage) {
+      setOvertimePage(overtimePagination.currentPage)
+    }
+  }, [overtimePage, overtimePagination.currentPage])
+
+  useEffect(() => {
+    if (leavePagination.currentPage !== leavePage) {
+      setLeavePage(leavePagination.currentPage)
+    }
+  }, [leavePage, leavePagination.currentPage])
+
+  useEffect(() => {
+    if (historyPagination.currentPage !== historyPage) {
+      setHistoryPage(historyPagination.currentPage)
+    }
+  }, [historyPage, historyPagination.currentPage])
 
   const refreshApprovals = async () => {
     const [pendingData, historyData] = await Promise.all([
@@ -221,7 +281,7 @@ export default function ApprovalsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredPendingOvertime.map((application) => (
+                {paginatedPendingOvertime.map((application) => (
                   <PendingApprovalCard
                     key={application.id}
                     title={application.userName}
@@ -239,6 +299,17 @@ export default function ApprovalsPage() {
                 ))}
               </div>
             )}
+            <PaginationControls
+              className="mt-4"
+              currentPage={overtimePagination.currentPage}
+              itemLabel="条待审批记录"
+              onPageChange={setOvertimePage}
+              onPageSizeChange={setOvertimePageSize}
+              pageSize={overtimePageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              totalItems={filteredPendingOvertime.length}
+              totalPages={overtimePagination.totalPages}
+            />
           </CardContent>
         </Card>
 
@@ -253,7 +324,7 @@ export default function ApprovalsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredPendingLeave.map((application) => (
+                {paginatedPendingLeave.map((application) => (
                   <PendingApprovalCard
                     key={application.id}
                     title={application.userName}
@@ -271,6 +342,17 @@ export default function ApprovalsPage() {
                 ))}
               </div>
             )}
+            <PaginationControls
+              className="mt-4"
+              currentPage={leavePagination.currentPage}
+              itemLabel="条待审批记录"
+              onPageChange={setLeavePage}
+              onPageSizeChange={setLeavePageSize}
+              pageSize={leavePageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              totalItems={filteredPendingLeave.length}
+              totalPages={leavePagination.totalPages}
+            />
           </CardContent>
         </Card>
       </div>
@@ -298,7 +380,7 @@ export default function ApprovalsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredHistory.map((item) => (
+                paginatedHistory.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>{item.applicationTypeText}</TableCell>
                     <TableCell>{item.applicantName}</TableCell>
@@ -312,6 +394,18 @@ export default function ApprovalsPage() {
               )}
             </TableBody>
           </Table>
+        </CardContent>
+        <CardContent className="pt-0">
+          <PaginationControls
+            currentPage={historyPagination.currentPage}
+            itemLabel="条审批记录"
+            onPageChange={setHistoryPage}
+            onPageSizeChange={setHistoryPageSize}
+            pageSize={historyPageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            totalItems={filteredHistory.length}
+            totalPages={historyPagination.totalPages}
+          />
         </CardContent>
       </Card>
     </div>

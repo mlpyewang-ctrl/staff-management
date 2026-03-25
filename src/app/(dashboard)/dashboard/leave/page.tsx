@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, getPaginationState } from '@/lib/pagination'
 import { getCompensatorySourceHistory } from '@/server/actions/compensatory'
 import { getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
 import { formatDate, formatDateTime } from '@/lib/utils'
@@ -44,6 +46,10 @@ export default function LeavePage() {
   const [applications, setApplications] = useState<any[]>([])
   const [balances, setBalances] = useState<any>(null)
   const [sourceHistory, setSourceHistory] = useState<any[]>([])
+  const [applicationPage, setApplicationPage] = useState(1)
+  const [applicationPageSize, setApplicationPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [sourcePage, setSourcePage] = useState(1)
+  const [sourcePageSize, setSourcePageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const canCreate = !!session?.user?.id
   const canEdit = session?.user?.role === 'EMPLOYEE'
@@ -72,6 +78,43 @@ export default function LeavePage() {
       fetchBalances()
     }
   }, [session])
+
+  const sourcePagination = useMemo(
+    () => getPaginationState(sourceHistory.length, sourcePage, sourcePageSize),
+    [sourceHistory.length, sourcePage, sourcePageSize]
+  )
+  const applicationPagination = useMemo(
+    () => getPaginationState(applications.length, applicationPage, applicationPageSize),
+    [applicationPage, applicationPageSize, applications.length]
+  )
+  const paginatedSourceHistory = useMemo(
+    () => sourceHistory.slice(sourcePagination.startIndex, sourcePagination.endIndex),
+    [sourceHistory, sourcePagination.endIndex, sourcePagination.startIndex]
+  )
+  const paginatedApplications = useMemo(
+    () => applications.slice(applicationPagination.startIndex, applicationPagination.endIndex),
+    [applicationPagination.endIndex, applicationPagination.startIndex, applications]
+  )
+
+  useEffect(() => {
+    setSourcePage(1)
+  }, [sourcePageSize])
+
+  useEffect(() => {
+    setApplicationPage(1)
+  }, [applicationPageSize])
+
+  useEffect(() => {
+    if (sourcePagination.currentPage !== sourcePage) {
+      setSourcePage(sourcePagination.currentPage)
+    }
+  }, [sourcePage, sourcePagination.currentPage])
+
+  useEffect(() => {
+    if (applicationPagination.currentPage !== applicationPage) {
+      setApplicationPage(applicationPagination.currentPage)
+    }
+  }, [applicationPage, applicationPagination.currentPage])
 
   return (
     <div className="space-y-6">
@@ -140,7 +183,7 @@ export default function LeavePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sourceHistory.map((item) => (
+                  {paginatedSourceHistory.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{formatDate(new Date(item.date))}</TableCell>
                       <TableCell>
@@ -158,6 +201,18 @@ export default function LeavePage() {
                 </TableBody>
               </Table>
             )}
+          </CardContent>
+          <CardContent className="pt-0">
+            <PaginationControls
+              currentPage={sourcePagination.currentPage}
+              itemLabel="条来源记录"
+              onPageChange={setSourcePage}
+              onPageSizeChange={setSourcePageSize}
+              pageSize={sourcePageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              totalItems={sourceHistory.length}
+              totalPages={sourcePagination.totalPages}
+            />
           </CardContent>
         </Card>
       )}
@@ -192,7 +247,7 @@ export default function LeavePage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                applications.map((app) => (
+                paginatedApplications.map((app) => (
                   <TableRow key={app.id}>
                     <TableCell>{app.leaveTypeText}</TableCell>
                     {session?.user?.role !== 'EMPLOYEE' && <TableCell>{app.userName}</TableCell>}
@@ -228,6 +283,18 @@ export default function LeavePage() {
               )}
             </TableBody>
           </Table>
+        </CardContent>
+        <CardContent className="pt-0">
+          <PaginationControls
+            currentPage={applicationPagination.currentPage}
+            itemLabel="条申请记录"
+            onPageChange={setApplicationPage}
+            onPageSizeChange={setApplicationPageSize}
+            pageSize={applicationPageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            totalItems={applications.length}
+            totalPages={applicationPagination.totalPages}
+          />
         </CardContent>
       </Card>
     </div>
