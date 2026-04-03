@@ -15,6 +15,10 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
+vi.mock('@/lib/leave-balance', () => ({
+  ensureLeaveBalance: vi.fn().mockResolvedValue(null),
+}))
+
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(),
 }))
@@ -46,7 +50,7 @@ describe('updateUserJobAssignment', () => {
     })
   })
 
-  it('should allow admin to promote a user to manager', async () => {
+  it('should allow admin to promote a user to manager and update dates', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
       id: 'user-1',
       role: 'EMPLOYEE',
@@ -62,6 +66,9 @@ describe('updateUserJobAssignment', () => {
       level: 'P6',
       departmentId: 'dept-1',
       positionId: 'pos-1',
+      startDate: new Date('2024-01-15'),
+      seniorityStartDate: new Date('2024-01-15'),
+      seniorityEndDate: new Date('2026-12-31'),
       department: { id: 'dept-1', name: '研发部' },
       position: { id: 'pos-1', name: '工程师', level: 'P6', salary: 10000 },
     } as never)
@@ -71,6 +78,9 @@ describe('updateUserJobAssignment', () => {
     formData.append('positionId', 'pos-1')
     formData.append('level', 'P6')
     formData.append('role', 'MANAGER')
+    formData.append('startDate', '2024-01-15')
+    formData.append('seniorityStartDate', '2024-01-15')
+    formData.append('seniorityEndDate', '2026-12-31')
 
     const result = await updateUserJobAssignment('user-1', formData)
 
@@ -87,6 +97,9 @@ describe('updateUserJobAssignment', () => {
           positionId: 'pos-1',
           level: 'P6',
           role: 'MANAGER',
+          startDate: expect.any(Date),
+          seniorityStartDate: expect.any(Date),
+          seniorityEndDate: expect.any(Date),
           salary: null,
         }),
       })
@@ -106,6 +119,23 @@ describe('updateUserJobAssignment', () => {
     const result = await updateUserJobAssignment('user-1', formData)
 
     expect(result).toEqual({ error: '不能在此页面将人员设置为管理员' })
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it('should reject invalid seniority date order', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      role: 'EMPLOYEE',
+      positionId: null,
+    } as never)
+
+    const formData = new FormData()
+    formData.append('seniorityStartDate', '2026-01-01')
+    formData.append('seniorityEndDate', '2025-01-01')
+
+    const result = await updateUserJobAssignment('user-1', formData)
+
+    expect(result).toEqual({ error: '工龄截止日期不能早于工龄起始日期' })
     expect(mockPrisma.user.update).not.toHaveBeenCalled()
   })
 

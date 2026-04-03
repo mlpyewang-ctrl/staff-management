@@ -24,21 +24,25 @@ import {
 } from '@/lib/pagination'
 import { TimeRange, isWithinTimeRange, timeRangeOptions } from '@/lib/time-range'
 import { formatDate, formatDateTime } from '@/lib/utils'
+import { parseAttachment } from '@/lib/attachment'
 import {
   approveApplication,
   getApprovalHistory,
   getPendingApprovals,
 } from '@/server/actions/approval'
 import type { Role } from '@/types'
+import { WordPreview } from '@/components/word-preview'
 
 type PendingApprovalsData = Awaited<ReturnType<typeof getPendingApprovals>>
 type ApprovalHistoryData = Awaited<ReturnType<typeof getApprovalHistory>>
 type PendingOvertimeApproval = PendingApprovalsData['overtime'][number]
 type PendingLeaveApproval = PendingApprovalsData['leave'][number]
+type PendingOtherApproval = PendingApprovalsData['other'][number]
 type ApprovalHistoryItem = ApprovalHistoryData[number]
 type SelectedApproval =
   | (PendingOvertimeApproval & { type: 'OVERTIME' })
   | (PendingLeaveApproval & { type: 'LEAVE' })
+  | (PendingOtherApproval & { type: 'RESIGNATION_HANDOVER' | 'RESUME_UPDATE' | 'PARTY_INFO_UPDATE' })
 
 interface ApprovalsClientPageProps {
   initialHistory: ApprovalHistoryData
@@ -60,9 +64,11 @@ export function ApprovalsClientPage({
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
   const [overtimePage, setOvertimePage] = useState(1)
   const [leavePage, setLeavePage] = useState(1)
+  const [otherPage, setOtherPage] = useState(1)
   const [historyPage, setHistoryPage] = useState(1)
   const [overtimePageSize, setOvertimePageSize] = useState(DEFAULT_PAGE_SIZE)
   const [leavePageSize, setLeavePageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [otherPageSize, setOtherPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [historyPageSize, setHistoryPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   useEffect(() => {
@@ -81,6 +87,10 @@ export function ApprovalsClientPage({
     () => pendingApps.leave.filter((application) => isWithinTimeRange(application.startDate, timeRange)),
     [pendingApps.leave, timeRange]
   )
+  const filteredPendingOther = useMemo(
+    () => pendingApps.other.filter((application) => isWithinTimeRange(application.createdAt, timeRange)),
+    [pendingApps.other, timeRange]
+  )
   const filteredHistory = useMemo(
     () => history.filter((item) => isWithinTimeRange(item.createdAt, timeRange)),
     [history, timeRange]
@@ -93,6 +103,10 @@ export function ApprovalsClientPage({
   const leavePagination = useMemo(
     () => getPaginationState(filteredPendingLeave.length, leavePage, leavePageSize),
     [filteredPendingLeave.length, leavePage, leavePageSize]
+  )
+  const otherPagination = useMemo(
+    () => getPaginationState(filteredPendingOther.length, otherPage, otherPageSize),
+    [filteredPendingOther.length, otherPage, otherPageSize]
   )
   const historyPagination = useMemo(
     () => getPaginationState(filteredHistory.length, historyPage, historyPageSize),
@@ -107,6 +121,10 @@ export function ApprovalsClientPage({
     () => filteredPendingLeave.slice(leavePagination.startIndex, leavePagination.endIndex),
     [filteredPendingLeave, leavePagination.endIndex, leavePagination.startIndex]
   )
+  const paginatedPendingOther = useMemo(
+    () => filteredPendingOther.slice(otherPagination.startIndex, otherPagination.endIndex),
+    [filteredPendingOther, otherPagination.endIndex, otherPagination.startIndex]
+  )
   const paginatedHistory = useMemo(
     () => filteredHistory.slice(historyPagination.startIndex, historyPagination.endIndex),
     [filteredHistory, historyPagination.endIndex, historyPagination.startIndex]
@@ -115,8 +133,9 @@ export function ApprovalsClientPage({
   useEffect(() => {
     setOvertimePage(1)
     setLeavePage(1)
+    setOtherPage(1)
     setHistoryPage(1)
-  }, [historyPageSize, leavePageSize, overtimePageSize, timeRange])
+  }, [historyPageSize, leavePageSize, otherPageSize, overtimePageSize, timeRange])
 
   useEffect(() => {
     if (overtimePagination.currentPage !== overtimePage) {
@@ -135,6 +154,12 @@ export function ApprovalsClientPage({
       setHistoryPage(historyPagination.currentPage)
     }
   }, [historyPage, historyPagination.currentPage])
+
+  useEffect(() => {
+    if (otherPagination.currentPage !== otherPage) {
+      setOtherPage(otherPagination.currentPage)
+    }
+  }, [otherPage, otherPagination.currentPage])
 
   const refreshApprovals = async () => {
     const [nextPendingApps, nextHistory] = await Promise.all([getPendingApprovals(), getApprovalHistory()])
@@ -158,9 +183,9 @@ export function ApprovalsClientPage({
 
     const result = await approveApplication(formData)
 
-    if (result.error) {
+    if ('error' in result) {
       setMessage({ type: 'error', text: result.error })
-    } else if (result.success) {
+    } else if ('success' in result) {
       setMessage({ type: 'success', text: result.success })
       setSelectedApp(null)
       setRemark('')
@@ -202,7 +227,17 @@ export function ApprovalsClientPage({
       {selectedApp && (
         <Card className="border-white/70 bg-white/90 shadow-lg backdrop-blur">
           <CardHeader>
-            <CardTitle>审批{selectedApp.type === 'OVERTIME' ? '加班' : '请假'}申请</CardTitle>
+            <CardTitle>
+              审批{selectedApp.type === 'OVERTIME' ? '加班' : selectedApp.type === 'LEAVE' ? '请假' : selectedApp.typeText}申请
+              {selectedApp.type === 'OVERTIME' && (
+                <Badge 
+                  variant={selectedApp.isConfirmPhase ? 'info' : 'warning'} 
+                  className="ml-2"
+                >
+                  {selectedApp.phaseLabel}
+                </Badge>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -212,12 +247,36 @@ export function ApprovalsClientPage({
               {selectedApp.type === 'OVERTIME' ? (
                 <>
                   <DetailItem label="加班日期" value={formatDate(new Date(selectedApp.date))} />
-                  <DetailItem label="时长" value={`${selectedApp.hours} 小时`} />
+                  <DetailItem label="申请时长" value={`${selectedApp.hours} 小时`} />
                   <div className="md:col-span-2">
                     <DetailItem label="事由" value={selectedApp.reason} />
                   </div>
+                  {/* 确认审批阶段显示实际加班时间 */}
+                  {selectedApp.isConfirmPhase && (
+                    <>
+                      <div className="md:col-span-2 pt-2 border-t">
+                        <div className="text-sm font-medium text-blue-600 mb-2">实际加班信息</div>
+                      </div>
+                      <DetailItem 
+                        label="实际加班日期" 
+                        value={selectedApp.actualStartTime ? formatDate(new Date(selectedApp.actualStartTime)) : '-'} 
+                      />
+                      <DetailItem 
+                        label="实际加班时长" 
+                        value={selectedApp.actualHours ? `${selectedApp.actualHours} 小时` : '-'} 
+                      />
+                      <DetailItem 
+                        label="实际开始时间" 
+                        value={selectedApp.actualStartTime ? new Date(selectedApp.actualStartTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '-'} 
+                      />
+                      <DetailItem 
+                        label="实际结束时间" 
+                        value={selectedApp.actualEndTime ? new Date(selectedApp.actualEndTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '-'} 
+                      />
+                    </>
+                  )}
                 </>
-              ) : (
+              ) : selectedApp.type === 'LEAVE' ? (
                 <>
                   <DetailItem label="假期类型" value={selectedApp.leaveTypeText} />
                   <DetailItem label="开始日期" value={formatDate(new Date(selectedApp.startDate))} />
@@ -226,6 +285,23 @@ export function ApprovalsClientPage({
                   <div className="md:col-span-2">
                     <DetailItem label="事由" value={selectedApp.reason} />
                   </div>
+                </>
+              ) : (
+                <>
+                  <div className="md:col-span-2">
+                    <DetailItem label="申请标题" value={selectedApp.title} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <DetailItem label="申请内容" value={selectedApp.content} />
+                  </div>
+                  {(selectedApp.type === 'RESUME_UPDATE' || selectedApp.type === 'PARTY_INFO_UPDATE') && selectedApp.attachments && (
+                    <div className="md:col-span-2">
+                      {(() => {
+                        const attachment = parseAttachment(selectedApp.attachments)
+                        return attachment ? <WordPreview attachment={attachment} /> : <div className="text-sm text-gray-500">附件格式异常</div>
+                      })()}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -287,9 +363,11 @@ export function ApprovalsClientPage({
                   <PendingApprovalCard
                     key={application.id}
                     title={application.userName}
+                    phaseBadge={application.phaseLabel}
+                    isConfirmPhase={application.isConfirmPhase}
                     meta={[
                       { label: '日期', value: formatDate(new Date(application.date)) },
-                      { label: '时长', value: `${application.hours} 小时` },
+                      { label: application.isConfirmPhase && application.actualHours ? '实际时长' : '申请时长', value: `${application.isConfirmPhase && application.actualHours ? application.actualHours : application.hours} 小时` },
                       { label: '审批节点', value: application.currentStepName },
                       { label: '进度', value: application.approvalProgress },
                     ]}
@@ -348,6 +426,45 @@ export function ApprovalsClientPage({
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               totalItems={filteredPendingLeave.length}
               totalPages={leavePagination.totalPages}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
+          <CardHeader>
+            <CardTitle>待审批其他事项（{filteredPendingOther.length}）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredPendingOther.length === 0 ? (
+              <div className="py-8 text-center text-slate-500">当前筛选条件下暂无待审批其他事项</div>
+            ) : (
+              <div className="space-y-4">
+                {paginatedPendingOther.map((application) => (
+                  <PendingApprovalCard
+                    key={application.id}
+                    title={application.userName}
+                    meta={[
+                      { label: '类型', value: application.typeText },
+                      { label: '标题', value: application.title },
+                      { label: '审批节点', value: application.currentStepName },
+                      { label: '进度', value: application.approvalProgress },
+                    ]}
+                    reason={application.content}
+                    onApprove={() => setSelectedApp({ ...application, type: application.type as 'RESIGNATION_HANDOVER' | 'RESUME_UPDATE' | 'PARTY_INFO_UPDATE' })}
+                  />
+                ))}
+              </div>
+            )}
+            <PaginationControls
+              className="mt-4"
+              currentPage={otherPagination.currentPage}
+              itemLabel="条待审批记录"
+              onPageChange={setOtherPage}
+              onPageSizeChange={setOtherPageSize}
+              pageSize={otherPageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              totalItems={filteredPendingOther.length}
+              totalPages={otherPagination.totalPages}
             />
           </CardContent>
         </Card>
@@ -428,17 +545,28 @@ function PendingApprovalCard({
   meta,
   reason,
   onApprove,
+  phaseBadge,
+  isConfirmPhase,
 }: {
   title: string
   meta: Array<{ label: string; value: string }>
   reason: string
   onApprove: () => void
+  phaseBadge?: string
+  isConfirmPhase?: boolean
 }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-slate-50/90 p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="text-lg font-semibold text-slate-900">{title}</div>
+          <div className="flex items-center gap-2">
+            <div className="text-lg font-semibold text-slate-900">{title}</div>
+            {phaseBadge && (
+              <Badge variant={isConfirmPhase ? 'info' : 'warning'} className="text-xs">
+                {phaseBadge}
+              </Badge>
+            )}
+          </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {meta.map((item) => (
               <div key={item.label} className="rounded-2xl bg-white px-4 py-3">

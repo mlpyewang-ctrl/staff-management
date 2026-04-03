@@ -6,6 +6,7 @@ import {
   leaveSchema,
   performanceSchema,
   positionSchema,
+  userJobAssignmentSchema,
 } from '../validations'
 
 describe('loginSchema', () => {
@@ -250,5 +251,41 @@ describe('positionSchema', () => {
       salary: '-100',
     })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('userJobAssignmentSchema', () => {
+  it('should validate job assignment dates and level', () => {
+    const result = userJobAssignmentSchema.safeParse({
+      departmentId: 'dept-1',
+      positionId: 'pos-1',
+      level: 'P6',
+      startDate: '2024-01-15',
+      seniorityStartDate: '2024-01-15',
+      seniorityEndDate: '2026-12-31',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('should trim empty strings to undefined', () => {
+    const result = userJobAssignmentSchema.safeParse({
+      departmentId: '',
+      positionId: '',
+      level: '',
+      startDate: '',
+      seniorityStartDate: '',
+      seniorityEndDate: '',
+    })
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.departmentId).toBeUndefined()
+      expect(result.data.positionId).toBeUndefined()
+      expect(result.data.level).toBeUndefined()
+      expect(result.data.startDate).toBeUndefined()
+      expect(result.data.seniorityStartDate).toBeUndefined()
+      expect(result.data.seniorityEndDate).toBeUndefined()
+    }
   })
 })

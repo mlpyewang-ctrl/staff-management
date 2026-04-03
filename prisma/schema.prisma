@@ -24,6 +24,8 @@ model User {
   seniorityEndDate   DateTime?
   companyId          String?
   company            Company? @relation(fields: [companyId], references: [id])
+  resumeDoc          String?
+  partyInfoDoc       String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -35,6 +37,7 @@ model User {
   leaveBalance         LeaveBalance?
   salaryRecords        SalaryRecord[]
   overtimeSettlements  OvertimeSettlement[]
+  otherApplications    OtherApplication[]
 
   department Department? @relation(fields: [departmentId], references: [id])
   position   Position?   @relation(fields: [positionId], references: [id])
@@ -58,21 +61,28 @@ model Company {
 }
 
 model OvertimeApplication {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date       DateTime
-  startTime  DateTime
-  endTime    DateTime
-  hours      Float
-  type       String   @default("WORKDAY")
-  reason     String
-  status     String   @default("DRAFT")
-  approverId String?
-  approvedAt DateTime?
-  remark     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime
+  startTime       DateTime
+  endTime         DateTime
+  hours           Float
+  // 实际加班时间（确认阶段填写）
+  actualStartTime DateTime?
+  actualEndTime   DateTime?
+  actualHours     Float?
+  type            String   @default("WORKDAY")
+  reason          String
+  // 状态: DRAFT(草稿), PENDING(事前审批中), PRE_APPROVED(事前通过待确认), CONFIRM_PENDING(确认审批中), COMPLETED(已完成), REJECTED(已退回)
+  status          String   @default("DRAFT")
+  // 当前流程阶段: PRE(事前审批), CONFIRM(确认审批)
+  currentPhase    String   @default("PRE")
+  approverId      String?
+  approvedAt      DateTime?
+  remark          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   overtimeSettlements OvertimeSettlement[]
 
@@ -257,6 +267,27 @@ model Approval {
   @@map("approvals")
 }
 
+model OtherApplication {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  content     String
+  attachments String?
+  status      String   @default("DRAFT")
+  approverId  String?
+  approvedAt  DateTime?
+  remark      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([status, createdAt])
+  @@index([type, status])
+  @@map("other_applications")
+}
+
 model Position {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -268,4 +299,16 @@ model Position {
   users User[]
 
   @@map("positions")
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   // HTML 格式，支持表格
+  isActive  Boolean  @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("announcements")
 }

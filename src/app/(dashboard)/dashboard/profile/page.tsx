@@ -12,6 +12,8 @@ import {
   formatDateInputValue,
 } from '@/lib/seniority'
 import { Button } from '@/components/ui/button'
+import { parseAttachment } from '@/lib/attachment'
+import { WordPreview } from '@/components/word-preview'
 import { getUserProfile, updateUserProfile } from '@/server/actions/user'
 
 interface UserProfile {
@@ -25,6 +27,8 @@ interface UserProfile {
   startDate?: string | Date | null
   seniorityStartDate?: string | Date | null
   seniorityEndDate?: string | Date | null
+  resumeDoc?: string | null
+  partyInfoDoc?: string | null
   department?: {
     name: string
   } | null
@@ -104,7 +108,7 @@ export default function ProfileDashboardPage() {
       </div>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        部门、岗位和职级由管理员在“人员岗位”模块统一维护，个人和部门主管不能在这里直接修改。
+        部门、岗位、职级、入职日期和工龄信息由管理员在“人员岗位”模块统一维护，个人页面只展示结果。
       </div>
 
       <Card>
@@ -137,6 +141,7 @@ export default function ProfileDashboardPage() {
                   name="startDate"
                   type="date"
                   defaultValue={formatDateInputValue(profile?.startDate)}
+                  disabled
                 />
               </div>
               <div className="space-y-2">
@@ -146,6 +151,7 @@ export default function ProfileDashboardPage() {
                   name="seniorityStartDate"
                   type="date"
                   defaultValue={formatDateInputValue(profile?.seniorityStartDate)}
+                  disabled
                 />
               </div>
               <div className="space-y-2">
@@ -155,8 +161,9 @@ export default function ProfileDashboardPage() {
                   name="seniorityEndDate"
                   type="date"
                   defaultValue={formatDateInputValue(profile?.seniorityEndDate)}
+                  disabled
                 />
-                <p className="text-xs text-gray-500">留空时默认按今天计算年假工龄</p>
+                <p className="text-xs text-gray-500">由管理员在人员岗位页面维护</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="departmentDisplay">部门</Label>
@@ -206,6 +213,46 @@ export default function ProfileDashboardPage() {
               {loading ? '保存中...' : '保存修改'}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>履历信息</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {profile?.resumeDoc ? (
+            (() => {
+              const attachment = parseAttachment(profile.resumeDoc)
+              return attachment ? (
+                <WordPreview attachment={attachment} />
+              ) : (
+                <div className="text-sm text-gray-500">履历文档格式异常</div>
+              )
+            })()
+          ) : (
+            <div className="text-sm text-gray-500">暂无履历文档</div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>党员信息</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {profile?.partyInfoDoc ? (
+            (() => {
+              const attachment = parseAttachment(profile.partyInfoDoc)
+              return attachment ? (
+                <WordPreview attachment={attachment} />
+              ) : (
+                <div className="text-sm text-gray-500">党员信息文档格式异常</div>
+              )
+            })()
+          ) : (
+            <div className="text-sm text-gray-500">暂无党员信息文档</div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -83,18 +83,7 @@ export async function updateUserProfile(userId: string, formData: FormData) {
       name: getString('name'),
       idCard: getString('idCard'),
       phone: getString('phone'),
-      startDate: getString('startDate'),
-      seniorityStartDate: getString('seniorityStartDate'),
-      seniorityEndDate: getString('seniorityEndDate'),
     })
-
-    const startDate = parseOptionalDate(validated.startDate, '入职日期')
-    const seniorityStartDate = parseOptionalDate(validated.seniorityStartDate, '工龄起始日期')
-    const seniorityEndDate = parseOptionalDate(validated.seniorityEndDate, '工龄截止日期')
-
-    if (seniorityStartDate && seniorityEndDate && seniorityEndDate < seniorityStartDate) {
-      return { error: '工龄截止日期不能早于工龄起始日期' }
-    }
 
     const user = await prisma.user.update({
       where: { id: userId },
@@ -102,9 +91,6 @@ export async function updateUserProfile(userId: string, formData: FormData) {
         name: validated.name,
         idCard: validated.idCard || null,
         phone: validated.phone || null,
-        startDate,
-        seniorityStartDate,
-        seniorityEndDate,
       },
       include: {
         department: true,
@@ -115,6 +101,7 @@ export async function updateUserProfile(userId: string, formData: FormData) {
     await ensureLeaveBalance(userId)
 
     revalidatePath('/dashboard/profile')
+    revalidatePath('/dashboard/staff')
     revalidatePath('/dashboard/leave')
 
     return { success: '个人信息已更新', user }
@@ -136,6 +123,9 @@ export async function getStaffJobAssignments() {
       email: true,
       role: true,
       level: true,
+      startDate: true,
+      seniorityStartDate: true,
+      seniorityEndDate: true,
       departmentId: true,
       positionId: true,
       department: {
@@ -170,6 +160,9 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       departmentId: getString('departmentId'),
       positionId: getString('positionId'),
       level: getString('level'),
+      startDate: getString('startDate'),
+      seniorityStartDate: getString('seniorityStartDate'),
+      seniorityEndDate: getString('seniorityEndDate'),
     })
 
     const roleValue = getString('role')
@@ -218,6 +211,14 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       return { error: '不能在此页面将人员设置为管理员' }
     }
 
+    const startDate = parseOptionalDate(validated.startDate, '入职日期')
+    const seniorityStartDate = parseOptionalDate(validated.seniorityStartDate, '工龄起始日期')
+    const seniorityEndDate = parseOptionalDate(validated.seniorityEndDate, '工龄截止日期')
+
+    if (seniorityStartDate && seniorityEndDate && seniorityEndDate < seniorityStartDate) {
+      return { error: '工龄截止日期不能早于工龄起始日期' }
+    }
+
     const shouldResetSalary = Boolean(
       validated.positionId && validated.positionId !== existingUser.positionId
     )
@@ -228,6 +229,9 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
         departmentId: validated.departmentId || null,
         positionId: validated.positionId || null,
         level: validated.level || null,
+        startDate,
+        seniorityStartDate,
+        seniorityEndDate,
         ...(normalizedRole ? { role: normalizedRole } : {}),
         ...(shouldResetSalary ? { salary: null } : {}),
       },
@@ -256,8 +260,11 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       },
     })
 
+    await ensureLeaveBalance(userId)
+
     revalidatePath('/dashboard/staff')
     revalidatePath('/dashboard/profile')
+    revalidatePath('/dashboard/leave')
     revalidatePath('/dashboard/salary')
 
     return { success: '人员信息已更新', user }

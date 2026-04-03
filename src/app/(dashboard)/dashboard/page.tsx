@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/utils'
 import { getOvertimeStats } from '@/server/actions/overtime'
 import { getLeaveStats } from '@/server/actions/leave'
 import { getDepartments } from '@/server/actions/department'
+import { AnnouncementBanner } from '@/components/announcement-banner'
 
 type DepartmentItem = Awaited<ReturnType<typeof getDepartments>>[number]
 
@@ -135,6 +136,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* 公示横幅 */}
+      <AnnouncementBanner />
+
       <section className="grid gap-6 xl:grid-cols-[1.7fr,1fr]">
         <Card className="overflow-hidden border border-sky-100 bg-[linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(238,246,255,0.95))] shadow-xl">
           <CardContent className="p-6 sm:p-8">

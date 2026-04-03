@@ -8,6 +8,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  calculateAnnualLeaveEntitlement,
+  calculateCompletedYears,
+  calculateSeniorityPay,
+  formatDateInputValue,
+} from '@/lib/seniority'
+import { formatDate } from '@/lib/utils'
 import { getDepartments } from '@/server/actions/department'
 import { getPositions } from '@/server/actions/position'
 import { getStaffJobAssignments, updateUserJobAssignment } from '@/server/actions/user'
@@ -30,6 +37,9 @@ interface StaffUser {
   email: string
   role: string
   level?: string | null
+  startDate?: string | Date | null
+  seniorityStartDate?: string | Date | null
+  seniorityEndDate?: string | Date | null
   departmentId?: string | null
   positionId?: string | null
   department?: DepartmentOption | null
@@ -42,6 +52,9 @@ const emptyFormState = {
   departmentId: '',
   positionId: '',
   level: '',
+  startDate: '',
+  seniorityStartDate: '',
+  seniorityEndDate: '',
   role: 'EMPLOYEE' as EditableRole,
 }
 
@@ -131,6 +144,9 @@ export default function StaffDashboardPage() {
       departmentId: selectedUser.departmentId || '',
       positionId: selectedUser.positionId || '',
       level: selectedUser.level || selectedUser.position?.level || '',
+      startDate: formatDateInputValue(selectedUser.startDate),
+      seniorityStartDate: formatDateInputValue(selectedUser.seniorityStartDate),
+      seniorityEndDate: formatDateInputValue(selectedUser.seniorityEndDate),
       role: selectedUser.role === 'MANAGER' ? 'MANAGER' : 'EMPLOYEE',
     })
   }, [selectedUser])
@@ -149,6 +165,17 @@ export default function StaffDashboardPage() {
     )
   }, [keyword, staff])
 
+  const employmentYears = calculateCompletedYears(formState.startDate || selectedUser?.startDate)
+  const seniorityYears = calculateCompletedYears(
+    formState.seniorityStartDate || selectedUser?.seniorityStartDate,
+    formState.seniorityEndDate || selectedUser?.seniorityEndDate
+  )
+  const seniorityPayPreview = calculateSeniorityPay(formState.startDate || selectedUser?.startDate)
+  const annualLeaveEntitlement = calculateAnnualLeaveEntitlement(
+    formState.seniorityStartDate || selectedUser?.seniorityStartDate,
+    formState.seniorityEndDate || selectedUser?.seniorityEndDate
+  )
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -164,6 +191,9 @@ export default function StaffDashboardPage() {
     submitData.append('departmentId', formState.departmentId)
     submitData.append('positionId', formState.positionId)
     submitData.append('level', formState.level)
+    submitData.append('startDate', formState.startDate)
+    submitData.append('seniorityStartDate', formState.seniorityStartDate)
+    submitData.append('seniorityEndDate', formState.seniorityEndDate)
     if (selectedUser.role !== 'ADMIN') {
       submitData.append('role', formState.role)
     }
@@ -194,7 +224,7 @@ export default function StaffDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">人员管理</h1>
-        <p className="mt-1 text-gray-600">统一维护系统角色与岗位信息，可在此指定谁是部门主管（MANAGER）。</p>
+        <p className="mt-1 text-gray-600">统一维护系统角色、岗位和任职日期，可在此指定谁是部门主管（MANAGER）。</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
@@ -301,6 +331,60 @@ export default function StaffDashboardPage() {
                   />
                 </div>
 
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="startDate">入职日期</Label>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={formState.startDate}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          startDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="seniorityStartDate">工龄起始日期</Label>
+                    <Input
+                      id="seniorityStartDate"
+                      type="date"
+                      value={formState.seniorityStartDate}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          seniorityStartDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="seniorityEndDate">工龄截止日期</Label>
+                    <Input
+                      id="seniorityEndDate"
+                      type="date"
+                      value={formState.seniorityEndDate}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          seniorityEndDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    <div>入职满 {employmentYears} 年</div>
+                    <div className="mt-1">工龄满 {seniorityYears} 年</div>
+                    <div className="mt-1">年假标准：{annualLeaveEntitlement} 天</div>
+                    <div className="mt-1">工龄工资：{seniorityPayPreview.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</div>
+                  </div>
+                </div>
+
                 {selectedPosition && (
                   <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                     岗位基准薪资：
@@ -350,13 +434,16 @@ export default function StaffDashboardPage() {
                     <TableHead>部门</TableHead>
                     <TableHead>岗位</TableHead>
                     <TableHead>职级</TableHead>
+                    <TableHead>入职日期</TableHead>
+                    <TableHead>工龄起始</TableHead>
+                    <TableHead>工龄截止</TableHead>
                     <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredStaff.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-gray-500">
+                      <TableCell colSpan={9} className="py-8 text-center text-gray-500">
                         暂无匹配人员
                       </TableCell>
                     </TableRow>
@@ -374,6 +461,9 @@ export default function StaffDashboardPage() {
                           <TableCell>{item.department?.name || '-'}</TableCell>
                           <TableCell>{item.position?.name || '-'}</TableCell>
                           <TableCell>{item.level || item.position?.level || '-'}</TableCell>
+                          <TableCell>{item.startDate ? formatDate(new Date(item.startDate)) : '-'}</TableCell>
+                          <TableCell>{item.seniorityStartDate ? formatDate(new Date(item.seniorityStartDate)) : '-'}</TableCell>
+                          <TableCell>{item.seniorityEndDate ? formatDate(new Date(item.seniorityEndDate)) : '-'}</TableCell>
                           <TableCell>
                             <Button variant={isActive ? 'default' : 'outline'} size="sm" onClick={() => setSelectedUserId(item.id)}>
                               {isActive ? '编辑中' : '编辑'}

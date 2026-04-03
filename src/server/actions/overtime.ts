@@ -272,7 +272,7 @@ export async function getOvertimeStats(userId?: string, departmentId?: string, r
 
     const where: Prisma.OvertimeApplicationWhereInput = {
       status: {
-        in: ['APPROVED', 'COMPLETED'],
+        in: ['COMPLETED'],
       },
       date: {
         gte: firstDayOfMonth,
@@ -295,13 +295,81 @@ export async function getOvertimeStats(userId?: string, departmentId?: string, r
     const result = await prisma.overtimeApplication.aggregate({
       where,
       _sum: {
-        hours: true,
+        actualHours: true,
       },
     })
 
-    return result._sum.hours || 0
+    return result._sum.actualHours || 0
   } catch (error) {
     console.error('获取加班统计失败:', error)
     return 0
+  }
+}
+
+// 提交加班确认（申请人填写实际加班时间后提交）
+export async function submitOvertimeConfirmation(formData: FormData) {
+  try {
+    const sessionUser = await requireSessionUser()
+    const id = formData.get('id') as string
+
+    if (!id) {
+      return { error: '缺少加班申请 ID' }
+    }
+
+    const application = await prisma.overtimeApplication.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+      },
+    })
+
+    if (!application) {
+      return { error: '加班申请不存在' }
+    }
+
+    if (application.userId !== sessionUser.id) {
+      return { error: '无权操作该加班申请' }
+    }
+
+    if (application.status !== 'PRE_APPROVED') {
+      return { error: '只有事前审批通过的加班申请可以提交确认' }
+    }
+
+    const date = formData.get('date') as string
+    const startTime = formData.get('startTime') as string
+    const endTime = formData.get('endTime') as string
+
+    if (!date || !startTime || !endTime) {
+      return { error: '请填写完整的实际加班时间' }
+    }
+
+    const actualStartTime = new Date(`${date} ${startTime}`)
+    const actualEndTime = new Date(`${date} ${endTime}`)
+    const actualHours = calculateHours(actualStartTime, actualEndTime)
+
+    if (actualHours <= 0) {
+      return { error: '结束时间必须晚于开始时间' }
+    }
+
+    await prisma.overtimeApplication.update({
+      where: { id },
+      data: {
+        actualStartTime,
+        actualEndTime,
+        actualHours,
+        status: 'CONFIRM_PENDING',
+        currentPhase: 'CONFIRM',
+      },
+    })
+
+    revalidatePath('/dashboard/overtime')
+    return { success: '加班确认已提交，进入确认审批流程' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '提交确认失败，请稍后重试' }
   }
 }

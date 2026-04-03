@@ -60,7 +60,7 @@ export const performanceSchema = z.object({
 
 export const approvalSchema = z.object({
   applicationId: z.string(),
-  applicationType: z.enum(['OVERTIME', 'LEAVE']),
+  applicationType: z.enum(['OVERTIME', 'LEAVE', 'RESIGNATION_HANDOVER', 'RESUME_UPDATE', 'PARTY_INFO_UPDATE']),
   status: z.enum(['APPROVED', 'REJECTED']),
   remark: z.string().optional(),
 })
@@ -69,9 +69,6 @@ export const userProfileSchema = z.object({
   name: z.string().min(2, '姓名至少需要 2 个字符'),
   idCard: optionalText,
   phone: optionalText,
-  startDate: optionalText,
-  seniorityStartDate: optionalText,
-  seniorityEndDate: optionalText,
 })
 
 export const userJobAssignmentSchema = z.object({
@@ -81,6 +78,9 @@ export const userJobAssignmentSchema = z.object({
     (value) => value === undefined || value.length <= 50,
     '职级不能超过 50 个字符'
   ),
+  startDate: optionalText,
+  seniorityStartDate: optionalText,
+  seniorityEndDate: optionalText,
 })
 
 export const positionSchema = z.object({
@@ -128,4 +128,11 @@ export const holidaySchema = z.object({
   name: z.string().min(2, '节假日名称至少需要 2 个字符'),
   date: z.string(),
   type: z.enum(['LEGAL_HOLIDAY', 'COMPENSATORY']),
+})
+
+export const otherApplicationSchema = z.object({
+  type: z.enum(['RESIGNATION_HANDOVER', 'RESUME_UPDATE', 'PARTY_INFO_UPDATE']),
+  title: z.string().min(2, '标题至少需要 2 个字符'),
+  content: z.string().min(10, '请详细描述申请内容（至少 10 个字符）'),
+  attachments: z.string().optional(),
 })

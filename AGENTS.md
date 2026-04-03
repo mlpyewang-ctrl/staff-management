@@ -3,6 +3,13 @@
 ## Project Structure & Module Organization
 This is a Next.js 14 app with Prisma-backed data access. Keep page routes in `src/app/`, shared UI in `src/components/`, business logic in `src/lib/`, and server actions in `src/server/actions/`. Database schema and seed data live in `prisma/`, while helper scripts live in `scripts/`. Tests are colocated under `src/**/__tests__/` and use the `*.test.ts` / `*.test.tsx` pattern.
 
+### File Upload & Word Preview
+- Word document upload and preview is supported via base64 encoding stored in the database
+- Use `WordUploadField` component for `.docx` file uploads (max 2MB)
+- Use `WordPreview` component for inline Word document preview (converts docx to HTML via mammoth)
+- Attachment data is serialized as JSON: `{ fileName, mimeType, data }`
+- Reference templates are stored in `public/templates/`
+
 ## Build, Test, and Development Commands
 - `npm run dev` - start the local Next.js app.
 - `npm run build` - create a production build.
@@ -18,6 +25,19 @@ For local setup, copy `.env.example` to `.env`, then start PostgreSQL with `dock
 
 ## Coding Style & Naming Conventions
 Follow the existing TypeScript/React style: 2-space indentation, single quotes, and semicolons omitted. Prefer descriptive component and function names, PascalCase for React components, and camelCase for variables, helpers, and server actions. Use the `@/` alias for imports from `src/`. Keep Tailwind class lists inline and grouped by layout -> spacing -> color -> state when practical.
+
+### Utility Modules
+- Place reusable helper functions in `src/lib/` with corresponding tests in `src/lib/__tests__/`
+- Export interfaces and types alongside functions when they define public API contracts
+
+### Announcement System
+- The announcement system allows ADMIN users to publish notices visible to all users
+- Uses `react-quill` for rich text editing with table support
+- Announcements display at the top of the dashboard page via `AnnouncementBanner`
+- Only users with ADMIN role can access `/dashboard/announcements` management page
+- Data stored in `announcements` table with `isActive` flag to control visibility
+- **Only one announcement can be active at a time** - activating a new one automatically deactivates the previous
+- Use the toggle switch in the management page to control display status
 
 ## Testing Guidelines
 Use Vitest with `jsdom` for UI-related tests. Keep test files next to the code they cover, especially under `__tests__`, and name them `something.test.ts` or `something.test.tsx`. Favor focused unit tests for helpers, validation, and server-action logic; add coverage for edge cases and auth-sensitive flows.

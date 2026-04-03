@@ -28,18 +28,20 @@ type OvertimeApplicationItem = Awaited<ReturnType<typeof getOvertimeApplications
 
 const statusMap: Record<string, string> = {
   DRAFT: '草稿',
-  PENDING: '待审批',
-  APPROVED: '已通过',
-  REJECTED: '已退回',
+  PENDING: '事前审批中',
+  PRE_APPROVED: '事前通过待确认',
+  CONFIRM_PENDING: '确认审批中',
   COMPLETED: '已完成',
+  REJECTED: '已退回',
 }
 
-const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger'> = {
+const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger' | 'info'> = {
   DRAFT: 'default',
   PENDING: 'warning',
-  APPROVED: 'success',
-  REJECTED: 'danger',
+  PRE_APPROVED: 'info',
+  CONFIRM_PENDING: 'warning',
   COMPLETED: 'success',
+  REJECTED: 'danger',
 }
 
 export default function OvertimePage() {
@@ -174,8 +176,16 @@ export default function OvertimePage() {
                           <Button asChild size="sm" variant="outline">
                             <Link href={`/dashboard/overtime/${application.id}`}>编辑</Link>
                           </Button>
+                        ) : application.status === 'PRE_APPROVED' ? (
+                          <Button asChild size="sm" variant="default">
+                            <Link href={`/dashboard/overtime/${application.id}/confirm`}>提交确认</Link>
+                          </Button>
                         ) : (
-                          <span className="text-xs text-slate-400">审批中或已完成</span>
+                          <span className="text-xs text-slate-400">
+                            {application.status === 'PENDING' && '事前审批中'}
+                            {application.status === 'CONFIRM_PENDING' && '确认审批中'}
+                            {application.status === 'COMPLETED' && '已完成'}
+                          </span>
                         )}
                       </TableCell>
                     )}
