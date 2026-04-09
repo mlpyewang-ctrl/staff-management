@@ -21,7 +21,7 @@ This is a Next.js 14 app with Prisma-backed data access. Keep page routes in `sr
 - `npm run db:seed` - load seed data.
 - `npm run db:studio` - open Prisma Studio.
 
-For local setup, copy `.env.example` to `.env`, then start PostgreSQL with `docker compose up -d`.
+For local setup, copy `.env.example` to `.env`, start PostgreSQL manually (e.g. via Docker), then run `npm run dev`.
 
 ## Coding Style & Naming Conventions
 Follow the existing TypeScript/React style: 2-space indentation, single quotes, and semicolons omitted. Prefer descriptive component and function names, PascalCase for React components, and camelCase for variables, helpers, and server actions. Use the `@/` alias for imports from `src/`. Keep Tailwind class lists inline and grouped by layout -> spacing -> color -> state when practical.
@@ -47,3 +47,4 @@ Recent commits are very short and informal (`bugfix`, `add export`, `opt`), so k
 
 ## Environment & Deployment Notes
 Do not commit local secrets from `.env`. If you change Prisma models, update the database workflow and mention whether `db:push` or `db:seed` is required. Deployment and offline bundle scripts are already in `scripts/`; reuse them instead of creating new ad hoc flows.
+- **Offline deployment** (`scripts/build-offline-bundle.ps1` → `scripts/deploy-offline.sh`): on Windows with internet, run the PowerShell script to build and export images. Copy the resulting bundle to the offline server, configure `.env.prod`, and run `scripts/deploy-offline.sh` to deploy with pure `docker run`.

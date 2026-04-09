@@ -27,6 +27,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # 编辑器目录和文件
+.cursor/
+.lingma/
 .vscode/*
 !.vscode/extensions.json
 .idea/

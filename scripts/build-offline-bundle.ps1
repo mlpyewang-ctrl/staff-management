@@ -35,10 +35,9 @@ docker save -o (Join-Path $imagesDir 'app-image.tar') $AppImage
 docker save -o (Join-Path $imagesDir 'postgres-image.tar') $PostgresImage
 
 Write-Host "[4/5] copy deployment files"
-Copy-Item (Join-Path $root 'docker-compose.prod.yml') (Join-Path $target 'docker-compose.prod.yml') -Force
 Copy-Item (Join-Path $root '.env.prod.example') (Join-Path $target '.env.prod.example') -Force
 Copy-Item (Join-Path $root 'scripts\docker-entrypoint.sh') (Join-Path $scriptsDir 'docker-entrypoint.sh') -Force
-Copy-Item (Join-Path $root 'scripts\install-offline-bundle.sh') (Join-Path $scriptsDir 'install-offline-bundle.sh') -Force
+Copy-Item (Join-Path $root 'scripts\deploy-offline.sh') (Join-Path $scriptsDir 'deploy-offline.sh') -Force
 
 $meta = @"
 APP_IMAGE=$AppImage
@@ -52,4 +51,4 @@ Write-Host "[5/5] bundle ready: $target"
 Write-Host "Copy this folder to the offline server, then run:"
 Write-Host "  cd $target"
 Write-Host "  cp .env.prod.example .env.prod"
-Write-Host "  sh scripts/install-offline-bundle.sh"
+Write-Host "  sh scripts/deploy-offline.sh"
