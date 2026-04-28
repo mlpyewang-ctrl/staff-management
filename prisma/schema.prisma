@@ -13,6 +13,7 @@ model User {
   name               String
   password           String
   role               String   @default("EMPLOYEE")
+  education          String?
   idCard             String?
   phone              String?
   salary             Float?
@@ -38,6 +39,10 @@ model User {
   salaryRecords        SalaryRecord[]
   overtimeSettlements  OvertimeSettlement[]
   otherApplications    OtherApplication[]
+  resumeVersions       UserResumeVersion[]
+  partyInfoVersions    UserPartyInfoVersion[]
+  profileChangeLogs    UserProfileChangeLog[]   @relation("ProfileChangeOwner")
+  createdProfileChangeLogs UserProfileChangeLog[] @relation("ProfileChangeActor")
 
   department Department? @relation(fields: [departmentId], references: [id])
   position   Position?   @relation(fields: [positionId], references: [id])
@@ -267,6 +272,24 @@ model Approval {
   @@map("approvals")
 }
 
+model UserProfileChangeLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("ProfileChangeOwner", fields: [userId], references: [id], onDelete: Cascade)
+  actorId     String
+  actor       User     @relation("ProfileChangeActor", fields: [actorId], references: [id])
+  actionType  String
+  summary     String
+  remark      String?
+  changes     Json
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([actionType, createdAt])
+  @@map("user_profile_change_logs")
+}
+
 model OtherApplication {
   id          String   @id @default(cuid())
   userId      String
@@ -275,6 +298,7 @@ model OtherApplication {
   title       String
   content     String
   attachments String?
+  versionRemark String?
   status      String   @default("DRAFT")
   approverId  String?
   approvedAt  DateTime?
@@ -286,6 +310,38 @@ model OtherApplication {
   @@index([status, createdAt])
   @@index([type, status])
   @@map("other_applications")
+}
+
+model UserResumeVersion {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachment    String
+  remark        String
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  @@index([userId, effectiveFrom])
+  @@index([userId, effectiveTo])
+  @@map("user_resume_versions")
+}
+
+model UserPartyInfoVersion {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachment    String
+  remark        String
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  @@index([userId, effectiveFrom])
+  @@index([userId, effectiveTo])
+  @@map("user_party_info_versions")
 }
 
 model Position {

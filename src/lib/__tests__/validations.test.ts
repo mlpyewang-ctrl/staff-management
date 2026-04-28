@@ -6,7 +6,9 @@ import {
   leaveSchema,
   performanceSchema,
   positionSchema,
+  userProfileSchema,
   userJobAssignmentSchema,
+  otherApplicationSchema,
 } from '../validations'
 
 describe('loginSchema', () => {
@@ -287,5 +289,39 @@ describe('userJobAssignmentSchema', () => {
       expect(result.data.seniorityStartDate).toBeUndefined()
       expect(result.data.seniorityEndDate).toBeUndefined()
     }
+  })
+})
+
+describe('userProfileSchema', () => {
+  it('should validate supported education values', () => {
+    const result = userProfileSchema.safeParse({
+      name: '张三',
+      education: '本科',
+      versionRemark: '学历补录',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('should reject unsupported education values', () => {
+    const result = userProfileSchema.safeParse({
+      name: '张三',
+      education: '小学',
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('otherApplicationSchema', () => {
+  it('should allow version remark for resume updates', () => {
+    const result = otherApplicationSchema.safeParse({
+      type: 'RESUME_UPDATE',
+      title: '履历更新申请',
+      content: '这里是足够长的履历更新说明内容。',
+      versionRemark: '新增学历信息',
+    })
+
+    expect(result.success).toBe(true)
   })
 })

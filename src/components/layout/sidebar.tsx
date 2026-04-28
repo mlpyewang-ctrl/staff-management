@@ -65,6 +65,7 @@ export function Sidebar() {
         items: [
           { name: '部门管理', href: '/dashboard/departments', icon: '🏢' },
           { name: '人员岗位', href: '/dashboard/staff', icon: '👥' },
+          { name: '变更记录', href: '/dashboard/profile-history', icon: '🕘' },
           { name: '岗位管理', href: '/dashboard/positions', icon: '💼' },
           { name: '审批流程', href: '/dashboard/approval-flows', icon: '🧭' },
           { name: '薪资管理', href: '/dashboard/salary', icon: '💰' },

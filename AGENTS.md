@@ -47,4 +47,4 @@ Recent commits are very short and informal (`bugfix`, `add export`, `opt`), so k
 
 ## Environment & Deployment Notes
 Do not commit local secrets from `.env`. If you change Prisma models, update the database workflow and mention whether `db:push` or `db:seed` is required. Deployment and offline bundle scripts are already in `scripts/`; reuse them instead of creating new ad hoc flows.
-- **Offline deployment** (`scripts/build-offline-bundle.ps1` → `scripts/deploy-offline.sh`): on Windows with internet, run the PowerShell script to build and export images. Copy the resulting bundle to the offline server, configure `.env.prod`, and run `scripts/deploy-offline.sh` to deploy with pure `docker run`.
+- **Offline deployment** (`scripts/build-offline-bundle.ps1` → `scripts/deploy-offline.sh`): on Windows with internet, run the PowerShell script to build and export the app Docker image. Copy the resulting bundle to the offline server, configure `.env.prod` (pointing `DATABASE_URL` to the external PostgreSQL instance), and run `scripts/deploy-offline.sh` to deploy the app container with pure `docker run`.

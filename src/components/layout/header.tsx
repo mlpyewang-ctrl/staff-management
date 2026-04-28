@@ -21,6 +21,7 @@ export function Header() {
     ...(canApprove ? [{ name: '审批中心', href: '/dashboard/approvals' }] : []),
     ...(isAdmin ? [{ name: '部门管理', href: '/dashboard/departments' }] : []),
     ...(isAdmin ? [{ name: '人员岗位', href: '/dashboard/staff' }] : []),
+    ...(isAdmin ? [{ name: '变更记录', href: '/dashboard/profile-history' }] : []),
     ...(isAdmin ? [{ name: '岗位管理', href: '/dashboard/positions' }] : []),
     { name: '个人信息', href: '/dashboard/profile' },
   ]

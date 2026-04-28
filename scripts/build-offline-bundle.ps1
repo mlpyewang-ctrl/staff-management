@@ -1,7 +1,6 @@
-﻿param(
+param(
   [string]$BundleDir = ".offline-bundle",
-  [string]$AppImage = "staff-management-app:offline",
-  [string]$PostgresImage = "postgres:16-alpine"
+  [string]$AppImage = "staff-management-app:offline"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,30 +23,24 @@ $scriptsDir = Join-Path $target 'scripts'
 New-Item -ItemType Directory -Force -Path $imagesDir | Out-Null
 New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
 
-Write-Host "[1/5] pull postgres image: $PostgresImage"
-docker pull $PostgresImage
-
-Write-Host "[2/5] build app image: $AppImage"
+Write-Host "[1/3] build app image: $AppImage"
 docker build -t $AppImage $root
 
-Write-Host "[3/5] save images"
+Write-Host "[2/3] save app image"
 docker save -o (Join-Path $imagesDir 'app-image.tar') $AppImage
-docker save -o (Join-Path $imagesDir 'postgres-image.tar') $PostgresImage
 
-Write-Host "[4/5] copy deployment files"
+Write-Host "[3/3] copy deployment files"
 Copy-Item (Join-Path $root '.env.prod.example') (Join-Path $target '.env.prod.example') -Force
-Copy-Item (Join-Path $root 'scripts\docker-entrypoint.sh') (Join-Path $scriptsDir 'docker-entrypoint.sh') -Force
 Copy-Item (Join-Path $root 'scripts\deploy-offline.sh') (Join-Path $scriptsDir 'deploy-offline.sh') -Force
 
 $meta = @"
 APP_IMAGE=$AppImage
-POSTGRES_IMAGE=$PostgresImage
 CREATED_AT=$(Get-Date -Format s)
 BUNDLE_DIR=$target
 "@
 Set-Content -Path (Join-Path $target 'bundle-info.txt') -Value $meta -Encoding utf8
 
-Write-Host "[5/5] bundle ready: $target"
+Write-Host "bundle ready: $target"
 Write-Host "Copy this folder to the offline server, then run:"
 Write-Host "  cd $target"
 Write-Host "  cp .env.prod.example .env.prod"

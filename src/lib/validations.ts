@@ -1,10 +1,21 @@
-﻿import { z } from 'zod'
+import { z } from 'zod'
+
+import { EDUCATION_OPTIONS } from '@/lib/profile-versioning'
 
 const optionalText = z
   .string()
   .trim()
   .optional()
   .transform((value) => value || undefined)
+
+const optionalEducation = z.preprocess((value) => {
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}, z.enum(EDUCATION_OPTIONS).optional())
 
 export const loginSchema = z.object({
   email: z.string().email('请输入有效的邮箱地址'),
@@ -67,8 +78,10 @@ export const approvalSchema = z.object({
 
 export const userProfileSchema = z.object({
   name: z.string().min(2, '姓名至少需要 2 个字符'),
+  education: optionalEducation,
   idCard: optionalText,
   phone: optionalText,
+  versionRemark: optionalText,
 })
 
 export const userJobAssignmentSchema = z.object({
@@ -81,6 +94,7 @@ export const userJobAssignmentSchema = z.object({
   startDate: optionalText,
   seniorityStartDate: optionalText,
   seniorityEndDate: optionalText,
+  versionRemark: optionalText,
 })
 
 export const positionSchema = z.object({
@@ -135,4 +149,5 @@ export const otherApplicationSchema = z.object({
   title: z.string().min(2, '标题至少需要 2 个字符'),
   content: z.string().min(10, '请详细描述申请内容（至少 10 个字符）'),
   attachments: z.string().optional(),
+  versionRemark: optionalText,
 })

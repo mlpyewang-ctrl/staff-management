@@ -12,6 +12,7 @@ import {
   type OvertimePhase,
 } from '@/lib/approval-workflow'
 import { requireManagerUser } from '@/lib/action-auth'
+import { recordDocumentVersionIfChanged } from '@/lib/profile-versioning'
 import { prisma } from '@/lib/prisma'
 import { approvalSchema } from '@/lib/validations'
 
@@ -510,6 +511,9 @@ async function handleOtherApplicationApproval(
           id: true,
           departmentId: true,
           name: true,
+          createdAt: true,
+          resumeDoc: true,
+          partyInfoDoc: true,
         },
       },
     },
@@ -588,8 +592,30 @@ async function handleOtherApplicationApproval(
         const userUpdateData: { resumeDoc?: string; partyInfoDoc?: string } = {}
         if (validatedData.applicationType === 'RESUME_UPDATE') {
           userUpdateData.resumeDoc = otherApplication.attachments
+          await recordDocumentVersionIfChanged({
+            tx,
+            type: 'RESUME',
+            userId: otherApplication.userId,
+            currentAttachment: otherApplication.user.resumeDoc || null,
+            nextAttachment: otherApplication.attachments,
+            userCreatedAt: otherApplication.user.createdAt,
+            remark: otherApplication.versionRemark || '履历信息变更',
+            effectiveFrom: now,
+            createdBy: approver.id,
+          })
         } else if (validatedData.applicationType === 'PARTY_INFO_UPDATE') {
           userUpdateData.partyInfoDoc = otherApplication.attachments
+          await recordDocumentVersionIfChanged({
+            tx,
+            type: 'PARTY',
+            userId: otherApplication.userId,
+            currentAttachment: otherApplication.user.partyInfoDoc || null,
+            nextAttachment: otherApplication.attachments,
+            userCreatedAt: otherApplication.user.createdAt,
+            remark: otherApplication.versionRemark || '党员信息变更',
+            effectiveFrom: now,
+            createdBy: approver.id,
+          })
         }
 
         if (Object.keys(userUpdateData).length > 0) {
@@ -603,6 +629,8 @@ async function handleOtherApplicationApproval(
 
     revalidatePath('/dashboard/approvals')
     revalidatePath('/dashboard/other')
+    revalidatePath('/dashboard/profile')
+    revalidatePath('/dashboard/profile-history')
 
     if (isFinalStep) {
       return { success: '审批完成，状态已更新为已完成' }

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
@@ -55,6 +55,7 @@ const emptyFormState = {
   startDate: '',
   seniorityStartDate: '',
   seniorityEndDate: '',
+  versionRemark: '',
   role: 'EMPLOYEE' as EditableRole,
 }
 
@@ -147,6 +148,7 @@ export default function StaffDashboardPage() {
       startDate: formatDateInputValue(selectedUser.startDate),
       seniorityStartDate: formatDateInputValue(selectedUser.seniorityStartDate),
       seniorityEndDate: formatDateInputValue(selectedUser.seniorityEndDate),
+      versionRemark: '',
       role: selectedUser.role === 'MANAGER' ? 'MANAGER' : 'EMPLOYEE',
     })
   }, [selectedUser])
@@ -194,6 +196,7 @@ export default function StaffDashboardPage() {
     submitData.append('startDate', formState.startDate)
     submitData.append('seniorityStartDate', formState.seniorityStartDate)
     submitData.append('seniorityEndDate', formState.seniorityEndDate)
+    submitData.append('versionRemark', formState.versionRemark)
     if (selectedUser.role !== 'ADMIN') {
       submitData.append('role', formState.role)
     }
@@ -395,6 +398,22 @@ export default function StaffDashboardPage() {
                     {selectedPosition.level ? `；默认职级：${selectedPosition.level}` : ''}
                   </div>
                 )}
+
+                                <div className="space-y-2">
+                  <Label htmlFor="versionRemark">变更备注</Label>
+                  <Input
+                    id="versionRemark"
+                    value={formState.versionRemark}
+                    placeholder="如：因升职调整为主管、岗位变更为招商主管"
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        versionRemark: event.target.value,
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500">当本次保存涉及角色、岗位、职级或日期变更时，可填写备注用于操作留痕。</p>
+                </div>
 
                 {message.text && (
                   <div className={`text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>

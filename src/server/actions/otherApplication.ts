@@ -55,7 +55,15 @@ export async function createOtherApplication(formData: FormData) {
       title: formData.get('title'),
       content: formData.get('content'),
       attachments: formData.get('attachments'),
+      versionRemark: formData.get('versionRemark'),
     })
+
+    if (
+      ['RESUME_UPDATE', 'PARTY_INFO_UPDATE'].includes(validatedData.type) &&
+      !validatedData.versionRemark
+    ) {
+      return { error: '请填写版本变更备注' }
+    }
 
     const created = await prisma.otherApplication.create({
       data: {
@@ -64,6 +72,7 @@ export async function createOtherApplication(formData: FormData) {
         title: validatedData.title,
         content: validatedData.content,
         attachments: validatedData.attachments || null,
+        versionRemark: validatedData.versionRemark || null,
         status: action === 'submit' ? 'PENDING' : 'DRAFT',
       },
     })
@@ -129,7 +138,15 @@ export async function updateOtherApplication(formData: FormData) {
       title: formData.get('title'),
       content: formData.get('content'),
       attachments: formData.get('attachments'),
+      versionRemark: formData.get('versionRemark'),
     })
+
+    if (
+      ['RESUME_UPDATE', 'PARTY_INFO_UPDATE'].includes(validatedData.type) &&
+      !validatedData.versionRemark
+    ) {
+      return { error: '请填写版本变更备注' }
+    }
 
     const action = formData.get('action') === 'submit' ? 'submit' : 'save'
     const nextStatus = action === 'submit' ? 'PENDING' : 'DRAFT'
@@ -150,6 +167,7 @@ export async function updateOtherApplication(formData: FormData) {
           title: validatedData.title,
           content: validatedData.content,
           attachments: validatedData.attachments || null,
+          versionRemark: validatedData.versionRemark || null,
           status: nextStatus,
           approverId: null,
           approvedAt: null,

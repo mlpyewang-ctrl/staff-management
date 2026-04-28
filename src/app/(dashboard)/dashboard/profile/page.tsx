@@ -1,18 +1,21 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
+
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
+import { parseAttachment } from '@/lib/attachment'
+import { EDUCATION_OPTIONS } from '@/lib/profile-versioning'
 import {
   calculateAnnualLeaveEntitlement,
   calculateCompletedYears,
   calculateSeniorityPay,
   formatDateInputValue,
 } from '@/lib/seniority'
-import { Button } from '@/components/ui/button'
-import { parseAttachment } from '@/lib/attachment'
 import { WordPreview } from '@/components/word-preview'
 import { getUserProfile, updateUserProfile } from '@/server/actions/user'
 
@@ -20,6 +23,7 @@ interface UserProfile {
   id: string
   email: string
   name: string
+  education?: string | null
   idCard?: string | null
   phone?: string | null
   salary?: number | null
@@ -108,7 +112,7 @@ export default function ProfileDashboardPage() {
       </div>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        部门、岗位、职级、入职日期和工龄信息由管理员在“人员岗位”模块统一维护，个人页面只展示结果。
+        部门、岗位、职级、入职日期和工龄信息由管理员统一维护，个人页面只展示结果。
       </div>
 
       <Card>
@@ -133,6 +137,17 @@ export default function ProfileDashboardPage() {
               <div className="space-y-2">
                 <Label htmlFor="phone">电话号码</Label>
                 <Input id="phone" name="phone" defaultValue={profile?.phone || ''} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="education">学历</Label>
+                <Select id="education" name="education" defaultValue={profile?.education || ''}>
+                  <option value="">未填写</option>
+                  {EDUCATION_OPTIONS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="startDate">入职日期</Label>
@@ -185,7 +200,7 @@ export default function ProfileDashboardPage() {
                 <Label htmlFor="seniorityPayDisplay">工龄工资</Label>
                 <Input
                   id="seniorityPayDisplay"
-                  value={`${seniorityPayText}（满 ${employmentYears} 年，每满 1 年 +100，最多 +1000）`}
+                  value={`${seniorityPayText} (满 ${employmentYears} 年, 每满 1 年 +100, 最多 +1000)`}
                   disabled
                 />
               </div>
@@ -197,9 +212,18 @@ export default function ProfileDashboardPage() {
                 <Label htmlFor="annualLeaveEntitlementDisplay">年假标准</Label>
                 <Input
                   id="annualLeaveEntitlementDisplay"
-                  value={`${annualLeaveEntitlement} 天（按 ${annualLeaveYears} 年工龄计算）`}
+                  value={`${annualLeaveEntitlement} 天 (按 ${annualLeaveYears} 年工龄计算)`}
                   disabled
                 />
+              </div>
+                            <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="versionRemark">变更备注</Label>
+                <Input
+                  id="versionRemark"
+                  name="versionRemark"
+                  placeholder="如：手机号更新、身份证补录、学历变更"
+                />
+                <p className="text-xs text-gray-500">如有字段变更，可填写备注用于操作留痕。</p>
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -21,16 +22,19 @@ type OtherApplicationDetail = Awaited<ReturnType<typeof getOtherApplication>>
 
 const typePlaceholders: Record<string, { title: string; content: string }> = {
   RESIGNATION_HANDOVER: {
-    title: '请输入离职交接标题，如：离职交接申请-张三',
-    content: '请详细描述离职交接内容，包括：\n1. 离职原因\n2. 工作交接清单\n3. 交接对象\n4. 预计离职日期\n5. 其他需要说明的事项',
+    title: '请输入离职交接标题, 如: 离职交接申请-张三',
+    content:
+      '请详细描述离职交接内容, 包括:\n1. 离职原因\n2. 工作交接清单\n3. 交接对象\n4. 预计离职日期\n5. 其他需要说明的事项',
   },
   RESUME_UPDATE: {
-    title: '请输入履历更新标题，如：个人履历更新申请',
-    content: '请详细描述需要更新的履历内容，包括：\n1. 更新项目（学历、工作经历、技能证书等）\n2. 更新前的信息\n3. 更新后的信息\n4. 更新原因\n5. 相关证明材料说明',
+    title: '请输入履历更新标题, 如: 个人履历更新申请',
+    content:
+      '请详细描述需要更新的履历内容, 包括:\n1. 更新项目(学历、工作经历、技能证书等)\n2. 更新前的信息\n3. 更新后的信息\n4. 更新原因\n5. 相关证明材料说明',
   },
   PARTY_INFO_UPDATE: {
-    title: '请输入党员信息更新标题，如：党员信息变更申请',
-    content: '请详细描述需要更新的党员信息，包括：\n1. 更新项目（党组织关系、党内职务、联系方式等）\n2. 更新前的信息\n3. 更新后的信息\n4. 更新原因\n5. 相关证明材料说明',
+    title: '请输入党员信息更新标题, 如: 党员信息变更申请',
+    content:
+      '请详细描述需要更新的党员信息, 包括:\n1. 更新项目(党组织关系、党内职务、联系方式等)\n2. 更新前的信息\n3. 更新后的信息\n4. 更新原因\n5. 相关证明材料说明',
   },
 }
 
@@ -118,7 +122,7 @@ export default function OtherEditPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">编辑其他事项申请</h1>
-          <p className="mt-1 text-gray-600">保存 / 提交 / 删除，提交后将进入审批流程。</p>
+          <p className="mt-1 text-gray-600">保存、提交或删除草稿, 提交后将进入审批流程。</p>
         </div>
       </div>
 
@@ -185,16 +189,27 @@ export default function OtherEditPage() {
                   </a>
                 </div>
                 <WordUploadField defaultValue={initial?.attachments} />
+                <div className="space-y-2">
+                  <Label htmlFor="versionRemark">版本变更备注</Label>
+                  <Input
+                    id="versionRemark"
+                    name="versionRemark"
+                    required
+                    disabled={isReadonly}
+                    defaultValue={initial?.versionRemark ?? ''}
+                    placeholder={applicationType === 'RESUME_UPDATE' ? '如: 新增学历与工作经历' : '如: 党组织关系转入'}
+                  />
+                </div>
               </div>
             )}
 
             {!isReadonly && (
               <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-600">
-                <p>提示：</p>
+                <p>提示:</p>
                 <ul className="ml-4 mt-1 list-disc">
-                  <li>请根据选择的事项类型填写相应的内容</li>
-                  <li>内容至少需要 10 个字符</li>
-                  <li>保存后可在列表中编辑，提交后进入审批流程</li>
+                  <li>请根据选择的事项类型填写对应内容</li>
+                  <li>申请内容至少需要 10 个字符</li>
+                  <li>保存后可在列表中继续编辑, 提交后进入审批流程</li>
                 </ul>
               </div>
             )}
@@ -236,7 +251,8 @@ export default function OtherEditPage() {
                 <Link href="/dashboard/other">返回</Link>
               </Button>
             </div>
-            {isReadonly && <div className="text-sm text-gray-500">仅申请人本人可编辑草稿；提交后需等待下一步审批或退回。</div>}
+
+            {isReadonly && <div className="text-sm text-gray-500">仅申请人本人可编辑草稿, 提交后需等待审批或退回。</div>}
           </form>
         </CardContent>
       </Card>

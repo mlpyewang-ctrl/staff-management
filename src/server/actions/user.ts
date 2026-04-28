@@ -1,9 +1,11 @@
-﻿'use server'
+'use server'
 
 import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
+
 import { authOptions } from '@/lib/auth'
 import { ensureLeaveBalance } from '@/lib/leave-balance'
+import { recordProfileChangeLogIfChanged } from '@/lib/profile-change-log'
 import { prisma } from '@/lib/prisma'
 import { userJobAssignmentSchema, userProfileSchema } from '@/lib/validations'
 
@@ -16,6 +18,7 @@ function parseOptionalDate(value: string | undefined, label: string) {
 
   const [year, month, day] = value.split('-').map(Number)
   const parsedDate = new Date(year, (month || 1) - 1, day || 1)
+
   if (Number.isNaN(parsedDate.getTime())) {
     throw new Error(`${label}格式无效`)
   }
@@ -70,9 +73,39 @@ export async function getUserProfile(userId: string) {
   }
 }
 
+export async function getUserProfileChangeHistory(userId: string) {
+  try {
+    await ensureAdmin()
+
+    return await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profileChangeLogs: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            actor: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    })
+  } catch (error) {
+    console.error('获取用户变更记录失败:', error)
+    return null
+  }
+}
+
 export async function updateUserProfile(userId: string, formData: FormData) {
   try {
-    await ensureSelfOrAdmin(userId)
+    const sessionUser = await ensureSelfOrAdmin(userId)
 
     const getString = (key: string) => {
       const value = formData.get(key)
@@ -81,34 +114,76 @@ export async function updateUserProfile(userId: string, formData: FormData) {
 
     const validated = userProfileSchema.parse({
       name: getString('name'),
+      education: getString('education'),
       idCard: getString('idCard'),
       phone: getString('phone'),
+      versionRemark: getString('versionRemark'),
     })
 
-    const user = await prisma.user.update({
+    const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      data: {
-        name: validated.name,
-        idCard: validated.idCard || null,
-        phone: validated.phone || null,
-      },
       include: {
         department: true,
         position: true,
       },
     })
 
+    if (!existingUser) {
+      return { error: '未找到对应用户' }
+    }
+
+    const nextProfileData = {
+      name: validated.name,
+      education: validated.education || null,
+      idCard: validated.idCard || null,
+      phone: validated.phone || null,
+    }
+
+    let recordedChange = false
+
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: nextProfileData,
+        include: {
+          department: true,
+          position: true,
+        },
+      })
+
+      recordedChange = await recordProfileChangeLogIfChanged({
+        tx,
+        userId,
+        actorId: sessionUser.id,
+        actionType: 'PROFILE_UPDATE',
+        remark: getString('versionRemark'),
+        changes: [
+          { label: '姓名', before: existingUser.name, after: nextProfileData.name },
+          { label: '学历', before: existingUser.education, after: nextProfileData.education },
+          { label: '身份证号', before: existingUser.idCard, after: nextProfileData.idCard },
+          { label: '手机号', before: existingUser.phone, after: nextProfileData.phone },
+        ],
+      })
+
+      return updatedUser
+    })
+
     await ensureLeaveBalance(userId)
 
     revalidatePath('/dashboard/profile')
+    revalidatePath('/dashboard/profile-history')
     revalidatePath('/dashboard/staff')
     revalidatePath('/dashboard/leave')
 
-    return { success: '个人信息已更新', user }
+    return {
+      success: recordedChange ? '个人信息已更新，并已记录变更' : '个人信息已更新',
+      user,
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
     }
+
     return { error: '更新失败，请稍后重试' }
   }
 }
@@ -122,6 +197,7 @@ export async function getStaffJobAssignments() {
       name: true,
       email: true,
       role: true,
+      education: true,
       level: true,
       startDate: true,
       seniorityStartDate: true,
@@ -149,7 +225,7 @@ export async function getStaffJobAssignments() {
 
 export async function updateUserJobAssignment(userId: string, formData: FormData) {
   try {
-    await ensureAdmin()
+    const sessionUser = await ensureAdmin()
 
     const getString = (key: string) => {
       const value = formData.get(key)
@@ -163,6 +239,7 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       startDate: getString('startDate'),
       seniorityStartDate: getString('seniorityStartDate'),
       seniorityEndDate: getString('seniorityEndDate'),
+      versionRemark: getString('versionRemark'),
     })
 
     const roleValue = getString('role')
@@ -170,45 +247,59 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
 
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        role: true,
-        positionId: true,
+      include: {
+        department: true,
+        position: true,
       },
     })
 
     if (!existingUser) {
-      return { error: '未找到对应人员' }
+      return { error: '未找到对应员工' }
     }
+
+    let departmentName: string | null = existingUser.department?.name || null
+    let positionName: string | null = existingUser.position?.name || null
 
     if (validated.departmentId) {
       const department = await prisma.department.findUnique({
         where: { id: validated.departmentId },
-        select: { id: true },
+        select: { id: true, name: true },
       })
 
       if (!department) {
         return { error: '所选部门不存在' }
       }
+
+      departmentName = department.name
+    } else {
+      departmentName = null
     }
 
     if (validated.positionId) {
       const position = await prisma.position.findUnique({
         where: { id: validated.positionId },
-        select: { id: true },
+        select: { id: true, name: true },
       })
 
       if (!position) {
         return { error: '所选岗位不存在' }
       }
+
+      positionName = position.name
+    } else {
+      positionName = null
     }
 
-    if (normalizedRole && !editableRoles.includes(normalizedRole as (typeof editableRoles)[number]) && normalizedRole !== 'ADMIN') {
+    if (
+      normalizedRole &&
+      !editableRoles.includes(normalizedRole as (typeof editableRoles)[number]) &&
+      normalizedRole !== 'ADMIN'
+    ) {
       return { error: '角色参数无效' }
     }
 
     if (normalizedRole === 'ADMIN' && existingUser.role !== 'ADMIN') {
-      return { error: '不能在此页面将人员设置为管理员' }
+      return { error: '不能在此页面将人员设为管理员' }
     }
 
     const startDate = parseOptionalDate(validated.startDate, '入职日期')
@@ -219,59 +310,87 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       return { error: '工龄截止日期不能早于工龄起始日期' }
     }
 
-    const shouldResetSalary = Boolean(
-      validated.positionId && validated.positionId !== existingUser.positionId
-    )
+    const nextRole = normalizedRole || existingUser.role
+    const nextJobData = {
+      departmentId: validated.departmentId || null,
+      positionId: validated.positionId || null,
+      level: validated.level || null,
+      startDate,
+      seniorityStartDate,
+      seniorityEndDate,
+      ...(normalizedRole ? { role: normalizedRole } : {}),
+      ...(validated.positionId && validated.positionId !== existingUser.positionId ? { salary: null } : {}),
+    }
 
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        departmentId: validated.departmentId || null,
-        positionId: validated.positionId || null,
-        level: validated.level || null,
-        startDate,
-        seniorityStartDate,
-        seniorityEndDate,
-        ...(normalizedRole ? { role: normalizedRole } : {}),
-        ...(shouldResetSalary ? { salary: null } : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        level: true,
-        departmentId: true,
-        positionId: true,
-        department: {
-          select: {
-            id: true,
-            name: true,
+    let recordedChange = false
+
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: nextJobData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          education: true,
+          level: true,
+          departmentId: true,
+          positionId: true,
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          position: {
+            select: {
+              id: true,
+              name: true,
+              level: true,
+              salary: true,
+            },
           },
         },
-        position: {
-          select: {
-            id: true,
-            name: true,
-            level: true,
-            salary: true,
-          },
-        },
-      },
+      })
+
+      recordedChange = await recordProfileChangeLogIfChanged({
+        tx,
+        userId,
+        actorId: sessionUser.id,
+        actionType: 'JOB_ASSIGNMENT_UPDATE',
+        remark: getString('versionRemark'),
+        changes: [
+          { label: '角色', before: existingUser.role, after: nextRole },
+          { label: '部门', before: existingUser.department?.name || null, after: departmentName },
+          { label: '岗位', before: existingUser.position?.name || null, after: positionName },
+          { label: '职级', before: existingUser.level, after: nextJobData.level },
+          { label: '入职日期', before: existingUser.startDate, after: startDate },
+          { label: '工龄起始日期', before: existingUser.seniorityStartDate, after: seniorityStartDate },
+          { label: '工龄截止日期', before: existingUser.seniorityEndDate, after: seniorityEndDate },
+        ],
+      })
+
+      return updatedUser
     })
 
     await ensureLeaveBalance(userId)
 
     revalidatePath('/dashboard/staff')
     revalidatePath('/dashboard/profile')
+    revalidatePath('/dashboard/profile-history')
     revalidatePath('/dashboard/leave')
     revalidatePath('/dashboard/salary')
 
-    return { success: '人员信息已更新', user }
+    return {
+      success: recordedChange ? '人员信息已更新，并已记录变更' : '人员信息已更新',
+      user,
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
     }
+
     return { error: '更新岗位信息失败，请稍后重试' }
   }
 }
