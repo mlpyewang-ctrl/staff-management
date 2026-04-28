@@ -1,4 +1,4 @@
-﻿# 劳务派遣员工管理系统
+# 劳务派遣员工管理系统
 
 一个基于 `Next.js 14 + Prisma + PostgreSQL` 的劳务派遣员工管理系统，覆盖员工档案、部门岗位、加班、请假、调休、绩效、审批流和薪资管理等场景。
 
@@ -29,7 +29,6 @@
 - ORM：`Prisma`
 - 认证：`NextAuth.js`
 - 测试：`Vitest`
-- 部署：`Docker`、`Docker Compose`
 
 ## 本地开发
 
@@ -37,7 +36,7 @@
 
 - `Node.js 18+`，推荐 `Node.js 20`
 - `npm 9+`
-- `Docker` / `Docker Compose`
+- `PostgreSQL`（本地或远程）
 
 ### 初始化环境变量
 
@@ -58,7 +57,6 @@ Copy-Item .env.example .env
 | `DATABASE_URL` | PostgreSQL 连接串 |
 | `NEXTAUTH_SECRET` | NextAuth 加密密钥 |
 | `NEXTAUTH_URL` | 应用访问地址 |
-| `POSTGRES_*` | 本地 Docker PostgreSQL 配置 |
 
 生成 `NEXTAUTH_SECRET`：
 
@@ -69,7 +67,6 @@ openssl rand -base64 32
 ### 启动本地环境
 
 ```bash
-docker compose up -d
 npm install
 npm run db:push
 npm run db:seed
@@ -90,8 +87,6 @@ npm run dev
 | `npm run db:push` | 同步 Prisma Schema 到数据库 |
 | `npm run db:seed` | 初始化示例数据 |
 | `npm run db:studio` | 打开 Prisma Studio |
-| `docker compose up -d` | 启动本地 PostgreSQL |
-| `docker compose down` | 停止本地 PostgreSQL |
 
 ## 测试账号
 
@@ -104,201 +99,88 @@ npm run dev
 | 人事部主管 | `hr.manager@zltech.com` |
 | 员工示例 | `wang.qiang@zltech.com`、`zhao.li@zltech.com`、`chen.ming@zltech.com` |
 
-## 离线服务器部署
+## 离线服务器部署（Native 方式）
 
-你的场景是离线服务器，所以推荐使用“联网环境提前打包镜像 + 离线服务器直接 `docker load` 运行”的方式。
+本项目使用 **Native 原生部署**：在联网 Windows 机器上打包，拷贝到离线 Linux 服务器（如 CentOS 7.9）直接运行 Node.js。
 
-这套方案已经在仓库里准备好：
+### 环境要求
 
-- `Dockerfile`：构建应用镜像
-- `docker-compose.prod.yml`：生产部署编排
-- `.env.prod.example`：生产环境变量模板
-- `scripts/docker-entrypoint.sh`：容器启动时自动执行 `prisma db push`
-- `scripts/build-offline-bundle.ps1`：Windows 联网环境打包脚本
-- `scripts/build-offline-bundle.sh`：Linux/macOS 联网环境打包脚本
-- `scripts/install-offline-bundle.sh`：离线服务器导入并启动脚本
+- 联网打包机：Windows 10+，已安装 Node.js 20 + npm
+- 离线服务器：CentOS 7.9，安装 [unofficial-builds.nodejs.org](https://unofficial-builds.nodejs.org/) 的 `linux-x64-glibc-217` 版本 Node.js
+- 数据库：外部 PostgreSQL（可部署在独立服务器）
 
-### 方案说明
-
-在有网络的机器上：
-1. 拉取基础镜像依赖（如 `postgres:16-alpine`）
-2. 构建应用镜像
-3. 将应用镜像和数据库镜像导出为 `.tar`
-4. 连同 `docker-compose.prod.yml`、`.env.prod.example` 一起打成离线发布目录
-
-在离线服务器上：
-1. 拷贝离线发布目录
-2. 配置 `.env.prod`
-3. 执行 `docker load`
-4. 直接 `docker compose up -d`
-
-也就是说，离线服务器不需要联网拉依赖、不需要联网拉镜像。
-
-## 1. 联网机器打离线包
-
-### Windows PowerShell
+### 1. 联网机器打包
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-offline-bundle.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build-offline-native.ps1
 ```
 
-### Linux / macOS
-
-```bash
-sh ./scripts/build-offline-bundle.sh
-```
-
-执行完成后，会生成一个类似下面的目录：
+执行完成后，会在 `.offline-native-bundle/` 下生成：
 
 ```text
-.offline-bundle/
-└─ 20260320-143000/
-   ├─ bundle-info.txt
-   ├─ docker-compose.prod.yml
+.offline-native-bundle/
+└─ 20260428-123456/
+   ├─ package.json
+   ├─ package-lock.json
+   ├─ next.config.js
    ├─ .env.prod.example
-   ├─ images/
-   │  ├─ app-image.tar
-   │  └─ postgres-image.tar
-   └─ scripts/
-      ├─ docker-entrypoint.sh
-      └─ install-offline-bundle.sh
+   ├─ .env.example
+   ├─ prisma/
+   ├─ public/
+   ├─ .next/
+   └─ node_modules/
+└─ staff-management-20260428-123456.tar.gz
 ```
 
-默认镜像：
-- 应用镜像：`staff-management-app:offline`
-- 数据库镜像：`postgres:16-alpine`
+### 2. 拷贝到离线服务器
 
-如果你要改镜像名，可在脚本里传参或设置环境变量。
-
-## 2. 拷贝到离线服务器
-
-把生成的整个离线目录拷到服务器，例如：
-
-```text
-/opt/staff-management-offline/
-```
-
-拷贝方式不限：
-- U 盘
-- 局域网共享
-- 堡垒机中转
-- `scp` 到一台可达机器后再转存
-
-## 3. 在离线服务器上启动
-
-进入离线目录：
+把 `.tar.gz` 包拷贝到离线服务器任意目录：
 
 ```bash
-cd /opt/staff-management-offline/20260320-143000
+# 服务器上解压
+tar -xzf staff-management-20260428-123456.tar.gz
+cd staff-management-20260428-123456
 ```
 
-复制环境变量模板：
+### 3. 配置环境变量
 
 ```bash
-cp .env.prod.example .env.prod
+cp .env.prod.example .env
 ```
 
-然后修改 `.env.prod`，重点确认这些值：
+编辑 `.env`，重点配置：
 
 | 变量 | 说明 |
 | --- | --- |
-| `APP_PORT` | 对外端口，默认 `3000` |
-| `POSTGRES_PORT` | 数据库对外端口，默认 `5432` |
-| `POSTGRES_USER` | PostgreSQL 用户 |
-| `POSTGRES_PASSWORD` | PostgreSQL 密码 |
-| `POSTGRES_DB` | PostgreSQL 数据库名 |
-| `DATABASE_URL` | 应用连接数据库的地址，默认走 compose 内部 `postgres` 服务 |
+| `DATABASE_URL` | 外部 PostgreSQL 连接串 |
 | `NEXTAUTH_SECRET` | 生产密钥，必须替换 |
 | `NEXTAUTH_URL` | 访问地址，如 `http://服务器IP:3000` |
+| `TZ` | 时区，默认 `Asia/Shanghai` |
 | `RUN_DB_PUSH` | 启动时自动同步表结构，默认 `true` |
 | `RUN_DB_SEED` | 是否初始化种子数据，默认 `false` |
 
-启动：
+### 4. 启动服务
 
 ```bash
-sh scripts/install-offline-bundle.sh
+chmod +x node_modules/.bin/*
+npm start
 ```
 
-这个脚本会自动执行：
+应用默认监听 `3000` 端口，访问 `http://服务器IP:3000`。
 
-```bash
-docker load -i images/postgres-image.tar
-docker load -i images/app-image.tar
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
-```
+### 5. 后续版本更新
 
-### 查看状态
+重复打包 → 拷贝 → 解压 → 覆盖旧目录 → `npm start` 即可。
 
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod ps
-```
-
-### 查看日志
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f app
-```
-
-### 停止服务
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod down
-```
-
-## 4. 后续版本更新
-
-如果有新版本，重复一遍“联网机器打包 -> 拷贝到离线服务器 -> 重新 load + up -d”即可。
-
-推荐更新方式：
-
-1. 在联网机器重新执行离线打包脚本
-2. 把新的离线目录拷到服务器
-3. 进入新目录后再次执行：
-
-```bash
-sh scripts/install-offline-bundle.sh
-```
-
-Docker 会用新镜像替换旧容器。
-
-## 生产环境文件说明
-
-### `docker-compose.prod.yml`
-
-- 同时启动 `app` 和 `postgres`
-- `app` 默认使用本地镜像 `staff-management-app:offline`
-- `postgres` 默认使用本地镜像 `postgres:16-alpine`
-
-### `.env.prod.example`
-
-默认示例：
-
-```env
-APP_PORT=3000
-POSTGRES_PORT=5432
-POSTGRES_IMAGE=postgres:16-alpine
-POSTGRES_USER=staff
-POSTGRES_PASSWORD=change_me
-POSTGRES_DB=staff_management
-TZ=Asia/Shanghai
-
-IMAGE_NAME=staff-management-app
-IMAGE_TAG=offline
-
-DATABASE_URL=postgresql://staff:change_me@postgres:5432/staff_management?schema=public
-NEXTAUTH_SECRET=replace_with_a_random_secret
-NEXTAUTH_URL=http://your-server-ip:3000
-
-RUN_DB_PUSH=true
-RUN_DB_SEED=false
-```
+> 首次部署会自动 `prisma db push` 同步表结构。如需初始化数据，可临时设置 `RUN_DB_SEED=true`。
 
 ## 项目结构
 
 ```text
 staff-management/
 ├─ prisma/                    # Prisma schema 与种子数据
-├─ scripts/                   # 启动、部署、离线打包脚本
+├─ scripts/                   # 部署与离线打包脚本
+│  └─ build-offline-native.ps1 # Native 离线打包脚本
 ├─ src/
 │  ├─ app/                    # Next.js App Router 页面
 │  ├─ components/             # UI 与布局组件
@@ -306,20 +188,20 @@ staff-management/
 │  ├─ server/actions/         # Server Actions
 │  ├─ test/                   # 测试初始化
 │  └─ types/                  # 类型定义
-├─ .github/workflows/         # GitHub Actions 工作流（可选）
-├─ docker-compose.yml         # 本地 PostgreSQL
-├─ docker-compose.prod.yml    # 生产部署编排
-├─ Dockerfile                 # 应用镜像
+├─ .env.example               # 本地开发环境变量模板
+├─ .env.prod.example          # 生产环境变量模板
+├─ next.config.js             # Next.js 配置
 └─ README.md
 ```
 
 ## 注意事项
 
 - 当前仓库没有 Prisma Migration 文件，生产环境默认通过 `prisma db push` 同步表结构
-- 如果后续改为正式 migration，建议将容器启动逻辑改为 `prisma migrate deploy`
-- 离线服务器首次部署前，请先确认已安装 `Docker` 和 `Docker Compose`
-- 如果服务器完全不能联网，`postgres` 镜像也必须通过离线包带过去，所以不要只拷应用镜像
-- `.offline-bundle/` 目录建议不要提交到 Git
+- 如果后续改为正式 migration，建议将启动逻辑改为 `prisma migrate deploy`
+- 离线服务器需提前安装 Node.js（glibc-217 非官方构建版本）
+- `.offline-native-bundle/` 目录不要提交到 Git
+- 项目使用 `bcryptjs`（纯 JS）替代 `bcrypt`（C++ 原生），因此 Windows 打包的 `node_modules` 可直接在 Linux 运行
+- Prisma 已配置 `binaryTargets = ["native", "rhel-openssl-1.0.x"]`，CentOS 7 查询引擎已包含在 bundle 中
 
 ## 验证
 
