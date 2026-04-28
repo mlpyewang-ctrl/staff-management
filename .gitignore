@@ -54,4 +54,4 @@ prisma/*.db-journal
 tmp/
 temp/
 .cache/
-.offline-bundle/
+.offline*/
