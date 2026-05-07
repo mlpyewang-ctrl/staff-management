@@ -89,62 +89,77 @@ async function main() {
   ]);
   console.log(`创建 ${departments.length} 个部门`);
 
-  // 创建岗位
+  const techDept = departments.find((d) => d.code === "TECH")!;
+  const hrDept = departments.find((d) => d.code === "HR")!;
+  const financeDept = departments.find((d) => d.code === "FINANCE")!;
+
+  // 创建岗位（必须先有部门）
   const positions = await Promise.all([
     prisma.position.create({
       data: {
         name: "高级工程师",
-        salary: 25000,
-        level: "P7",
+        departmentId: techDept.id,
+        baseSalary: 25000,
+        hasSeniorityPay: true,
+        seniorityPayPerYear: 100,
+        maxSeniorityPay: 1000,
       },
     }),
     prisma.position.create({
       data: {
         name: "工程师",
-        salary: 18000,
-        level: "P6",
+        departmentId: techDept.id,
+        baseSalary: 18000,
+        hasSeniorityPay: true,
+        seniorityPayPerYear: 100,
+        maxSeniorityPay: 1000,
       },
     }),
     prisma.position.create({
       data: {
         name: "初级工程师",
-        salary: 12000,
-        level: "P5",
+        departmentId: techDept.id,
+        baseSalary: 12000,
+        hasSeniorityPay: true,
+        seniorityPayPerYear: 100,
+        maxSeniorityPay: 1000,
       },
     }),
     prisma.position.create({
       data: {
         name: "人事专员",
-        salary: 10000,
-        level: "P4",
+        departmentId: hrDept.id,
+        baseSalary: 10000,
+        hasSeniorityPay: true,
+        seniorityPayPerYear: 100,
+        maxSeniorityPay: 1000,
       },
     }),
     prisma.position.create({
       data: {
         name: "财务专员",
-        salary: 11000,
-        level: "P4",
+        departmentId: financeDept.id,
+        baseSalary: 11000,
+        hasSeniorityPay: true,
+        seniorityPayPerYear: 100,
+        maxSeniorityPay: 1000,
       },
     }),
   ]);
   console.log(`创建 ${positions.length} 个岗位`);
 
-  const techDept = departments.find((d) => d.code === "TECH")!;
-  const hrDept = departments.find((d) => d.code === "HR")!;
-  const financeDept = departments.find((d) => d.code === "FINANCE")!;
-
-  const seniorEng = positions.find((p) => p.name === "高级工程师")!;
-  const engineer = positions.find((p) => p.name === "工程师")!;
-  const juniorEng = positions.find((p) => p.name === "初级工程师")!;
-  const hrSpecialist = positions.find((p) => p.name === "人事专员")!;
-  const financeSpecialist = positions.find((p) => p.name === "财务专员")!;
+  const seniorEng = positions.find((p) => p.name === "高级工程师" && p.departmentId === techDept.id)!;
+  const engineer = positions.find((p) => p.name === "工程师" && p.departmentId === techDept.id)!;
+  const juniorEng = positions.find((p) => p.name === "初级工程师" && p.departmentId === techDept.id)!;
+  const hrSpecialist = positions.find((p) => p.name === "人事专员" && p.departmentId === hrDept.id)!;
+  const financeSpecialist = positions.find((p) => p.name === "财务专员" && p.departmentId === financeDept.id)!;
 
   const hashedPassword = await bcrypt.hash("password123", 10);
 
   // 创建管理员
   const admin = await prisma.user.create({
     data: {
-      email: "admin@zltech.com",
+      username: "admin",
       name: "系统管理员",
       password: hashedPassword,
       role: "ADMIN",
@@ -162,7 +177,7 @@ async function main() {
   // 创建部门经理
   const techManager = await prisma.user.create({
     data: {
-      email: "tech.manager@zltech.com",
+      username: "tech_manager",
       name: "张技术",
       password: hashedPassword,
       role: "MANAGER",
@@ -178,7 +193,7 @@ async function main() {
 
   const hrManager = await prisma.user.create({
     data: {
-      email: "hr.manager@zltech.com",
+      username: "hr_manager",
       name: "李人事",
       password: hashedPassword,
       role: "MANAGER",
@@ -193,11 +208,29 @@ async function main() {
   });
   console.log(`创建 2 位部门经理`);
 
+  // 创建考勤员
+  const attendanceClerk = await prisma.user.create({
+    data: {
+      username: "attendance_clerk",
+      name: "王考勤",
+      password: hashedPassword,
+      role: "ATTENDANCE_CLERK",
+      phone: "13800000010",
+      salary: 12000,
+      level: "P4",
+      departmentId: hrDept.id,
+      positionId: hrSpecialist.id,
+      companyId: company.id,
+      startDate: new Date("2021-03-01"),
+    },
+  });
+  console.log(`创建考勤员: ${attendanceClerk.name}`);
+
   // 创建普通员工
   const employees = await Promise.all([
     prisma.user.create({
       data: {
-        email: "wang.qiang@zltech.com",
+        username: "wangqiang",
         name: "王强",
         password: hashedPassword,
         role: "EMPLOYEE",
@@ -212,7 +245,7 @@ async function main() {
     }),
     prisma.user.create({
       data: {
-        email: "zhao.li@zltech.com",
+        username: "zhaoli",
         name: "赵丽",
         password: hashedPassword,
         role: "EMPLOYEE",
@@ -227,7 +260,7 @@ async function main() {
     }),
     prisma.user.create({
       data: {
-        email: "chen.ming@zltech.com",
+        username: "chenming",
         name: "陈明",
         password: hashedPassword,
         role: "EMPLOYEE",
@@ -242,7 +275,7 @@ async function main() {
     }),
     prisma.user.create({
       data: {
-        email: "liu.fang@zltech.com",
+        username: "liufang",
         name: "刘芳",
         password: hashedPassword,
         role: "EMPLOYEE",
@@ -257,7 +290,7 @@ async function main() {
     }),
     prisma.user.create({
       data: {
-        email: "sun.wei@zltech.com",
+        username: "sunwei",
         name: "孙伟",
         password: hashedPassword,
         role: "EMPLOYEE",
@@ -272,7 +305,7 @@ async function main() {
     }),
     prisma.user.create({
       data: {
-        email: "zhou.jie@zltech.com",
+        username: "zhoujie",
         name: "周杰",
         password: hashedPassword,
         role: "EMPLOYEE",
@@ -289,7 +322,7 @@ async function main() {
   console.log(`创建 ${employees.length} 位普通员工`);
 
   // 为所有用户创建假期余额
-  const allUsers = [admin, techManager, hrManager, ...employees];
+  const allUsers = [admin, techManager, hrManager, attendanceClerk, ...employees];
   const currentYear = new Date().getFullYear();
 
   for (const user of allUsers) {
@@ -620,14 +653,14 @@ async function main() {
   console.log("\n=== Seeding 完成! ===");
   console.log("\n测试账号信息 (密码均为: password123):");
   console.log("\n管理员:");
-  console.log(`  - ${admin.email} (${admin.name})`);
+  console.log(`  - ${admin.username} (${admin.name})`);
   console.log("\n部门经理:");
-  console.log(`  - ${techManager.email} (${techManager.name}) - 技术部`);
-  console.log(`  - ${hrManager.email} (${hrManager.name}) - 人事部`);
+  console.log(`  - ${techManager.username} (${techManager.name}) - 技术部`);
+  console.log(`  - ${hrManager.username} (${hrManager.name}) - 人事部`);
   console.log("\n普通员工:");
   employees.forEach((emp) => {
     const dept = departments.find((d) => d.id === emp.departmentId);
-    console.log(`  - ${emp.email} (${emp.name}) - ${dept?.name || "未分配"}`);
+    console.log(`  - ${emp.username} (${emp.name}) - ${dept?.name || "未分配"}`);
   });
   console.log("\n测试数据说明:");
   console.log(`  - 法定节假日: ${holidayCount} 天 (2024-2026年)`);

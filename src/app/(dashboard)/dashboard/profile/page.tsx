@@ -21,12 +21,13 @@ import { getUserProfile, updateUserProfile } from '@/server/actions/user'
 
 interface UserProfile {
   id: string
-  email: string
+  username: string
   name: string
   education?: string | null
   idCard?: string | null
   phone?: string | null
   salary?: number | null
+  educationSalary?: number | null
   level?: string | null
   startDate?: string | Date | null
   seniorityStartDate?: string | Date | null
@@ -38,8 +39,10 @@ interface UserProfile {
   } | null
   position?: {
     name: string
-    salary?: number | null
-    level?: string | null
+    baseSalary?: number | null
+    hasSeniorityPay?: boolean | null
+    seniorityPayPerYear?: number | null
+    maxSeniorityPay?: number | null
   } | null
 }
 
@@ -84,19 +87,27 @@ export default function ProfileDashboardPage() {
     return null
   }
 
-  const baseSalaryValue = profile?.position?.salary ?? profile?.salary ?? null
+  const baseSalaryValue = profile?.position?.baseSalary ?? profile?.salary ?? null
   const salaryText =
     baseSalaryValue !== null
       ? baseSalaryValue.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
       : '未设置'
-  const seniorityPay = calculateSeniorityPay(profile?.startDate)
+  const educationSalary = profile?.educationSalary ?? 0
+  const educationSalaryText = educationSalary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
+  const seniorityPay = calculateSeniorityPay(
+    profile?.startDate,
+    undefined,
+    profile?.position?.seniorityPayPerYear,
+    profile?.position?.maxSeniorityPay,
+    profile?.position?.hasSeniorityPay
+  )
   const seniorityPayText = seniorityPay.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
   const totalSalaryText =
     baseSalaryValue !== null
-      ? (baseSalaryValue + seniorityPay).toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
+      ? (baseSalaryValue + educationSalary + seniorityPay).toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
       : '未设置'
 
-  const levelText = profile?.level || profile?.position?.level || '未设置'
+
   const employmentYears = calculateCompletedYears(profile?.startDate)
   const annualLeaveYears = calculateCompletedYears(profile?.seniorityStartDate, profile?.seniorityEndDate)
   const annualLeaveEntitlement = calculateAnnualLeaveEntitlement(
@@ -127,8 +138,8 @@ export default function ProfileDashboardPage() {
                 <Input id="name" name="name" defaultValue={profile?.name || session.user.name || ''} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">邮箱</Label>
-                <Input id="email" type="email" value={profile?.email || session.user.email || ''} disabled />
+                <Label htmlFor="username">账户名</Label>
+                <Input id="username" type="text" value={profile?.username || session.user.username || ''} disabled />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="idCard">身份证号</Label>
@@ -188,19 +199,20 @@ export default function ProfileDashboardPage() {
                 <Label htmlFor="positionDisplay">岗位</Label>
                 <Input id="positionDisplay" value={profile?.position?.name || '未设置'} disabled />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="levelDisplay">职级</Label>
-                <Input id="levelDisplay" value={levelText} disabled />
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="salaryDisplay">岗位基础工资</Label>
+                <Input id="salaryDisplay" value={salaryText} disabled />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="salaryDisplay">基础薪资</Label>
-                <Input id="salaryDisplay" value={salaryText} disabled />
+                <Label htmlFor="educationSalaryDisplay">学历工资</Label>
+                <Input id="educationSalaryDisplay" value={educationSalaryText} disabled />
+                <p className="text-xs text-gray-500">由管理员在人员岗位页面维护</p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="seniorityPayDisplay">工龄工资</Label>
                 <Input
                   id="seniorityPayDisplay"
-                  value={`${seniorityPayText} (满 ${employmentYears} 年, 每满 1 年 +100, 最多 +1000)`}
+                  value={`${seniorityPayText} (满 ${employmentYears} 年, 每满 1 年 +${profile?.position?.seniorityPayPerYear ?? 100}, 最多 +${profile?.position?.maxSeniorityPay ?? 1000})`}
                   disabled
                 />
               </div>

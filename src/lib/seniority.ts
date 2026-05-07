@@ -1,6 +1,6 @@
 const DEFAULT_ANNUAL_LEAVE_DAYS = 5
-const MAX_SENIORITY_PAY = 1000
-const SENIORITY_PAY_PER_YEAR = 100
+const DEFAULT_MAX_SENIORITY_PAY = 1000
+const DEFAULT_SENIORITY_PAY_PER_YEAR = 100
 
 function normalizeDate(date?: Date | string | null) {
   if (!date) {
@@ -54,9 +54,20 @@ export function calculateAnnualLeaveEntitlement(
   return DEFAULT_ANNUAL_LEAVE_DAYS
 }
 
-export function calculateSeniorityPay(startDate?: Date | string | null, referenceDate?: Date | string | null) {
+export function calculateSeniorityPay(
+  startDate?: Date | string | null,
+  referenceDate?: Date | string | null,
+  seniorityPayPerYear?: number | null,
+  maxSeniorityPay?: number | null,
+  hasSeniorityPay?: boolean | null
+) {
+  if (hasSeniorityPay === false) {
+    return 0
+  }
+  const perYear = seniorityPayPerYear ?? DEFAULT_SENIORITY_PAY_PER_YEAR
+  const maxPay = maxSeniorityPay ?? DEFAULT_MAX_SENIORITY_PAY
   const seniorityYears = calculateCompletedYears(startDate, referenceDate)
-  return Math.min(seniorityYears * SENIORITY_PAY_PER_YEAR, MAX_SENIORITY_PAY)
+  return Math.min(seniorityYears * perYear, maxPay)
 }
 
 export function formatDateInputValue(date?: Date | string | null) {

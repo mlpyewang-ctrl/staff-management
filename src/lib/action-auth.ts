@@ -14,6 +14,10 @@ export function hasManagerAccess(role: Role) {
   return role === 'ADMIN' || role === 'MANAGER'
 }
 
+export function isAttendanceClerk(role: Role) {
+  return role === 'ATTENDANCE_CLERK'
+}
+
 export async function requireSessionUser(): Promise<SessionUser> {
   const session = await getServerSession(authOptions)
 
@@ -39,6 +43,16 @@ export async function requireManagerUser() {
 
   if (!hasManagerAccess(sessionUser.role)) {
     throw new Error('只有主管或管理员可以执行此操作')
+  }
+
+  return sessionUser
+}
+
+export async function requireAttendanceClerk() {
+  const sessionUser = await requireSessionUser()
+
+  if (!isAttendanceClerk(sessionUser.role)) {
+    throw new Error('只有考勤员可以执行此操作')
   }
 
   return sessionUser

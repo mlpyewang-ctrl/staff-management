@@ -8,20 +8,28 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { getPositions, createPosition, updatePosition, deletePosition } from '@/server/actions/position'
+import { getDepartments } from '@/server/actions/department'
 
 type PositionItem = Awaited<ReturnType<typeof getPositions>>[number]
+
+interface DepartmentOption {
+  id: string
+  name: string
+}
 
 export default function PositionsDashboardPage() {
   const { data: session } = useSession()
   const [positions, setPositions] = useState<PositionItem[]>([])
+  const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [editingPosition, setEditingPosition] = useState<PositionItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
 
   useEffect(() => {
     const load = async () => {
-      const data = await getPositions()
+      const [data, deptData] = await Promise.all([getPositions(), getDepartments()])
       setPositions(data)
+      setDepartments(deptData)
     }
     load()
   }, [])
@@ -86,7 +94,7 @@ export default function PositionsDashboardPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">岗位名称</Label>
                 <Input
@@ -97,23 +105,68 @@ export default function PositionsDashboardPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="salary">基础薪资</Label>
+                <Label htmlFor="departmentId">所属部门</Label>
+                <select
+                  id="departmentId"
+                  name="departmentId"
+                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  defaultValue={editingPosition?.departmentId || ''}
+                  required
+                >
+                  <option value="">请选择部门</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="baseSalary">基础工资</Label>
                 <Input
-                  id="salary"
-                  name="salary"
+                  id="baseSalary"
+                  name="baseSalary"
                   type="number"
                   step="0.01"
                   min="0"
-                  defaultValue={editingPosition?.salary || ''}
+                  defaultValue={editingPosition?.baseSalary || ''}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="level">职级</Label>
+                <Label htmlFor="hasSeniorityPay">是否有工龄工资</Label>
+                <select
+                  id="hasSeniorityPay"
+                  name="hasSeniorityPay"
+                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  defaultValue={editingPosition?.hasSeniorityPay === false ? 'false' : 'true'}
+                >
+                  <option value="true">有</option>
+                  <option value="false">无</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="seniorityPayPerYear">工龄工资（每年）</Label>
                 <Input
-                  id="level"
-                  name="level"
-                  defaultValue={editingPosition?.level || ''}
+                  id="seniorityPayPerYear"
+                  name="seniorityPayPerYear"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={editingPosition?.seniorityPayPerYear || '100'}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxSeniorityPay">工龄工资上限</Label>
+                <Input
+                  id="maxSeniorityPay"
+                  name="maxSeniorityPay"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={editingPosition?.maxSeniorityPay || '1000'}
+                  required
                 />
               </div>
             </div>
@@ -152,8 +205,11 @@ export default function PositionsDashboardPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>岗位名称</TableHead>
-                <TableHead>基础薪资</TableHead>
-                <TableHead>职级</TableHead>
+                <TableHead>所属部门</TableHead>
+                <TableHead>基础工资</TableHead>
+                <TableHead>工龄工资</TableHead>
+                <TableHead>每年涨幅</TableHead>
+                <TableHead>工龄上限</TableHead>
                 <TableHead>关联员工数</TableHead>
                 <TableHead>操作</TableHead>
               </TableRow>
@@ -161,7 +217,7 @@ export default function PositionsDashboardPage() {
             <TableBody>
               {positions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={8} className="text-center text-gray-500 py-8">
                     暂无岗位
                   </TableCell>
                 </TableRow>
@@ -169,8 +225,11 @@ export default function PositionsDashboardPage() {
                 positions.map((pos) => (
                   <TableRow key={pos.id}>
                     <TableCell>{pos.name}</TableCell>
-                    <TableCell>{pos.salary?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
-                    <TableCell>{pos.level || '-'}</TableCell>
+                    <TableCell>{pos.department?.name || '-'}</TableCell>
+                    <TableCell>{pos.baseSalary?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
+                    <TableCell>{pos.hasSeniorityPay ? '有' : '无'}</TableCell>
+                    <TableCell>{pos.seniorityPayPerYear?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
+                    <TableCell>{pos.maxSeniorityPay?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
                     <TableCell>{pos._count?.users || 0}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">

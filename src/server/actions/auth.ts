@@ -3,14 +3,14 @@
 import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
-import { registerSchema } from '@/lib/validations'
+import { registerSchema, createUserSchema } from '@/lib/validations'
 import { requireSessionUser } from '@/lib/action-auth'
 import { revalidatePath } from 'next/cache'
 
 export async function registerUser(formData: FormData) {
   try {
     const validatedData = registerSchema.parse({
-      email: formData.get('email'),
+      username: formData.get('username'),
       password: formData.get('password'),
       name: formData.get('name'),
       role: formData.get('role') || undefined,
@@ -28,13 +28,13 @@ export async function registerUser(formData: FormData) {
       role = 'EMPLOYEE'
     }
 
-    // 检查邮箱是否已存在
+    // 检查账户名是否已存在
     const existingUser = await prisma.user.findUnique({
-      where: { email: validatedData.email },
+      where: { username: validatedData.username },
     })
 
     if (existingUser) {
-      return { error: '该邮箱已被注册' }
+      return { error: '该账户名已被注册' }
     }
 
     // 加密密码
@@ -43,7 +43,7 @@ export async function registerUser(formData: FormData) {
     // 创建用户
     const user = await prisma.user.create({
       data: {
-        email: validatedData.email,
+        username: validatedData.username,
         password: hashedPassword,
         name: validatedData.name,
         role,
@@ -66,6 +66,55 @@ export async function registerUser(formData: FormData) {
   }
 }
 
+const DEFAULT_PASSWORD = 'Aa@12345!'
+
+export async function createUser(formData: FormData) {
+  try {
+    const sessionUser = await requireSessionUser()
+    if (sessionUser.role !== 'ADMIN') {
+      return { error: '无权操作' }
+    }
+
+    const validatedData = createUserSchema.parse({
+      username: formData.get('username'),
+      name: formData.get('name'),
+      role: formData.get('role') || undefined,
+    })
+
+    // 检查账户名是否已存在
+    const existingUser = await prisma.user.findUnique({
+      where: { username: validatedData.username },
+    })
+
+    if (existingUser) {
+      return { error: '该账户名已存在' }
+    }
+
+    const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10)
+
+    const user = await prisma.user.create({
+      data: {
+        username: validatedData.username,
+        password: hashedPassword,
+        name: validatedData.name,
+        role: validatedData.role,
+      },
+    })
+
+    if (validatedData.role === 'EMPLOYEE' || validatedData.role === 'ATTENDANCE_CLERK') {
+      await ensureLeaveBalance(user.id)
+    }
+
+    revalidatePath('/dashboard/staff')
+    return { success: '账号创建成功' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '创建失败，请稍后重试' }
+  }
+}
+
 export async function createInitialAdmin() {
   try {
     const existingAdmin = await prisma.user.findFirst({
@@ -80,7 +129,7 @@ export async function createInitialAdmin() {
 
     await prisma.user.create({
       data: {
-        email: 'admin@example.com',
+        username: 'admin',
         password: hashedPassword,
         name: '系统管理员',
         role: 'ADMIN',

@@ -3,10 +3,11 @@
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
-import { requireSessionUser } from '@/lib/action-auth'
+import { isAttendanceClerk, requireAttendanceClerk, requireSessionUser } from '@/lib/action-auth'
 import { prisma } from '@/lib/prisma'
 import { calculateHours } from '@/lib/utils'
 import { overtimeSchema } from '@/lib/validations'
+import type { ParsedOvertimeRow } from '@/lib/excel-parser'
 
 async function requireOvertimeOwnerOrAdmin(id: string) {
   const sessionUser = await requireSessionUser()
@@ -16,6 +17,7 @@ async function requireOvertimeOwnerOrAdmin(id: string) {
       id: true,
       userId: true,
       status: true,
+      approverId: true,
     },
   })
 
@@ -90,13 +92,33 @@ export async function deleteOvertimeApplication(id: string) {
       return { error: '缺少加班申请 ID' }
     }
 
-    const { application } = await requireOvertimeOwnerOrAdmin(id)
+    const sessionUser = await requireSessionUser()
+    const application = await prisma.overtimeApplication.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        approverId: true,
+      },
+    })
 
     if (!application) {
       return { error: '加班申请不存在' }
     }
 
-    if (application.status !== 'DRAFT') {
+    const isOwner = sessionUser.id === application.userId
+    const isAdmin = sessionUser.role === 'ADMIN'
+    const isClerkDeletingImport =
+      isAttendanceClerk(sessionUser.role) &&
+      application.status === 'COMPLETED' &&
+      application.approverId === null
+
+    if (!isOwner && !isAdmin && !isClerkDeletingImport) {
+      return { error: '无权操作该加班申请' }
+    }
+
+    if (application.status !== 'DRAFT' && !isAdmin && !isClerkDeletingImport) {
       return { error: '只有草稿状态的加班申请可以删除' }
     }
 
@@ -210,7 +232,7 @@ export async function getOvertimeApplications(_userId?: string, _role?: string) 
         user: {
           select: {
             name: true,
-            email: true,
+            username: true,
           },
         },
       },
@@ -236,7 +258,7 @@ export async function getOvertimeApplication(id: string) {
         user: {
           select: {
             name: true,
-            email: true,
+            username: true,
           },
         },
       },
@@ -371,5 +393,90 @@ export async function submitOvertimeConfirmation(formData: FormData) {
       return { error: error.message }
     }
     return { error: '提交确认失败，请稍后重试' }
+  }
+}
+
+
+// ===== 批量导入加班 =====
+
+export async function batchImportOvertime(rows: ParsedOvertimeRow[]) {
+  try {
+    await requireAttendanceClerk()
+
+    if (!rows || rows.length === 0) {
+      return { error: '没有数据需要导入' }
+    }
+
+    const usernames = Array.from(new Set(rows.map((r) => r.username)))
+    const users = await prisma.user.findMany({
+      where: {
+        username: {
+          in: usernames,
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+      },
+    })
+
+    const userMap = new Map(users.map((u) => [u.username, u]))
+    const errors: Array<{ rowIndex: number; message: string }> = []
+
+    for (const row of rows) {
+      const user = userMap.get(row.username)
+      if (!user) {
+        errors.push({ rowIndex: row.rowIndex, message: `用户 "${row.username}" 不存在` })
+      } else if (user.name !== row.name && row.name) {
+        errors.push({ rowIndex: row.rowIndex, message: `用户 "${row.username}" 的姓名不匹配（系统中为 ${user.name}）` })
+      }
+    }
+
+    if (errors.length > 0) {
+      return { error: '数据校验失败', errors }
+    }
+
+    const now = new Date()
+
+    await prisma.$transaction(async (tx) => {
+      for (const row of rows) {
+        const user = userMap.get(row.username)!
+        const startDateTime = new Date(`${row.date} ${row.startTime}`)
+        const endDateTime = new Date(`${row.date} ${row.endTime}`)
+        const hours = calculateHours(startDateTime, endDateTime)
+
+        if (hours <= 0) {
+          throw new Error(`第 ${row.rowIndex} 行：结束时间必须晚于开始时间`)
+        }
+
+        await tx.overtimeApplication.create({
+          data: {
+            userId: user.id,
+            date: startDateTime,
+            startTime: startDateTime,
+            endTime: endDateTime,
+            hours,
+            actualStartTime: startDateTime,
+            actualEndTime: endDateTime,
+            actualHours: hours,
+            type: row.type,
+            reason: row.reason,
+            status: 'COMPLETED',
+            currentPhase: 'CONFIRM',
+            approverId: null,
+            approvedAt: now,
+          },
+        })
+      }
+    })
+
+    revalidatePath('/dashboard/overtime')
+    return { success: `成功导入 ${rows.length} 条加班记录` }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '导入失败，请稍后重试' }
   }
 }

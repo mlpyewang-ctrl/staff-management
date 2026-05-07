@@ -744,7 +744,7 @@ export async function getPendingApprovals(_approverId?: string) {
           user: {
             select: {
               name: true,
-              email: true,
+              username: true,
               departmentId: true,
               department: {
                 select: {
@@ -762,7 +762,7 @@ export async function getPendingApprovals(_approverId?: string) {
           user: {
             select: {
               name: true,
-              email: true,
+              username: true,
               departmentId: true,
               department: {
                 select: {
@@ -780,7 +780,7 @@ export async function getPendingApprovals(_approverId?: string) {
           user: {
             select: {
               name: true,
-              email: true,
+              username: true,
               departmentId: true,
               department: {
                 select: {

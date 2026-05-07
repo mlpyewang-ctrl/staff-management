@@ -151,7 +151,7 @@ export default function ProfileHistoryPage() {
             <Select id="userId" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>
               {users.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} ({item.email})
+                  {item.name} ({item.username})
                 </option>
               ))}
             </Select>
@@ -162,7 +162,7 @@ export default function ProfileHistoryPage() {
           ) : selectedUser ? (
             <div className="rounded-lg border bg-gray-50 px-4 py-3 text-sm text-gray-700">
               <div className="font-medium text-gray-900">{selectedUser.name}</div>
-              <div className="mt-1">{selectedUser.email}</div>
+              <div className="mt-1">{selectedUser.username}</div>
               <div className="mt-1">
                 {selectedUser.department?.name || '未分配部门'} / {selectedUser.position?.name || '未设置岗位'}
               </div>
@@ -195,7 +195,7 @@ export default function ProfileHistoryPage() {
                         <span className="text-sm text-gray-500">{item.summary}</span>
                       </div>
                       <div className="text-sm text-gray-500">
-                        操作人：{item.actor.name} ({item.actor.email})
+                        操作人：{item.actor.name} ({item.actor.username})
                       </div>
                       {item.remark ? <div className="text-sm text-gray-600">备注：{item.remark}</div> : null}
                     </div>

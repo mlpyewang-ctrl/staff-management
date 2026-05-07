@@ -10,7 +10,7 @@ datasource db {
 
 model User {
   id                 String   @id @default(cuid())
-  email              String   @unique
+  username           String   @unique
   name               String
   password           String
   role               String   @default("EMPLOYEE")
@@ -18,6 +18,7 @@ model User {
   idCard             String?
   phone              String?
   salary             Float?
+  educationSalary    Float?   @default(0)
   level              String?
   departmentId       String?
   positionId         String?
@@ -236,6 +237,7 @@ model Department {
   updatedAt DateTime @updatedAt
 
   users         User[]
+  positions     Position[]
   approvalFlows ApprovalFlow[]
 
   @@map("departments")
@@ -346,15 +348,20 @@ model UserPartyInfoVersion {
 }
 
 model Position {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  salary    Float
-  level     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String     @id @default(cuid())
+  name                String
+  departmentId        String
+  department          Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  baseSalary          Float
+  hasSeniorityPay     Boolean    @default(true)
+  seniorityPayPerYear Float      @default(100)
+  maxSeniorityPay     Float      @default(1000)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   users User[]
 
+  @@unique([departmentId, name])
   @@map("positions")
 }
 

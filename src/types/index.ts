@@ -1,11 +1,11 @@
-export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE'
+export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ATTENDANCE_CLERK'
 
 // NextAuth type extensions
 declare module 'next-auth' {
   interface Session {
     user: {
       id: string
-      email: string
+      username: string
       name: string
       role: Role
       companyId?: string | null
@@ -14,7 +14,7 @@ declare module 'next-auth' {
 
   interface User {
     id: string
-    email: string
+    username: string
     name: string
     role: Role
     companyId?: string | null
@@ -31,7 +31,7 @@ declare module 'next-auth/jwt' {
 
 export interface User {
   id: string
-  email: string
+  username: string
   name: string
   role: Role
   companyId?: string | null

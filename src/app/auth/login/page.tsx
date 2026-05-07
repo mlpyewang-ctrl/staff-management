@@ -2,14 +2,13 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,7 +20,7 @@ export default function LoginPage() {
 
     try {
       const result = await signIn('credentials', {
-        email,
+        username,
         password,
         redirect: false,
         callbackUrl: '/dashboard',
@@ -50,13 +49,13 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">邮箱</Label>
+              <Label htmlFor="username">账户名</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="请输入邮箱"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="请输入账户名"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
@@ -82,14 +81,8 @@ export default function LoginPage() {
               {loading ? '登录中...' : '登录'}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-gray-600">
-            还没有账号？{' '}
-            <Link href="/auth/register" className="text-blue-600 hover:underline">
-              立即注册
-            </Link>
-          </div>
-          <div className="mt-2 text-center text-xs text-gray-500">
-            测试账号：admin@zltech.com / password123
+          <div className="mt-4 text-center text-xs text-gray-500">
+            测试账号：admin / password123
           </div>
         </CardContent>
       </Card>

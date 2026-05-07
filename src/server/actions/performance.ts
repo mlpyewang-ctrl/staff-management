@@ -191,7 +191,7 @@ export async function getPerformanceReviews(_userId?: string, _role?: string) {
         user: {
           select: {
             name: true,
-            email: true,
+            username: true,
           },
         },
         reviewer: {

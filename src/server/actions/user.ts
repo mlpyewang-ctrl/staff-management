@@ -9,7 +9,7 @@ import { recordProfileChangeLogIfChanged } from '@/lib/profile-change-log'
 import { prisma } from '@/lib/prisma'
 import { userJobAssignmentSchema, userProfileSchema } from '@/lib/validations'
 
-const editableRoles = ['EMPLOYEE', 'MANAGER'] as const
+const editableRoles = ['EMPLOYEE', 'MANAGER', 'ATTENDANCE_CLERK'] as const
 
 function parseOptionalDate(value: string | undefined, label: string) {
   if (!value) {
@@ -82,7 +82,7 @@ export async function getUserProfileChangeHistory(userId: string) {
       select: {
         id: true,
         name: true,
-        email: true,
+        username: true,
         profileChangeLogs: {
           orderBy: { createdAt: 'desc' },
           include: {
@@ -90,7 +90,7 @@ export async function getUserProfileChangeHistory(userId: string) {
               select: {
                 id: true,
                 name: true,
-                email: true,
+                username: true,
               },
             },
           },
@@ -195,10 +195,12 @@ export async function getStaffJobAssignments() {
     select: {
       id: true,
       name: true,
-      email: true,
+      username: true,
       role: true,
       education: true,
       level: true,
+      salary: true,
+      educationSalary: true,
       startDate: true,
       seniorityStartDate: true,
       seniorityEndDate: true,
@@ -214,8 +216,11 @@ export async function getStaffJobAssignments() {
         select: {
           id: true,
           name: true,
-          level: true,
-          salary: true,
+          departmentId: true,
+          baseSalary: true,
+          hasSeniorityPay: true,
+          seniorityPayPerYear: true,
+          maxSeniorityPay: true,
         },
       },
     },
@@ -235,11 +240,11 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
     const validated = userJobAssignmentSchema.parse({
       departmentId: getString('departmentId'),
       positionId: getString('positionId'),
-      level: getString('level'),
       startDate: getString('startDate'),
       seniorityStartDate: getString('seniorityStartDate'),
       seniorityEndDate: getString('seniorityEndDate'),
       versionRemark: getString('versionRemark'),
+      educationSalary: getString('educationSalary'),
     })
 
     const roleValue = getString('role')
@@ -275,16 +280,17 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       departmentName = null
     }
 
+    let nextPosition: typeof existingUser.position = null
     if (validated.positionId) {
       const position = await prisma.position.findUnique({
         where: { id: validated.positionId },
-        select: { id: true, name: true },
       })
 
       if (!position) {
         return { error: '所选岗位不存在' }
       }
 
+      nextPosition = position
       positionName = position.name
     } else {
       positionName = null
@@ -296,6 +302,13 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       normalizedRole !== 'ADMIN'
     ) {
       return { error: '角色参数无效' }
+    }
+
+    if (
+      normalizedRole === 'ATTENDANCE_CLERK' &&
+      existingUser.role !== 'ATTENDANCE_CLERK'
+    ) {
+      // 允许将其他角色设置为考勤员
     }
 
     if (normalizedRole === 'ADMIN' && existingUser.role !== 'ADMIN') {
@@ -311,15 +324,62 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
     }
 
     const nextRole = normalizedRole || existingUser.role
-    const nextJobData = {
+    const isPositionChanging = validated.positionId !== undefined && validated.positionId !== existingUser.positionId
+
+    let finalSeniorityStartDate = seniorityStartDate ?? existingUser.seniorityStartDate
+
+    // 调岗工龄逻辑
+    if (isPositionChanging && nextPosition) {
+      const oldPosition = existingUser.position
+
+      if (oldPosition) {
+        const sameSeniorityConfig =
+          oldPosition.hasSeniorityPay === true &&
+          nextPosition.hasSeniorityPay === true &&
+          oldPosition.seniorityPayPerYear === nextPosition.seniorityPayPerYear &&
+          oldPosition.maxSeniorityPay === nextPosition.maxSeniorityPay
+
+        const fromNoSeniorityToYes =
+          oldPosition.hasSeniorityPay === false &&
+          nextPosition.hasSeniorityPay === true
+
+        if (sameSeniorityConfig) {
+          // 工龄连续，seniorityStartDate 保持不变
+        } else if (fromNoSeniorityToYes) {
+          // 从无工龄岗位调到有工龄岗位，从调岗时间开始计算
+          finalSeniorityStartDate = new Date()
+          finalSeniorityStartDate.setHours(0, 0, 0, 0)
+        } else {
+          return { error: '当前岗位工龄配置不支持直接调岗，请联系管理员处理' }
+        }
+      } else {
+        // 之前无岗位，新岗位有工龄工资：若没有工龄起始日期，则设为入职日期
+        if (nextPosition.hasSeniorityPay === true && !finalSeniorityStartDate) {
+          finalSeniorityStartDate = startDate ?? existingUser.startDate
+        }
+      }
+    }
+
+    const educationSalaryValue = validated.educationSalary ? Number(validated.educationSalary) : 0
+
+    const nextJobData: {
+      departmentId: string | null
+      positionId: string | null
+      startDate: Date | null
+      seniorityStartDate: Date | null
+      seniorityEndDate: Date | null
+      role?: string
+      salary?: null
+      educationSalary?: number
+    } = {
       departmentId: validated.departmentId || null,
       positionId: validated.positionId || null,
-      level: validated.level || null,
       startDate,
-      seniorityStartDate,
+      seniorityStartDate: finalSeniorityStartDate,
       seniorityEndDate,
       ...(normalizedRole ? { role: normalizedRole } : {}),
-      ...(validated.positionId && validated.positionId !== existingUser.positionId ? { salary: null } : {}),
+      ...(isPositionChanging ? { salary: null } : {}),
+      educationSalary: educationSalaryValue,
     }
 
     let recordedChange = false
@@ -331,10 +391,9 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
         select: {
           id: true,
           name: true,
-          email: true,
+          username: true,
           role: true,
           education: true,
-          level: true,
           departmentId: true,
           positionId: true,
           department: {
@@ -347,8 +406,11 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
             select: {
               id: true,
               name: true,
-              level: true,
-              salary: true,
+              departmentId: true,
+              baseSalary: true,
+              hasSeniorityPay: true,
+              seniorityPayPerYear: true,
+              maxSeniorityPay: true,
             },
           },
         },
@@ -364,10 +426,10 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
           { label: '角色', before: existingUser.role, after: nextRole },
           { label: '部门', before: existingUser.department?.name || null, after: departmentName },
           { label: '岗位', before: existingUser.position?.name || null, after: positionName },
-          { label: '职级', before: existingUser.level, after: nextJobData.level },
           { label: '入职日期', before: existingUser.startDate, after: startDate },
-          { label: '工龄起始日期', before: existingUser.seniorityStartDate, after: seniorityStartDate },
+          { label: '工龄起始日期', before: existingUser.seniorityStartDate, after: finalSeniorityStartDate },
           { label: '工龄截止日期', before: existingUser.seniorityEndDate, after: seniorityEndDate },
+          { label: '学历工资', before: existingUser.educationSalary, after: educationSalaryValue },
         ],
       })
 

@@ -19,12 +19,24 @@ interface NavGroup {
   defaultOpen?: boolean
 }
 
-function isActivePath(pathname: string, href: string) {
-  return pathname === href || (href !== '/dashboard' && pathname.startsWith(`${href}/`))
+function findBestMatch(pathname: string, hrefs: string[]): string | null {
+  const exact = hrefs.find((h) => h === pathname)
+  if (exact) return exact
+
+  const candidates = hrefs
+    .filter((h) => h !== '/dashboard' && pathname.startsWith(`${h}/`))
+    .sort((a, b) => b.length - a.length)
+
+  return candidates[0] || null
 }
 
-function isGroupActive(items: NavItem[], pathname: string): boolean {
-  return items.some(item => isActivePath(pathname, item.href))
+function isActivePath(pathname: string, href: string, allHrefs: string[]) {
+  const best = findBestMatch(pathname, allHrefs)
+  return best === href
+}
+
+function isGroupActive(items: NavItem[], pathname: string, allHrefs: string[]): boolean {
+  return items.some((item) => isActivePath(pathname, item.href, allHrefs))
 }
 
 export function Sidebar() {
@@ -34,12 +46,15 @@ export function Sidebar() {
 
   const isAdmin = session?.user?.role === 'ADMIN'
   const isManager = session?.user?.role === 'MANAGER'
+  const isAttendanceClerk = session?.user?.role === 'ATTENDANCE_CLERK'
   const canApprove = isAdmin || isManager
 
   // 定义导航分组
   const navGroups = useMemo<NavGroup[]>(() => {
-    const groups: NavGroup[] = [
-      {
+    const groups: NavGroup[] = []
+
+    if (!isAttendanceClerk) {
+      groups.push({
         title: '我的申请',
         items: [
           { name: '加班申请', href: '/dashboard/overtime', icon: '⏰' },
@@ -48,13 +63,27 @@ export function Sidebar() {
           { name: '其他事项', href: '/dashboard/other', icon: '📝' },
         ],
         defaultOpen: true,
-      },
-    ]
+      })
+    }
 
     if (canApprove) {
       groups.push({
         title: '审批中心',
-        items: [{ name: '待办审批', href: '/dashboard/approvals', icon: '✅' }],
+        items: [
+          { name: '待办审批', href: '/dashboard/approvals', icon: '✅' },
+          { name: '查询统计', href: '/dashboard/query', icon: '🔍' },
+        ],
+        defaultOpen: true,
+      })
+    }
+
+    if (isAttendanceClerk) {
+      groups.push({
+        title: '考勤管理',
+        items: [
+          { name: '加班导入', href: '/dashboard/overtime', icon: '📥' },
+          { name: '请假导入', href: '/dashboard/leave', icon: '📥' },
+        ],
         defaultOpen: true,
       })
     }
@@ -76,7 +105,7 @@ export function Sidebar() {
     }
 
     return groups
-  }, [canApprove, isAdmin])
+  }, [canApprove, isAdmin, isAttendanceClerk])
 
   // 常驻项（始终显示在顶部）
   const topItems: NavItem[] = useMemo(
@@ -109,19 +138,31 @@ export function Sidebar() {
       ? '系统管理员'
       : session?.user?.role === 'MANAGER'
       ? '部门主管'
+      : session?.user?.role === 'ATTENDANCE_CLERK'
+      ? '考勤员账号'
       : '员工账号'
+
+  const allHrefs = useMemo(() => {
+    const hrefs = topItems.map((item) => item.href)
+    navGroups.forEach((group) => {
+      group.items.forEach((item) => {
+        hrefs.push(item.href)
+      })
+    })
+    return hrefs
+  }, [navGroups, topItems])
 
   const currentPageName = useMemo(() => {
     // 先在常驻项中查找
-    const topMatch = topItems.find(item => isActivePath(pathname, item.href))
+    const topMatch = topItems.find((item) => isActivePath(pathname, item.href, allHrefs))
     if (topMatch) return topMatch.name
     // 再在分组中查找
     for (const group of navGroups) {
-      const match = group.items.find(item => isActivePath(pathname, item.href))
+      const match = group.items.find((item) => isActivePath(pathname, item.href, allHrefs))
       if (match) return match.name
     }
     return '工作台'
-  }, [navGroups, topItems, pathname])
+  }, [navGroups, topItems, pathname, allHrefs])
 
   return (
     <>
@@ -181,7 +222,7 @@ export function Sidebar() {
               href={item.href}
               className={cn(
                 'group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-colors',
-                isActivePath(pathname, item.href)
+                isActivePath(pathname, item.href, allHrefs)
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:bg-white/10 hover:text-white'
               )}
@@ -189,7 +230,7 @@ export function Sidebar() {
               <span
                 className={cn(
                   'flex h-9 w-9 items-center justify-center rounded-xl text-lg transition-colors',
-                  isActivePath(pathname, item.href)
+                  isActivePath(pathname, item.href, allHrefs)
                     ? 'bg-slate-100 text-slate-900'
                     : 'bg-white/10 text-white group-hover:bg-white/15'
                 )}
@@ -203,7 +244,7 @@ export function Sidebar() {
           {/* 分组项 */}
           {navGroups.map(group => {
             const isExpanded = expandedGroups[group.title] ?? true
-            const hasActiveItem = isGroupActive(group.items, pathname)
+            const hasActiveItem = isGroupActive(group.items, pathname, allHrefs)
 
             return (
               <div key={group.title} className="pt-4">
@@ -231,7 +272,7 @@ export function Sidebar() {
                         href={item.href}
                         className={cn(
                           'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                          isActivePath(pathname, item.href)
+                          isActivePath(pathname, item.href, allHrefs)
                             ? 'bg-white/10 text-white'
                             : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                         )}
@@ -239,7 +280,7 @@ export function Sidebar() {
                         <span
                           className={cn(
                             'flex h-7 w-7 items-center justify-center rounded-lg text-base transition-colors',
-                            isActivePath(pathname, item.href)
+                            isActivePath(pathname, item.href, allHrefs)
                               ? 'bg-sky-500/20 text-sky-400'
                               : 'bg-white/5 text-slate-500 group-hover:bg-white/10 group-hover:text-slate-400'
                           )}

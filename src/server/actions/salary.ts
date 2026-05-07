@@ -7,6 +7,7 @@ import { requireAdminUser } from '@/lib/action-auth'
 import { prisma } from '@/lib/prisma'
 import { buildSalaryExportRows } from '@/lib/salary-export'
 import { calculateSeniorityPay } from '@/lib/seniority'
+
 import {
   calculateHourlyRate,
   calculateOvertimeAllocation,
@@ -74,13 +75,23 @@ function normalizeSalaryRecord<T extends {
   user?: {
     startDate?: Date | null
     salary?: number | null
+    educationSalary?: number | null
     position?: {
-      salary?: number | null
+      baseSalary?: number | null
+      hasSeniorityPay?: boolean | null
+      seniorityPayPerYear?: number | null
+      maxSeniorityPay?: number | null
     } | null
   } | null
 }>(record: T) {
-  const expectedBaseSalary = record.user?.position?.salary ?? record.user?.salary ?? record.baseSalary
-  const expectedSeniorityPay = calculateSeniorityPay(record.user?.startDate, getMonthEndDate(record.month))
+  const expectedBaseSalary = (record.user?.position?.baseSalary ?? record.user?.salary ?? 0) + (record.user?.educationSalary ?? 0)
+  const expectedSeniorityPay = calculateSeniorityPay(
+    record.user?.startDate,
+    getMonthEndDate(record.month),
+    record.user?.position?.seniorityPayPerYear,
+    record.user?.position?.maxSeniorityPay,
+    record.user?.position?.hasSeniorityPay
+  )
   const currentSeniorityPay = record.seniorityPay ?? 0
   let baseSalary = record.baseSalary
   let seniorityPay = currentSeniorityPay
@@ -159,15 +170,16 @@ export async function getSalaryRecords(filters?: {
         user: {
           select: {
             name: true,
-            email: true,
+            username: true,
             startDate: true,
             salary: true,
+            educationSalary: true,
             level: true,
             department: {
               select: { name: true },
             },
             position: {
-              select: { name: true, salary: true },
+              select: { name: true, baseSalary: true, hasSeniorityPay: true, seniorityPayPerYear: true, maxSeniorityPay: true },
             },
           },
         },
@@ -201,15 +213,16 @@ export async function getSalaryRecord(id: string) {
         user: {
           select: {
             name: true,
-            email: true,
+            username: true,
             startDate: true,
             salary: true,
+            educationSalary: true,
             level: true,
             department: {
               select: { name: true },
             },
             position: {
-              select: { name: true, salary: true },
+              select: { name: true, baseSalary: true, hasSeniorityPay: true, seniorityPayPerYear: true, maxSeniorityPay: true },
             },
           },
         },
@@ -301,13 +314,19 @@ export async function generateSalaryRecords(formData: FormData) {
           return 'skipped' as const
         }
 
-        const baseMonthlySalary = user.position?.salary ?? user.salary ?? 0
+        const baseMonthlySalary = (user.position?.baseSalary ?? user.salary ?? 0) + (user.educationSalary ?? 0)
         if (!baseMonthlySalary) {
           console.log(`用户 ${user.name} 未设置薪资，已跳过`)
           return 'skipped' as const
         }
 
-        const seniorityPay = calculateSeniorityPay(user.startDate, endDate)
+        const seniorityPay = calculateSeniorityPay(
+          user.startDate,
+          endDate,
+          user.position?.seniorityPayPerYear,
+          user.position?.maxSeniorityPay,
+          user.position?.hasSeniorityPay
+        )
         const baseSalary = baseMonthlySalary
         const otherAdjustment = 0
 
@@ -813,7 +832,10 @@ export async function getSalaryStats(month?: string) {
             salary: true,
             position: {
               select: {
-                salary: true,
+                baseSalary: true,
+                hasSeniorityPay: true,
+                seniorityPayPerYear: true,
+                maxSeniorityPay: true,
               },
             },
           },

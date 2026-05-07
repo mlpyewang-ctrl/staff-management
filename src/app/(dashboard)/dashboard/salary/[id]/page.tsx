@@ -49,7 +49,7 @@ interface SalaryRecordDetail {
   positionName?: string
   user: {
     name: string
-    email: string
+    username: string
     level?: string | null
   }
   overtimeSettlements: Array<{
@@ -210,7 +210,7 @@ export default function SalaryDetailPage() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">邮箱</dt>
-                <dd>{record.user.email}</dd>
+                <dd>{record.user.username}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">部门</dt>

@@ -26,7 +26,7 @@ export interface SalaryExportRecord {
   departmentName?: string | null
   positionName?: string | null
   user?: {
-    email?: string | null
+    username?: string | null
     level?: string | null
   }
 }
@@ -64,7 +64,7 @@ export function buildSalaryExportRows(records: SalaryExportRecord[]): SalaryExpo
       薪资单ID: record.id,
       员工ID: record.userId,
       姓名: record.userName || '',
-      邮箱: record.user?.email || '',
+      账户名: record.user?.username || '',
       部门: record.departmentName || '',
       岗位: record.positionName || '',
       职级: record.user?.level || '',

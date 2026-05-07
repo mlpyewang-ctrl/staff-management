@@ -13,7 +13,7 @@ export async function middleware(req: NextRequest) {
   const { nextUrl } = req
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
 
-  const isAuthPage = nextUrl.pathname.startsWith('/auth/login') || nextUrl.pathname.startsWith('/auth/register')
+  const isAuthPage = nextUrl.pathname.startsWith('/auth/login')
   const isDashboardPage = nextUrl.pathname.startsWith('/dashboard')
   const isApiAuth = nextUrl.pathname.startsWith('/api/auth')
 
@@ -45,5 +45,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth/login', '/auth/register'],
+  matcher: ['/dashboard/:path*', '/auth/login'],
 }

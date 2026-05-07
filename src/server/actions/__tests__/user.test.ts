@@ -78,7 +78,7 @@ describe('user actions', () => {
     mockGetServerSession.mockResolvedValue({
       user: {
         id: 'admin-1',
-        email: 'admin@example.com',
+        username: 'admin@example.com',
         name: 'Admin',
         role: 'ADMIN',
       },
@@ -99,7 +99,7 @@ describe('user actions', () => {
       id: 'user-1',
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       name: '张三',
-      email: 'zhangsan@example.com',
+      username: 'zhangsan@example.com',
       role: 'EMPLOYEE',
       education: EDUCATION_OPTIONS[0],
       idCard: null,
@@ -116,7 +116,7 @@ describe('user actions', () => {
     mockPrisma.user.update.mockResolvedValue({
       id: 'user-1',
       name: '张三',
-      email: 'zhangsan@example.com',
+      username: 'zhangsan@example.com',
       role: 'EMPLOYEE',
       education: EDUCATION_OPTIONS[4],
       idCard: null,
@@ -145,7 +145,7 @@ describe('user actions', () => {
       id: 'user-1',
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       name: 'Staff',
-      email: 'staff@example.com',
+      username: 'staff@example.com',
       role: 'EMPLOYEE',
       education: EDUCATION_OPTIONS[0],
       idCard: null,
@@ -158,27 +158,26 @@ describe('user actions', () => {
       seniorityEndDate: null,
       salary: 8000,
       department: { name: '旧部门' },
-      position: { name: '旧岗位' },
+      position: { name: '旧岗位', hasSeniorityPay: true, seniorityPayPerYear: 100, maxSeniorityPay: 1000 },
     } as never)
     mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', name: '研发部' } as never)
-    mockPrisma.position.findUnique.mockResolvedValue({ id: 'pos-1', name: '工程师' } as never)
+    mockPrisma.position.findUnique.mockResolvedValue({ id: 'pos-1', name: '工程师', hasSeniorityPay: true, seniorityPayPerYear: 100, maxSeniorityPay: 1000 } as never)
     mockPrisma.user.update.mockResolvedValue({
       id: 'user-1',
       name: 'Staff',
-      email: 'staff@example.com',
+      username: 'staff@example.com',
       role: 'MANAGER',
       education: EDUCATION_OPTIONS[0],
       level: 'P6',
       departmentId: 'dept-1',
       positionId: 'pos-1',
       department: { id: 'dept-1', name: '研发部' },
-      position: { id: 'pos-1', name: '工程师', level: 'P6', salary: 10000 },
+      position: { id: 'pos-1', name: '工程师', departmentId: 'dept-1', baseSalary: 10000, hasSeniorityPay: true, seniorityPayPerYear: 100, maxSeniorityPay: 1000 },
     } as never)
 
     const formData = new FormData()
     formData.append('departmentId', 'dept-1')
     formData.append('positionId', 'pos-1')
-    formData.append('level', 'P6')
     formData.append('role', 'MANAGER')
     formData.append('startDate', '2024-01-15')
     formData.append('seniorityStartDate', '2024-01-15')
@@ -198,7 +197,6 @@ describe('user actions', () => {
         data: expect.objectContaining({
           departmentId: 'dept-1',
           positionId: 'pos-1',
-          level: 'P6',
           role: 'MANAGER',
           salary: null,
         }),
@@ -211,7 +209,7 @@ describe('user actions', () => {
       id: 'user-1',
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       name: 'Staff',
-      email: 'staff@example.com',
+      username: 'staff@example.com',
       role: 'EMPLOYEE',
       education: null,
       idCard: null,

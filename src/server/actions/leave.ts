@@ -3,12 +3,13 @@
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
-import { requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { isAttendanceClerk, requireAttendanceClerk, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
 import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import { calculateLeaveDaysExcludingNonWorkingDays, formatDateKey } from '@/lib/utils'
 import { leaveSchema } from '@/lib/validations'
 import { SALARY_CONSTANTS } from '@/types'
+import type { ParsedLeaveRow } from '@/lib/excel-parser'
 
 const leaveTypeMap: Record<string, string> = {
   ANNUAL: '年假',
@@ -153,6 +154,7 @@ async function requireLeaveOwnerOrAdmin(id: string) {
       id: true,
       userId: true,
       status: true,
+      approverId: true,
     },
   })
 
@@ -300,27 +302,78 @@ export async function deleteLeaveApplication(id: string) {
       return { error: '缺少请假申请 ID' }
     }
 
-    const { application } = await requireLeaveOwnerOrAdmin(id)
+    const sessionUser = await requireSessionUser()
+    const application = await prisma.leaveApplication.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            departmentId: true,
+          },
+        },
+      },
+    })
 
     if (!application) {
       return { error: '请假申请不存在' }
     }
 
-    if (application.status !== 'DRAFT') {
+    const isOwner = sessionUser.id === application.userId
+    const isAdmin = sessionUser.role === 'ADMIN'
+    const isClerkDeletingImport =
+      isAttendanceClerk(sessionUser.role) &&
+      application.status === 'COMPLETED' &&
+      application.approverId === null
+
+    if (!isOwner && !isAdmin && !isClerkDeletingImport) {
+      return { error: '无权操作该请假申请' }
+    }
+
+    if (application.status !== 'DRAFT' && !isAdmin && !isClerkDeletingImport) {
       return { error: '只有草稿状态的请假申请可以删除' }
     }
 
-    await prisma.$transaction([
-      prisma.approval.deleteMany({
+    await prisma.$transaction(async (tx) => {
+      // 如果是导入的已完成请假，删除时恢复余额
+      if (isClerkDeletingImport && ['ANNUAL', 'SICK', 'PERSONAL', 'COMPENSATORY'].includes(application.type)) {
+        const balance = await tx.leaveBalance.findFirst({
+          where: {
+            userId: application.userId,
+            year: new Date().getFullYear(),
+          },
+        })
+
+        if (balance) {
+          const updateData: Record<string, { increment: number } | { decrement: number }> = {}
+          if (application.type === 'ANNUAL') {
+            updateData.annual = { increment: application.days }
+          } else if (application.type === 'SICK') {
+            updateData.sick = { increment: application.days }
+          } else if (application.type === 'PERSONAL') {
+            updateData.personal = { increment: application.days }
+          } else if (application.type === 'COMPENSATORY') {
+            updateData.usedCompensatory = { decrement: application.days * SALARY_CONSTANTS.HOURS_PER_DAY }
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            await tx.leaveBalance.update({
+              where: { id: balance.id },
+              data: updateData,
+            })
+          }
+        }
+      }
+
+      await tx.approval.deleteMany({
         where: {
           applicationId: id,
           applicationType: 'LEAVE',
         },
-      }),
-      prisma.leaveApplication.delete({
+      })
+      await tx.leaveApplication.delete({
         where: { id },
-      }),
-    ])
+      })
+    })
 
     revalidatePath('/dashboard/leave')
     revalidatePath('/dashboard/compensatory')
@@ -435,7 +488,7 @@ export async function getLeaveApplications(_userId?: string, _role?: string) {
         user: {
           select: {
             name: true,
-            email: true,
+            username: true,
           },
         },
       },
@@ -544,5 +597,178 @@ export async function getLeaveStats(userId?: string, departmentId?: string, refe
   } catch (error) {
     console.error('获取请假统计失败:', error)
     return 0
+  }
+}
+
+
+// ===== 批量导入请假 =====
+
+export async function batchImportLeave(rows: ParsedLeaveRow[]) {
+  try {
+    await requireAttendanceClerk()
+
+    if (!rows || rows.length === 0) {
+      return { error: '没有数据需要导入' }
+    }
+
+    const usernames = Array.from(new Set(rows.map((r) => r.username)))
+    const users = await prisma.user.findMany({
+      where: {
+        username: {
+          in: usernames,
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+      },
+    })
+
+    const userMap = new Map(users.map((u) => [u.username, u]))
+    const errors: Array<{ rowIndex: number; message: string }> = []
+
+    for (const row of rows) {
+      const user = userMap.get(row.username)
+      if (!user) {
+        errors.push({ rowIndex: row.rowIndex, message: `用户 "${row.username}" 不存在` })
+      } else if (user.name !== row.name && row.name) {
+        errors.push({ rowIndex: row.rowIndex, message: `用户 "${row.username}" 的姓名不匹配（系统中为 ${user.name}）` })
+      }
+    }
+
+    if (errors.length > 0) {
+      return { error: '数据校验失败', errors }
+    }
+
+    const now = new Date()
+
+    await prisma.$transaction(async (tx) => {
+      for (const row of rows) {
+        const user = userMap.get(row.username)!
+        const startDateTime = new Date(row.startDate)
+        const endDateTime = new Date(row.endDate)
+        const startSession = row.startSession || 'AM'
+        const endSession = row.endSession || 'PM'
+
+        if (
+          formatDateKey(startDateTime) === formatDateKey(endDateTime) &&
+          startSession === 'PM' &&
+          endSession === 'AM'
+        ) {
+          throw new Error(`第 ${row.rowIndex} 行：同一天请假的结束时段不能早于开始时段`)
+        }
+
+        const holidays = await tx.holiday.findMany({
+          where: {
+            date: {
+              gte: new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate()),
+              lte: new Date(endDateTime.getFullYear(), endDateTime.getMonth(), endDateTime.getDate(), 23, 59, 59),
+            },
+          },
+          select: {
+            date: true,
+            type: true,
+          },
+        })
+
+        const legalHolidayDates = holidays
+          .filter((h) => h.type === 'LEGAL_HOLIDAY')
+          .map((h) => formatDateKey(new Date(h.date)))
+        const compensatoryWorkDates = holidays
+          .filter((h) => h.type === 'COMPENSATORY')
+          .map((h) => formatDateKey(new Date(h.date)))
+
+        const days = calculateLeaveDaysExcludingNonWorkingDays(startDateTime, endDateTime, {
+          legalHolidayDates,
+          compensatoryWorkDates,
+          startSession,
+          endSession,
+        })
+
+        if (days <= 0) {
+          throw new Error(`第 ${row.rowIndex} 行：所选日期不包含有效工作日`)
+        }
+
+        const leaveType = row.type
+        const isCompensatory = leaveType === 'COMPENSATORY'
+
+        const balance = await tx.leaveBalance.findFirst({
+          where: {
+            userId: user.id,
+            year: now.getFullYear(),
+          },
+        })
+
+        if (!balance) {
+          throw new Error(`第 ${row.rowIndex} 行：用户 ${row.username} 没有假期余额记录`)
+        }
+
+        if (isCompensatory) {
+          const availableCompensatory = (balance.compensatory || 0) - (balance.usedCompensatory || 0)
+          if (availableCompensatory < days * SALARY_CONSTANTS.HOURS_PER_DAY) {
+            throw new Error(`第 ${row.rowIndex} 行：用户 ${row.username} 调休余额不足，当前可用 ${availableCompensatory} 小时`)
+          }
+        } else if (
+          leaveType !== 'MARRIAGE' &&
+          leaveType !== 'MATERNITY' &&
+          leaveType !== 'PATERNITY'
+        ) {
+          let currentBalance = 0
+          if (leaveType === 'ANNUAL') currentBalance = balance.annual
+          else if (leaveType === 'SICK') currentBalance = balance.sick
+          else if (leaveType === 'PERSONAL') currentBalance = balance.personal
+
+          if (days > currentBalance) {
+            throw new Error(`第 ${row.rowIndex} 行：用户 ${row.username} 假期余额不足，当前剩余 ${currentBalance} 天`)
+          }
+        }
+
+        await tx.leaveApplication.create({
+          data: {
+            userId: user.id,
+            type: leaveType,
+            startSession: startSession || null,
+            endSession: endSession || null,
+            halfDaySession: null,
+            startDate: startDateTime,
+            endDate: endDateTime,
+            days,
+            reason: row.reason,
+            destination: row.destination || null,
+            status: 'COMPLETED',
+            approverId: null,
+            approvedAt: now,
+          },
+        })
+
+        const balanceUpdate: Record<string, { decrement: number } | { increment: number }> = {}
+        if (leaveType === 'ANNUAL') {
+          balanceUpdate.annual = { decrement: days }
+        } else if (leaveType === 'SICK') {
+          balanceUpdate.sick = { decrement: days }
+        } else if (leaveType === 'PERSONAL') {
+          balanceUpdate.personal = { decrement: days }
+        } else if (leaveType === 'COMPENSATORY') {
+          balanceUpdate.usedCompensatory = { increment: days * SALARY_CONSTANTS.HOURS_PER_DAY }
+        }
+
+        if (Object.keys(balanceUpdate).length > 0) {
+          await tx.leaveBalance.update({
+            where: { id: balance.id },
+            data: balanceUpdate,
+          })
+        }
+      }
+    })
+
+    revalidatePath('/dashboard/leave')
+    revalidatePath('/dashboard/compensatory')
+    return { success: `成功导入 ${rows.length} 条请假记录` }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '导入失败，请稍后重试' }
   }
 }

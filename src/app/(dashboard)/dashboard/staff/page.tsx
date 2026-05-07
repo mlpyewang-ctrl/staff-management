@@ -18,6 +18,7 @@ import { formatDate } from '@/lib/utils'
 import { getDepartments } from '@/server/actions/department'
 import { getPositions } from '@/server/actions/position'
 import { getStaffJobAssignments, updateUserJobAssignment } from '@/server/actions/user'
+import { createUser } from '@/server/actions/auth'
 
 interface DepartmentOption {
   id: string
@@ -27,16 +28,20 @@ interface DepartmentOption {
 interface PositionOption {
   id: string
   name: string
-  salary: number
-  level?: string | null
+  departmentId: string
+  baseSalary: number
+  hasSeniorityPay: boolean
+  seniorityPayPerYear: number
+  maxSeniorityPay: number
 }
 
 interface StaffUser {
   id: string
   name: string
-  email: string
+  username: string
   role: string
-  level?: string | null
+  salary?: number | null
+  educationSalary?: number | null
   startDate?: string | Date | null
   seniorityStartDate?: string | Date | null
   seniorityEndDate?: string | Date | null
@@ -46,22 +51,23 @@ interface StaffUser {
   position?: PositionOption | null
 }
 
-type EditableRole = 'EMPLOYEE' | 'MANAGER'
+type EditableRole = 'EMPLOYEE' | 'MANAGER' | 'ATTENDANCE_CLERK'
 
 const emptyFormState = {
   departmentId: '',
   positionId: '',
-  level: '',
   startDate: '',
   seniorityStartDate: '',
   seniorityEndDate: '',
   versionRemark: '',
   role: 'EMPLOYEE' as EditableRole,
+  educationSalary: '',
 }
 
 const roleOptions: Array<{ value: EditableRole; label: string }> = [
   { value: 'EMPLOYEE', label: '员工' },
   { value: 'MANAGER', label: '部门主管' },
+  { value: 'ATTENDANCE_CLERK', label: '考勤员' },
 ]
 
 function getRoleLabel(role: string) {
@@ -70,6 +76,9 @@ function getRoleLabel(role: string) {
   }
   if (role === 'MANAGER') {
     return '部门主管'
+  }
+  if (role === 'ATTENDANCE_CLERK') {
+    return '考勤员'
   }
   return '员工'
 }
@@ -86,6 +95,11 @@ export default function StaffDashboardPage() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
 
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [createForm, setCreateForm] = useState({ username: '', name: '', role: 'EMPLOYEE' as EditableRole })
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createMessage, setCreateMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+
   const loadData = async (preferredUserId?: string) => {
     const [users, departmentOptions, positionOptions] = await Promise.all([
       getStaffJobAssignments(),
@@ -99,8 +113,11 @@ export default function StaffDashboardPage() {
       positionOptions.map((item) => ({
         id: item.id,
         name: item.name,
-        salary: item.salary,
-        level: item.level,
+        departmentId: item.departmentId,
+        baseSalary: item.baseSalary,
+        hasSeniorityPay: item.hasSeniorityPay,
+        seniorityPayPerYear: item.seniorityPayPerYear,
+        maxSeniorityPay: item.maxSeniorityPay,
       }))
     )
 
@@ -144,12 +161,12 @@ export default function StaffDashboardPage() {
     setFormState({
       departmentId: selectedUser.departmentId || '',
       positionId: selectedUser.positionId || '',
-      level: selectedUser.level || selectedUser.position?.level || '',
       startDate: formatDateInputValue(selectedUser.startDate),
       seniorityStartDate: formatDateInputValue(selectedUser.seniorityStartDate),
       seniorityEndDate: formatDateInputValue(selectedUser.seniorityEndDate),
       versionRemark: '',
-      role: selectedUser.role === 'MANAGER' ? 'MANAGER' : 'EMPLOYEE',
+      role: ['MANAGER', 'ATTENDANCE_CLERK'].includes(selectedUser.role) ? (selectedUser.role as EditableRole) : 'EMPLOYEE',
+      educationSalary: selectedUser.educationSalary ? String(selectedUser.educationSalary) : '',
     })
   }, [selectedUser])
 
@@ -161,7 +178,7 @@ export default function StaffDashboardPage() {
     }
 
     return staff.filter((item) =>
-      [item.name, item.email, item.department?.name, item.position?.name, getRoleLabel(item.role)]
+      [item.name, item.username, item.department?.name, item.position?.name, getRoleLabel(item.role)]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(search))
     )
@@ -172,7 +189,12 @@ export default function StaffDashboardPage() {
     formState.seniorityStartDate || selectedUser?.seniorityStartDate,
     formState.seniorityEndDate || selectedUser?.seniorityEndDate
   )
-  const seniorityPayPreview = calculateSeniorityPay(formState.startDate || selectedUser?.startDate)
+  const seniorityPayPreview = calculateSeniorityPay(
+    formState.startDate || selectedUser?.startDate,
+    undefined,
+    selectedPosition?.seniorityPayPerYear,
+    selectedPosition?.maxSeniorityPay
+  )
   const annualLeaveEntitlement = calculateAnnualLeaveEntitlement(
     formState.seniorityStartDate || selectedUser?.seniorityStartDate,
     formState.seniorityEndDate || selectedUser?.seniorityEndDate
@@ -192,11 +214,11 @@ export default function StaffDashboardPage() {
     const submitData = new FormData()
     submitData.append('departmentId', formState.departmentId)
     submitData.append('positionId', formState.positionId)
-    submitData.append('level', formState.level)
     submitData.append('startDate', formState.startDate)
     submitData.append('seniorityStartDate', formState.seniorityStartDate)
     submitData.append('seniorityEndDate', formState.seniorityEndDate)
     submitData.append('versionRemark', formState.versionRemark)
+    submitData.append('educationSalary', formState.educationSalary)
     if (selectedUser.role !== 'ADMIN') {
       submitData.append('role', formState.role)
     }
@@ -240,7 +262,7 @@ export default function StaffDashboardPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="rounded-lg border bg-gray-50 px-4 py-3 text-sm text-gray-700">
                   <div className="font-medium text-gray-900">{selectedUser.name}</div>
-                  <div>{selectedUser.email}</div>
+                  <div>{selectedUser.username}</div>
                   <div className="mt-1">当前系统角色：{getRoleLabel(selectedUser.role)}</div>
                   <div className="mt-1 text-gray-500">{selectedUser.department?.name || '未分配部门'} · {selectedUser.position?.name || '未设置岗位'}</div>
                 </div>
@@ -301,37 +323,22 @@ export default function StaffDashboardPage() {
                     value={formState.positionId}
                     onChange={(event) => {
                       const nextPositionId = event.target.value
-                      const nextPosition = positions.find((item) => item.id === nextPositionId)
 
                       setFormState((current) => ({
                         ...current,
                         positionId: nextPositionId,
-                        level: current.level || !nextPosition?.level ? current.level : nextPosition.level,
                       }))
                     }}
                   >
                     <option value="">未设置</option>
-                    {positions.map((position) => (
-                      <option key={position.id} value={position.id}>
-                        {position.name}
-                      </option>
-                    ))}
+                    {positions
+                      .filter((position) => !formState.departmentId || position.departmentId === formState.departmentId)
+                      .map((position) => (
+                        <option key={position.id} value={position.id}>
+                          {position.name}
+                        </option>
+                      ))}
                   </select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="level">岗位职级</Label>
-                  <Input
-                    id="level"
-                    value={formState.level}
-                    placeholder="如：P6 / 高级 / 主管级"
-                    onChange={(event) =>
-                      setFormState((current) => ({
-                        ...current,
-                        level: event.target.value,
-                      }))
-                    }
-                  />
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -385,17 +392,35 @@ export default function StaffDashboardPage() {
                     <div className="mt-1">工龄满 {seniorityYears} 年</div>
                     <div className="mt-1">年假标准：{annualLeaveEntitlement} 天</div>
                     <div className="mt-1">工龄工资：{seniorityPayPreview.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</div>
+                    {selectedPosition && !selectedPosition.hasSeniorityPay && (
+                      <div className="mt-1 text-amber-600">当前岗位无工龄工资</div>
+                    )}
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="educationSalary">学历工资</Label>
+                  <Input
+                    id="educationSalary"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formState.educationSalary}
+                    placeholder="0"
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        educationSalary: event.target.value,
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500">按月发放的固定学历补贴，计入基本工资</p>
                 </div>
 
                 {selectedPosition && (
                   <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                    岗位基准薪资：
-                    {selectedPosition.salary.toLocaleString('zh-CN', {
-                      style: 'currency',
-                      currency: 'CNY',
-                    })}
-                    {selectedPosition.level ? `；默认职级：${selectedPosition.level}` : ''}
+                    <div>岗位基础工资：{selectedPosition.baseSalary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</div>
+                    <div className="mt-1">工龄工资：每年 {selectedPosition.seniorityPayPerYear.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}，上限 {selectedPosition.maxSeniorityPay.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</div>
                   </div>
                 )}
 
@@ -412,7 +437,7 @@ export default function StaffDashboardPage() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500">当本次保存涉及角色、岗位、职级或日期变更时，可填写备注用于操作留痕。</p>
+                  <p className="text-xs text-gray-500">当本次保存涉及角色、岗位或日期变更时，可填写备注用于操作留痕。</p>
                 </div>
 
                 {message.text && (
@@ -432,13 +457,97 @@ export default function StaffDashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>人员列表</CardTitle>
+            <Button size="sm" onClick={() => { setShowCreateForm(true); setCreateMessage(null) }}>
+              新建账号
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
+            {showCreateForm && (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  setCreateLoading(true)
+                  setCreateMessage(null)
+                  const formData = new FormData()
+                  formData.append('username', createForm.username)
+                  formData.append('name', createForm.name)
+                  formData.append('role', createForm.role)
+                  const result = await createUser(formData)
+                  setCreateLoading(false)
+                  if (result.error) {
+                    setCreateMessage({ type: 'error', text: result.error })
+                  } else {
+                    setCreateMessage({ type: 'success', text: result.success || '账号创建成功' })
+                    setCreateForm({ username: '', name: '', role: 'EMPLOYEE' })
+                    await loadData()
+                    setTimeout(() => setShowCreateForm(false), 1500)
+                  }
+                }}
+                className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
+              >
+                <h3 className="text-sm font-semibold text-gray-900">新建账号</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="create-username">账户名</Label>
+                  <Input
+                    id="create-username"
+                    placeholder="请输入账户名"
+                    value={createForm.username}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, username: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-name">姓名</Label>
+                  <Input
+                    id="create-name"
+                    placeholder="请输入姓名"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-role">系统角色</Label>
+                  <Select
+                    id="create-role"
+                    value={createForm.role}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, role: e.target.value as EditableRole }))}
+                  >
+                    {roleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>默认密码</Label>
+                  <div className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600">
+                    Aa@12345!
+                  </div>
+                  <p className="text-xs text-gray-500">创建后请通知用户尽快修改密码</p>
+                </div>
+                {createMessage && (
+                  <div className={`text-sm ${createMessage.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                    {createMessage.text}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={createLoading} className="flex-1">
+                    {createLoading ? '创建中...' : '创建账号'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
+                    取消
+                  </Button>
+                </div>
+              </form>
+            )}
+
             <Input
               value={keyword}
-              placeholder="搜索姓名、邮箱、部门、岗位或角色"
+              placeholder="搜索姓名、账户名、部门、岗位或角色"
               onChange={(event) => setKeyword(event.target.value)}
             />
 
@@ -452,7 +561,7 @@ export default function StaffDashboardPage() {
                     <TableHead>系统角色</TableHead>
                     <TableHead>部门</TableHead>
                     <TableHead>岗位</TableHead>
-                    <TableHead>职级</TableHead>
+                    <TableHead>学历工资</TableHead>
                     <TableHead>入职日期</TableHead>
                     <TableHead>工龄起始</TableHead>
                     <TableHead>工龄截止</TableHead>
@@ -474,12 +583,12 @@ export default function StaffDashboardPage() {
                         <TableRow key={item.id} className={isActive ? 'bg-blue-50/60' : ''}>
                           <TableCell>
                             <div className="font-medium text-gray-900">{item.name}</div>
-                            <div className="text-xs text-gray-500">{item.email}</div>
+                            <div className="text-xs text-gray-500">{item.username}</div>
                           </TableCell>
                           <TableCell>{getRoleLabel(item.role)}</TableCell>
                           <TableCell>{item.department?.name || '-'}</TableCell>
                           <TableCell>{item.position?.name || '-'}</TableCell>
-                          <TableCell>{item.level || item.position?.level || '-'}</TableCell>
+                          <TableCell>{item.educationSalary ? item.educationSalary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' }) : '-'}</TableCell>
                           <TableCell>{item.startDate ? formatDate(new Date(item.startDate)) : '-'}</TableCell>
                           <TableCell>{item.seniorityStartDate ? formatDate(new Date(item.seniorityStartDate)) : '-'}</TableCell>
                           <TableCell>{item.seniorityEndDate ? formatDate(new Date(item.seniorityEndDate)) : '-'}</TableCell>

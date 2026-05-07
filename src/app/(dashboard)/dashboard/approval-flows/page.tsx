@@ -85,6 +85,10 @@ function roleLabel(role: string) {
     return '部门主管'
   }
 
+  if (role === 'ATTENDANCE_CLERK') {
+    return '考勤员'
+  }
+
   return '员工'
 }
 

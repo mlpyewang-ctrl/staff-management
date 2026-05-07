@@ -10,16 +10,16 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        username: { label: 'Username', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('请输入邮箱和密码')
+        if (!credentials?.username || !credentials?.password) {
+          throw new Error('请输入账户名和密码')
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { username: credentials.username },
         })
 
         if (!user) {
@@ -37,7 +37,7 @@ export const authOptions: NextAuthOptions = {
 
         return {
           id: user.id,
-          email: user.email,
+          username: user.username,
           name: user.name,
           role: user.role as Role,
           companyId: user.companyId,

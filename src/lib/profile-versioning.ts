@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 
-export const EDUCATION_OPTIONS = ['楂樹腑', '涓笓', '澶т笓', '鏈', '纭曞＋', '鍗氬＋'] as const
+export const EDUCATION_OPTIONS = ['高中', '中专', '大专', '本科', '硕士', '博士'] as const
 
 export type EducationOption = (typeof EDUCATION_OPTIONS)[number]
 export type ProfileVersionType = 'RESUME' | 'PARTY'

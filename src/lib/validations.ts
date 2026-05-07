@@ -18,16 +18,22 @@ const optionalEducation = z.preprocess((value) => {
 }, z.enum(EDUCATION_OPTIONS).optional())
 
 export const loginSchema = z.object({
-  email: z.string().email('请输入有效的邮箱地址'),
+  username: z.string().min(2, '账户名至少需要 2 个字符'),
   password: z.string().min(6, '密码至少需要 6 个字符'),
 })
 
 export const registerSchema = z.object({
-  email: z.string().email('请输入有效的邮箱地址'),
+  username: z.string().min(2, '账户名至少需要 2 个字符'),
   password: z.string().min(6, '密码至少需要 6 个字符'),
   name: z.string().min(2, '姓名至少需要 2 个字符'),
-  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE']).optional().default('EMPLOYEE'),
+  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE', 'ATTENDANCE_CLERK']).optional().default('EMPLOYEE'),
   companyId: z.string().nullish(),
+})
+
+export const createUserSchema = z.object({
+  username: z.string().min(2, '账户名至少需要 2 个字符'),
+  name: z.string().min(2, '姓名至少需要 2 个字符'),
+  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE', 'ATTENDANCE_CLERK']).optional().default('EMPLOYEE'),
 })
 
 export const overtimeSchema = z.object({
@@ -87,22 +93,29 @@ export const userProfileSchema = z.object({
 export const userJobAssignmentSchema = z.object({
   departmentId: optionalText,
   positionId: optionalText,
-  level: optionalText.refine(
-    (value) => value === undefined || value.length <= 50,
-    '职级不能超过 50 个字符'
-  ),
   startDate: optionalText,
   seniorityStartDate: optionalText,
   seniorityEndDate: optionalText,
   versionRemark: optionalText,
+  educationSalary: z
+    .string()
+    .optional()
+    .refine((value) => value === undefined || value === '' || (!Number.isNaN(Number(value)) && Number(value) >= 0), '请输入有效的学历工资金额'),
 })
 
 export const positionSchema = z.object({
   name: z.string().min(2, '岗位名称至少需要 2 个字符'),
-  salary: z
+  departmentId: z.string().min(1, '请选择部门'),
+  baseSalary: z
     .string()
-    .refine((value) => !Number.isNaN(Number(value)) && Number(value) >= 0, '请输入有效的薪资金额'),
-  level: z.string().optional(),
+    .refine((value) => !Number.isNaN(Number(value)) && Number(value) >= 0, '请输入有效的基础工资金额'),
+  hasSeniorityPay: z.enum(['true', 'false']).optional().default('true'),
+  seniorityPayPerYear: z
+    .string()
+    .refine((value) => !Number.isNaN(Number(value)) && Number(value) >= 0, '请输入有效的工龄工资金额'),
+  maxSeniorityPay: z
+    .string()
+    .refine((value) => !Number.isNaN(Number(value)) && Number(value) >= 0, '请输入有效的工龄工资上限金额'),
 })
 
 export const salaryGenerateSchema = z.object({

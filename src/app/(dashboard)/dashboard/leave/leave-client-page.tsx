@@ -10,8 +10,9 @@ import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, getPaginationState } from '@/lib/pagination'
 import { formatDate, formatDateTime, getLeaveSessionLabel } from '@/lib/utils'
+import { generateLeaveTemplate } from '@/lib/excel-parser'
 import { getCompensatorySourceHistory } from '@/server/actions/compensatory'
-import { getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
+import { deleteLeaveApplication, getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
 import type { Role } from '@/types'
 
 type LeaveApplicationsData = Awaited<ReturnType<typeof getLeaveApplications>>
@@ -60,7 +61,8 @@ export function LeaveClientPage({
   const [sourcePageSize, setSourcePageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const canCreate = Boolean(viewerId)
-  const canEdit = viewerRole === 'EMPLOYEE'
+  const canEdit = viewerRole === 'EMPLOYEE' || viewerRole === 'ATTENDANCE_CLERK'
+  const isAttendanceClerk = viewerRole === 'ATTENDANCE_CLERK'
 
   useEffect(() => {
     setApplications(initialApplications)
@@ -119,11 +121,35 @@ export function LeaveClientPage({
           <h1 className="text-2xl font-bold text-gray-900">请假管理</h1>
           <p className="mt-1 text-gray-600">调休作为一种假期类型统一在此申请，并共用请假审批流程。</p>
         </div>
-        {canCreate && (
-          <Button asChild>
-            <Link href="/dashboard/leave/new">新增申请</Link>
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {viewerRole === 'EMPLOYEE' && (
+            <Button asChild>
+              <Link href="/dashboard/leave/new">新增申请</Link>
+            </Button>
+          )}
+          {isAttendanceClerk && (
+            <>
+              <Button asChild>
+                <Link href="/dashboard/leave/import">批量导入</Link>
+              </Button>
+              <Button
+                onClick={() => {
+                  const blob = new Blob([generateLeaveTemplate()], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                  })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = '请假导入模板.xlsx'
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+              >
+                下载模板
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {balances && canCreate && (
@@ -228,6 +254,18 @@ export function LeaveClientPage({
                     application={application}
                     canEdit={canEdit}
                     showApplicant={viewerRole !== 'EMPLOYEE'}
+                    isAttendanceClerk={isAttendanceClerk}
+                    onDelete={async (id) => {
+                      if (!confirm('确定删除这条导入的请假记录吗？')) return
+                      const result = await deleteLeaveApplication(id)
+                      if (result.error) {
+                        alert(result.error)
+                      } else {
+                        alert(result.success)
+                        const data = await getLeaveApplications()
+                        setApplications(data)
+                      }
+                    }}
                   />
                 ))
               )}
@@ -300,10 +338,14 @@ function LeaveApplicationRow({
   application,
   canEdit,
   showApplicant,
+  isAttendanceClerk,
+  onDelete,
 }: {
   application: LeaveApplicationItem
   canEdit: boolean
   showApplicant: boolean
+  isAttendanceClerk: boolean
+  onDelete: (id: string) => void
 }) {
   return (
     <TableRow>
@@ -330,6 +372,14 @@ function LeaveApplicationRow({
           {application.status === 'DRAFT' ? (
             <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/leave/${application.id}`}>编辑</Link>
+            </Button>
+          ) : isAttendanceClerk && application.status === 'COMPLETED' && application.approverId === null ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => onDelete(application.id)}
+            >
+              删除
             </Button>
           ) : (
             <span className="text-xs text-gray-400">审批中 / 已完成</span>

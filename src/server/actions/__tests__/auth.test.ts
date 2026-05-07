@@ -52,7 +52,7 @@ describe('registerUser', () => {
     mockPrisma.user.findUnique.mockResolvedValue(null)
     mockPrisma.user.create.mockResolvedValue({
       id: '1',
-      email: 'test@example.com',
+      username: 'test@example.com',
       name: 'Test User',
       role: 'EMPLOYEE',
       password: '$2a$10$hashedpassword',
@@ -60,7 +60,7 @@ describe('registerUser', () => {
       updatedAt: new Date(),
     } as never)
     const formData = new FormData()
-    formData.append('email', 'test@example.com')
+    formData.append('username', 'test@example.com')
     formData.append('password', 'password123')
     formData.append('name', 'Test User')
 
@@ -68,12 +68,12 @@ describe('registerUser', () => {
 
     expect(result).toEqual({ success: '注册成功，请登录' })
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-      where: { email: 'test@example.com' },
+      where: { username: 'test@example.com' },
     })
     expect(mockBcrypt.hash).toHaveBeenCalledWith('password123', 10)
     expect(mockPrisma.user.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        email: 'test@example.com',
+        username: 'test@example.com',
         name: 'Test User',
         role: 'EMPLOYEE',
       }),
@@ -85,7 +85,7 @@ describe('registerUser', () => {
     mockPrisma.user.findUnique.mockResolvedValue(null)
     mockPrisma.user.create.mockResolvedValue({
       id: '1',
-      email: 'admin@example.com',
+      username: 'admin@example.com',
       name: 'Admin User',
       role: 'EMPLOYEE',
       password: '$2a$10$hashedpassword',
@@ -93,7 +93,7 @@ describe('registerUser', () => {
       updatedAt: new Date(),
     } as never)
     const formData = new FormData()
-    formData.append('email', 'admin@example.com')
+    formData.append('username', 'admin@example.com')
     formData.append('password', 'password123')
     formData.append('name', 'Admin User')
     formData.append('role', 'ADMIN')
@@ -113,7 +113,7 @@ describe('registerUser', () => {
     mockGetServerSession.mockResolvedValue({
       user: {
         id: 'admin-1',
-        email: 'root@example.com',
+        username: 'root@example.com',
         name: 'Root',
         role: 'ADMIN',
       },
@@ -122,7 +122,7 @@ describe('registerUser', () => {
     mockPrisma.user.findUnique.mockResolvedValue(null)
     mockPrisma.user.create.mockResolvedValue({
       id: '1',
-      email: 'manager@example.com',
+      username: 'manager@example.com',
       name: 'Manager User',
       role: 'MANAGER',
       password: '$2a$10$hashedpassword',
@@ -131,7 +131,7 @@ describe('registerUser', () => {
     } as never)
 
     const formData = new FormData()
-    formData.append('email', 'manager@example.com')
+    formData.append('username', 'manager@example.com')
     formData.append('password', 'password123')
     formData.append('name', 'Manager User')
     formData.append('role', 'MANAGER')
@@ -147,14 +147,14 @@ describe('registerUser', () => {
     expect(mockEnsureLeaveBalance).not.toHaveBeenCalled()
   })
 
-  it('should return error if email already exists', async () => {
+  it('should return error if username already exists', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
       id: '1',
-      email: 'existing@example.com',
+      username: 'existing@example.com',
     } as never)
 
     const formData = new FormData()
-    formData.append('email', 'existing@example.com')
+    formData.append('username', 'existing@example.com')
     formData.append('password', 'password123')
     formData.append('name', 'Test User')
 
@@ -164,9 +164,9 @@ describe('registerUser', () => {
     expect(mockPrisma.user.create).not.toHaveBeenCalled()
   })
 
-  it('should return error for invalid email', async () => {
+  it('should return error for username shorter than 2 characters', async () => {
     const formData = new FormData()
-    formData.append('email', 'invalid-email')
+    formData.append('username', 'a')
     formData.append('password', 'password123')
     formData.append('name', 'Test User')
 
@@ -177,7 +177,7 @@ describe('registerUser', () => {
 
   it('should return error for password shorter than 6 characters', async () => {
     const formData = new FormData()
-    formData.append('email', 'test@example.com')
+    formData.append('username', 'test@example.com')
     formData.append('password', '12345')
     formData.append('name', 'Test User')
 
@@ -196,7 +196,7 @@ describe('createInitialAdmin', () => {
     mockPrisma.user.findFirst.mockResolvedValue(null)
     mockPrisma.user.create.mockResolvedValue({
       id: '1',
-      email: 'admin@example.com',
+      username: 'admin@example.com',
       name: 'System Admin',
       role: 'ADMIN',
       password: '$2a$10$hashedpassword',
@@ -208,7 +208,7 @@ describe('createInitialAdmin', () => {
 
     expect(mockPrisma.user.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        email: 'admin@example.com',
+        username: 'admin',
         password: '$2a$10$hashedpassword',
         role: 'ADMIN',
       }),
@@ -218,7 +218,7 @@ describe('createInitialAdmin', () => {
   it('should not create admin if one already exists', async () => {
     mockPrisma.user.findFirst.mockResolvedValue({
       id: '1',
-      email: 'existing-admin@example.com',
+      username: 'existing-admin',
       role: 'ADMIN',
     } as never)
 

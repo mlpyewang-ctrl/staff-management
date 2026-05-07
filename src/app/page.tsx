@@ -18,12 +18,6 @@ export default function Home() {
           >
             登录系统
           </Link>
-          <Link
-            href="/auth/register"
-            className="px-6 py-3 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50 transition-colors font-medium"
-          >
-            注册账号
-          </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-4xl mx-auto mt-12">

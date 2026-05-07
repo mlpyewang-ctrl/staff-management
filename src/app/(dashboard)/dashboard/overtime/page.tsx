@@ -22,7 +22,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { TimeRange, isWithinTimeRange, timeRangeOptions } from '@/lib/time-range'
-import { getOvertimeApplications } from '@/server/actions/overtime'
+import { generateOvertimeTemplate } from '@/lib/excel-parser'
+import { deleteOvertimeApplication, getOvertimeApplications } from '@/server/actions/overtime'
 
 type OvertimeApplicationItem = Awaited<ReturnType<typeof getOvertimeApplications>>[number]
 
@@ -51,9 +52,11 @@ export default function OvertimePage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
 
+  const role = session?.user?.role
   const canCreate = !!session?.user?.id
-  const showApplicant = session?.user?.role !== 'EMPLOYEE'
-  const showActions = session?.user?.role === 'EMPLOYEE'
+  const showApplicant = role !== 'EMPLOYEE'
+  const showActions = role === 'EMPLOYEE' || role === 'ATTENDANCE_CLERK'
+  const isAttendanceClerk = role === 'ATTENDANCE_CLERK'
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -100,11 +103,35 @@ export default function OvertimePage() {
             统一查看申请进度，并按时间范围快速筛选记录。
           </p>
         </div>
-        {canCreate && (
-          <Button asChild>
-            <Link href="/dashboard/overtime/new">新增加班申请</Link>
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {role === 'EMPLOYEE' && (
+            <Button asChild>
+              <Link href="/dashboard/overtime/new">新增加班申请</Link>
+            </Button>
+          )}
+          {isAttendanceClerk && (
+            <>
+              <Button asChild>
+                <Link href="/dashboard/overtime/import">批量导入</Link>
+              </Button>
+              <Button
+                onClick={() => {
+                  const blob = new Blob([generateOvertimeTemplate()], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                  })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = '加班导入模板.xlsx'
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+              >
+                下载模板
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
@@ -179,6 +206,24 @@ export default function OvertimePage() {
                         ) : application.status === 'PRE_APPROVED' ? (
                           <Button asChild size="sm" variant="default">
                             <Link href={`/dashboard/overtime/${application.id}/confirm`}>提交确认</Link>
+                          </Button>
+                        ) : isAttendanceClerk && application.status === 'COMPLETED' && application.approverId === null ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              if (!confirm('确定删除这条导入的加班记录吗？')) return
+                              const result = await deleteOvertimeApplication(application.id)
+                              if (result.error) {
+                                alert(result.error)
+                              } else {
+                                alert(result.success)
+                                const data = await getOvertimeApplications(session?.user?.id, session?.user?.role)
+                                setApplications(data)
+                              }
+                            }}
+                          >
+                            删除
                           </Button>
                         ) : (
                           <span className="text-xs text-slate-400">

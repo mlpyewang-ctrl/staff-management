@@ -31,7 +31,7 @@ describe('buildSalaryExportRows', () => {
         departmentName: '研发部',
         positionName: '工程师',
         user: {
-          email: 'zhangsan@example.com',
+          username: 'zhangsan@example.com',
           level: 'P6',
         },
       },
@@ -42,7 +42,7 @@ describe('buildSalaryExportRows', () => {
       薪资单ID: 'salary-1',
       员工ID: 'user-1',
       姓名: '张三',
-      邮箱: 'zhangsan@example.com',
+      账户名: 'zhangsan@example.com',
       部门: '研发部',
       岗位: '工程师',
       职级: 'P6',

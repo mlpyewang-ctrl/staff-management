@@ -14,15 +14,15 @@ import {
 describe('loginSchema', () => {
   it('should validate valid login data', () => {
     const result = loginSchema.safeParse({
-      email: 'test@example.com',
+      username: 'test@example.com',
       password: 'password123',
     })
     expect(result.success).toBe(true)
   })
 
-  it('should reject invalid email', () => {
+  it('should reject username shorter than 2 characters', () => {
     const result = loginSchema.safeParse({
-      email: 'invalid-email',
+      username: 'a',
       password: 'password123',
     })
     expect(result.success).toBe(false)
@@ -30,7 +30,7 @@ describe('loginSchema', () => {
 
   it('should reject password shorter than 6 characters', () => {
     const result = loginSchema.safeParse({
-      email: 'test@example.com',
+      username: 'test@example.com',
       password: '12345',
     })
     expect(result.success).toBe(false)
@@ -40,7 +40,7 @@ describe('loginSchema', () => {
 describe('registerSchema', () => {
   it('should validate valid register data', () => {
     const result = registerSchema.safeParse({
-      email: 'test@example.com',
+      username: 'test@example.com',
       password: 'password123',
       name: 'Test User',
       role: 'EMPLOYEE',
@@ -50,7 +50,7 @@ describe('registerSchema', () => {
 
   it('should reject name shorter than 2 characters', () => {
     const result = registerSchema.safeParse({
-      email: 'test@example.com',
+      username: 'test@example.com',
       password: 'password123',
       name: 'T',
       role: 'EMPLOYEE',
@@ -60,7 +60,7 @@ describe('registerSchema', () => {
 
   it('should reject invalid role', () => {
     const result = registerSchema.safeParse({
-      email: 'test@example.com',
+      username: 'test@example.com',
       password: 'password123',
       name: 'Test User',
       role: 'INVALID',
@@ -72,7 +72,7 @@ describe('registerSchema', () => {
     const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE'] as const
     roles.forEach((role) => {
       const result = registerSchema.safeParse({
-        email: 'test@example.com',
+        username: 'test@example.com',
         password: 'password123',
         name: 'Test User',
         role,
@@ -225,8 +225,10 @@ describe('positionSchema', () => {
   it('should validate valid position data', () => {
     const result = positionSchema.safeParse({
       name: 'Software Engineer',
-      salary: '50000',
-      level: 'P5',
+      departmentId: 'dept-1',
+      baseSalary: '50000',
+      seniorityPayPerYear: '100',
+      maxSeniorityPay: '1000',
     })
     expect(result.success).toBe(true)
   })
@@ -234,23 +236,42 @@ describe('positionSchema', () => {
   it('should reject name shorter than 2 characters', () => {
     const result = positionSchema.safeParse({
       name: 'S',
-      salary: '50000',
+      departmentId: 'dept-1',
+      baseSalary: '50000',
+      seniorityPayPerYear: '100',
+      maxSeniorityPay: '1000',
     })
     expect(result.success).toBe(false)
   })
 
-  it('should reject invalid salary', () => {
+  it('should reject invalid baseSalary', () => {
     const result = positionSchema.safeParse({
       name: 'Software Engineer',
-      salary: 'invalid',
+      departmentId: 'dept-1',
+      baseSalary: 'invalid',
+      seniorityPayPerYear: '100',
+      maxSeniorityPay: '1000',
     })
     expect(result.success).toBe(false)
   })
 
-  it('should reject negative salary', () => {
+  it('should reject negative baseSalary', () => {
     const result = positionSchema.safeParse({
       name: 'Software Engineer',
-      salary: '-100',
+      departmentId: 'dept-1',
+      baseSalary: '-100',
+      seniorityPayPerYear: '100',
+      maxSeniorityPay: '1000',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('should reject missing departmentId', () => {
+    const result = positionSchema.safeParse({
+      name: 'Software Engineer',
+      baseSalary: '50000',
+      seniorityPayPerYear: '100',
+      maxSeniorityPay: '1000',
     })
     expect(result.success).toBe(false)
   })
