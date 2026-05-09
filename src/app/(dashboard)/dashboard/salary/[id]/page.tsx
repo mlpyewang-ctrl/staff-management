@@ -24,6 +24,11 @@ interface SalaryRecordDetail {
   baseSalary: number
   seniorityPay: number
   otherAdjustment: number
+  classLeaderAllowance: number
+  dormHeadAllowance: number
+  electricityAllowance: number
+  supplementalPay: number
+  deductionAdjustment: number
   adjustmentNote?: string | null
   salaryBase: number
   workdayOvertimeHours: number
@@ -64,6 +69,38 @@ interface SalaryRecordDetail {
   }>
 }
 
+interface AdjustmentForm {
+  otherAdjustment: string
+  classLeaderAllowance: string
+  dormHeadAllowance: string
+  electricityAllowance: string
+  supplementalPay: string
+  deductionAdjustment: string
+  note: string
+}
+
+const emptyAdjustmentForm: AdjustmentForm = {
+  otherAdjustment: '',
+  classLeaderAllowance: '',
+  dormHeadAllowance: '',
+  electricityAllowance: '',
+  supplementalPay: '',
+  deductionAdjustment: '',
+  note: '',
+}
+
+function recordToForm(record: SalaryRecordDetail): AdjustmentForm {
+  return {
+    otherAdjustment: String(record.otherAdjustment ?? 0),
+    classLeaderAllowance: String(record.classLeaderAllowance ?? 0),
+    dormHeadAllowance: String(record.dormHeadAllowance ?? 0),
+    electricityAllowance: String(record.electricityAllowance ?? 0),
+    supplementalPay: String(record.supplementalPay ?? 0),
+    deductionAdjustment: String(record.deductionAdjustment ?? 0),
+    note: record.adjustmentNote || '',
+  }
+}
+
 export default function SalaryDetailPage() {
   const { data: session } = useSession()
   const router = useRouter()
@@ -73,10 +110,7 @@ export default function SalaryDetailPage() {
   const [record, setRecord] = useState<SalaryRecordDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingAdjustment, setSavingAdjustment] = useState(false)
-  const [adjustmentForm, setAdjustmentForm] = useState({
-    amount: '',
-    note: '',
-  })
+  const [adjustmentForm, setAdjustmentForm] = useState<AdjustmentForm>(emptyAdjustmentForm)
 
   useEffect(() => {
     if (session?.user?.role !== 'ADMIN') {
@@ -88,10 +122,7 @@ export default function SalaryDetailPage() {
       const data = await getSalaryRecord(salaryId)
       setRecord(data as SalaryRecordDetail | null)
       if (data) {
-        setAdjustmentForm({
-          amount: String((data as SalaryRecordDetail).otherAdjustment ?? 0),
-          note: (data as SalaryRecordDetail).adjustmentNote || '',
-        })
+        setAdjustmentForm(recordToForm(data as SalaryRecordDetail))
       }
       setLoading(false)
     }
@@ -128,7 +159,12 @@ export default function SalaryDetailPage() {
     setSavingAdjustment(true)
     const formData = new FormData()
     formData.append('salaryId', salaryId)
-    formData.append('amount', adjustmentForm.amount)
+    formData.append('otherAdjustment', adjustmentForm.otherAdjustment)
+    formData.append('classLeaderAllowance', adjustmentForm.classLeaderAllowance)
+    formData.append('dormHeadAllowance', adjustmentForm.dormHeadAllowance)
+    formData.append('electricityAllowance', adjustmentForm.electricityAllowance)
+    formData.append('supplementalPay', adjustmentForm.supplementalPay)
+    formData.append('deductionAdjustment', adjustmentForm.deductionAdjustment)
     if (adjustmentForm.note) {
       formData.append('note', adjustmentForm.note)
     }
@@ -139,6 +175,9 @@ export default function SalaryDetailPage() {
     if (result.success) {
       const data = await getSalaryRecord(salaryId)
       setRecord(data as SalaryRecordDetail | null)
+      if (data) {
+        setAdjustmentForm(recordToForm(data as SalaryRecordDetail))
+      }
       alert(result.success)
       return
     }
@@ -322,6 +361,26 @@ export default function SalaryDetailPage() {
                   {record.otherAdjustment >= 0 ? '+' : ''}{formatCurrency(record.otherAdjustment)}
                 </dd>
               </div>
+              <div className="flex justify-between border-b pb-2">
+                <dt className="text-gray-500">班长补助</dt>
+                <dd className="text-green-600">+{formatCurrency(record.classLeaderAllowance)}</dd>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <dt className="text-gray-500">宿舍负责人补助</dt>
+                <dd className="text-green-600">+{formatCurrency(record.dormHeadAllowance)}</dd>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <dt className="text-gray-500">电费补助</dt>
+                <dd className="text-green-600">+{formatCurrency(record.electricityAllowance)}</dd>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <dt className="text-gray-500">补发工资</dt>
+                <dd className="text-green-600">+{formatCurrency(record.supplementalPay)}</dd>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <dt className="text-gray-500">补扣工资</dt>
+                <dd className="text-red-600">-{formatCurrency(record.deductionAdjustment)}</dd>
+              </div>
               {record.adjustmentNote && (
                 <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600">
                   调整说明：{record.adjustmentNote}
@@ -356,29 +415,53 @@ export default function SalaryDetailPage() {
             <CardTitle>手动微调</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-[220px_1fr_auto]">
-              <Input
-                type="number"
-                value={adjustmentForm.amount}
-                onChange={(event) =>
-                  setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))
-                }
-                placeholder="输入调整金额"
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <AdjustmentField
+                label="其他调整"
+                value={adjustmentForm.otherAdjustment}
+                onChange={(value) => setAdjustmentForm((current) => ({ ...current, otherAdjustment: value }))}
               />
-              <Textarea
-                rows={2}
-                value={adjustmentForm.note}
-                onChange={(event) =>
-                  setAdjustmentForm((current) => ({ ...current, note: event.target.value }))
-                }
-                placeholder="输入调整说明"
+              <AdjustmentField
+                label="班长补助"
+                value={adjustmentForm.classLeaderAllowance}
+                onChange={(value) => setAdjustmentForm((current) => ({ ...current, classLeaderAllowance: value }))}
               />
+              <AdjustmentField
+                label="宿舍负责人补助"
+                value={adjustmentForm.dormHeadAllowance}
+                onChange={(value) => setAdjustmentForm((current) => ({ ...current, dormHeadAllowance: value }))}
+              />
+              <AdjustmentField
+                label="电费补助"
+                value={adjustmentForm.electricityAllowance}
+                onChange={(value) => setAdjustmentForm((current) => ({ ...current, electricityAllowance: value }))}
+              />
+              <AdjustmentField
+                label="补发工资"
+                value={adjustmentForm.supplementalPay}
+                onChange={(value) => setAdjustmentForm((current) => ({ ...current, supplementalPay: value }))}
+              />
+              <AdjustmentField
+                label="补扣工资"
+                value={adjustmentForm.deductionAdjustment}
+                onChange={(value) => setAdjustmentForm((current) => ({ ...current, deductionAdjustment: value }))}
+              />
+            </div>
+            <Textarea
+              rows={2}
+              value={adjustmentForm.note}
+              onChange={(event) =>
+                setAdjustmentForm((current) => ({ ...current, note: event.target.value }))
+              }
+              placeholder="输入调整说明"
+            />
+            <div className="flex items-center gap-4">
               <Button onClick={handleAdjustmentSave} disabled={savingAdjustment}>
                 {savingAdjustment ? '保存中...' : '保存调整'}
               </Button>
-            </div>
-            <div className="text-sm text-gray-500">
-              支持正负数。正数表示补贴，负数表示扣减。
+              <span className="text-sm text-gray-500">
+                支持正负数。正数表示补贴，负数表示扣减。
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -425,6 +508,28 @@ export default function SalaryDetailPage() {
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+
+function AdjustmentField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <Input
+        type="number"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="0"
+      />
     </div>
   )
 }

@@ -3,7 +3,7 @@
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
-import { requireSessionUser } from '@/lib/action-auth'
+import { isEmployeeRole, requireSessionUser } from '@/lib/action-auth'
 import { prisma } from '@/lib/prisma'
 import { otherApplicationSchema } from '@/lib/validations'
 
@@ -234,12 +234,9 @@ export async function deleteOtherApplication(id: string) {
 export async function getOtherApplications(_userId?: string, _role?: string) {
   try {
     const sessionUser = await requireSessionUser()
-    const where: Prisma.OtherApplicationWhereInput =
-      sessionUser.role === 'EMPLOYEE'
-        ? {
-            userId: sessionUser.id,
-          }
-        : {}
+    const where: Prisma.OtherApplicationWhereInput = {
+      userId: sessionUser.id,
+    }
 
     const applications = await prisma.otherApplication.findMany({
       where,

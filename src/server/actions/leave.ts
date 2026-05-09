@@ -3,7 +3,7 @@
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
-import { isAttendanceClerk, requireAttendanceClerk, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { isAttendanceClerk, isEmployeeRole, requireAttendanceClerk, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
 import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import { calculateLeaveDaysExcludingNonWorkingDays, formatDateKey } from '@/lib/utils'
@@ -125,22 +125,8 @@ async function validateLeaveBalance(params: {
     return { balance }
   }
 
-  let currentBalance = 0
-  if (params.leaveType === 'ANNUAL') {
-    currentBalance = balance.annual
-  } else if (params.leaveType === 'SICK') {
-    currentBalance = balance.sick
-  } else if (params.leaveType === 'PERSONAL') {
-    currentBalance = balance.personal
-  }
-
-  if (
-    params.days > currentBalance &&
-    params.leaveType !== 'MARRIAGE' &&
-    params.leaveType !== 'MATERNITY' &&
-    params.leaveType !== 'PATERNITY'
-  ) {
-    return { error: `假期余额不足，当前剩余 ${currentBalance} 天` }
+  if (params.leaveType === 'ANNUAL' && params.days > balance.annual) {
+    return { error: `年假余额不足，当前剩余 ${balance.annual} 天` }
   }
 
   return { balance }
@@ -335,7 +321,7 @@ export async function deleteLeaveApplication(id: string) {
 
     await prisma.$transaction(async (tx) => {
       // 如果是导入的已完成请假，删除时恢复余额
-      if (isClerkDeletingImport && ['ANNUAL', 'SICK', 'PERSONAL', 'COMPENSATORY'].includes(application.type)) {
+      if (isClerkDeletingImport && ['ANNUAL', 'COMPENSATORY'].includes(application.type)) {
         const balance = await tx.leaveBalance.findFirst({
           where: {
             userId: application.userId,
@@ -347,10 +333,6 @@ export async function deleteLeaveApplication(id: string) {
           const updateData: Record<string, { increment: number } | { decrement: number }> = {}
           if (application.type === 'ANNUAL') {
             updateData.annual = { increment: application.days }
-          } else if (application.type === 'SICK') {
-            updateData.sick = { increment: application.days }
-          } else if (application.type === 'PERSONAL') {
-            updateData.personal = { increment: application.days }
           } else if (application.type === 'COMPENSATORY') {
             updateData.usedCompensatory = { decrement: application.days * SALARY_CONSTANTS.HOURS_PER_DAY }
           }
@@ -475,12 +457,9 @@ export async function updateLeaveApplication(formData: FormData) {
 export async function getLeaveApplications(_userId?: string, _role?: string) {
   try {
     const sessionUser = await requireSessionUser()
-    const where: Prisma.LeaveApplicationWhereInput =
-      sessionUser.role === 'EMPLOYEE'
-        ? {
-            userId: sessionUser.id,
-          }
-        : {}
+    const where: Prisma.LeaveApplicationWhereInput = {
+      userId: sessionUser.id,
+    }
 
     const applications = await prisma.leaveApplication.findMany({
       where,
@@ -489,6 +468,7 @@ export async function getLeaveApplications(_userId?: string, _role?: string) {
           select: {
             name: true,
             username: true,
+            leaveBalance: true,
           },
         },
       },
@@ -504,6 +484,10 @@ export async function getLeaveApplications(_userId?: string, _role?: string) {
       halfDaySession: application.halfDaySession,
       compensatoryHours:
         application.type === 'COMPENSATORY' ? application.days * SALARY_CONSTANTS.HOURS_PER_DAY : 0,
+      applicantAnnual: application.user.leaveBalance?.annual ?? null,
+      applicantAnnualEntitlement: application.user.leaveBalance?.annualEntitlement ?? null,
+      applicantCompensatory: application.user.leaveBalance?.compensatory ?? null,
+      applicantUsedCompensatory: application.user.leaveBalance?.usedCompensatory ?? null,
     }))
   } catch (error) {
     console.error('获取请假申请列表失败:', error)
@@ -709,19 +693,8 @@ export async function batchImportLeave(rows: ParsedLeaveRow[]) {
           if (availableCompensatory < days * SALARY_CONSTANTS.HOURS_PER_DAY) {
             throw new Error(`第 ${row.rowIndex} 行：用户 ${row.username} 调休余额不足，当前可用 ${availableCompensatory} 小时`)
           }
-        } else if (
-          leaveType !== 'MARRIAGE' &&
-          leaveType !== 'MATERNITY' &&
-          leaveType !== 'PATERNITY'
-        ) {
-          let currentBalance = 0
-          if (leaveType === 'ANNUAL') currentBalance = balance.annual
-          else if (leaveType === 'SICK') currentBalance = balance.sick
-          else if (leaveType === 'PERSONAL') currentBalance = balance.personal
-
-          if (days > currentBalance) {
-            throw new Error(`第 ${row.rowIndex} 行：用户 ${row.username} 假期余额不足，当前剩余 ${currentBalance} 天`)
-          }
+        } else if (leaveType === 'ANNUAL' && days > balance.annual) {
+          throw new Error(`第 ${row.rowIndex} 行：用户 ${row.username} 年假余额不足，当前剩余 ${balance.annual} 天`)
         }
 
         await tx.leaveApplication.create({
@@ -745,10 +718,6 @@ export async function batchImportLeave(rows: ParsedLeaveRow[]) {
         const balanceUpdate: Record<string, { decrement: number } | { increment: number }> = {}
         if (leaveType === 'ANNUAL') {
           balanceUpdate.annual = { decrement: days }
-        } else if (leaveType === 'SICK') {
-          balanceUpdate.sick = { decrement: days }
-        } else if (leaveType === 'PERSONAL') {
-          balanceUpdate.personal = { decrement: days }
         } else if (leaveType === 'COMPENSATORY') {
           balanceUpdate.usedCompensatory = { increment: days * SALARY_CONSTANTS.HOURS_PER_DAY }
         }

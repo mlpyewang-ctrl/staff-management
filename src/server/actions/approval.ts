@@ -407,7 +407,7 @@ export async function approveApplication(formData: FormData) {
           },
         })
 
-        if (isFinalStep && ['ANNUAL', 'SICK', 'PERSONAL', 'COMPENSATORY'].includes(leaveApplication.type)) {
+        if (isFinalStep && ['ANNUAL', 'COMPENSATORY'].includes(leaveApplication.type)) {
           const balance = await tx.leaveBalance.findFirst({
             where: {
               userId: leaveApplication.userId,
@@ -423,10 +423,6 @@ export async function approveApplication(formData: FormData) {
 
           if (leaveApplication.type === 'ANNUAL') {
             updateData.annual = { decrement: leaveApplication.days }
-          } else if (leaveApplication.type === 'SICK') {
-            updateData.sick = { decrement: leaveApplication.days }
-          } else if (leaveApplication.type === 'PERSONAL') {
-            updateData.personal = { decrement: leaveApplication.days }
           } else if (leaveApplication.type === 'COMPENSATORY') {
             updateData.usedCompensatory = { increment: leaveApplication.days * 8 }
           }

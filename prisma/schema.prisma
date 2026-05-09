@@ -23,8 +23,7 @@ model User {
   departmentId       String?
   positionId         String?
   startDate          DateTime?
-  seniorityStartDate DateTime?
-  seniorityEndDate   DateTime?
+  firstWorkDate      DateTime?
   companyId          String?
   company            Company? @relation(fields: [companyId], references: [id])
   resumeDoc          String?
@@ -130,8 +129,8 @@ model LeaveBalance {
   year              Int
   annual            Float    @default(5)
   annualEntitlement Float    @default(5)
-  sick              Float    @default(10)
-  personal          Float    @default(5)
+  sick              Float    @default(0)
+  personal          Float    @default(0)
   compensatory      Float    @default(0)
   usedCompensatory  Float    @default(0)
   createdAt         DateTime @default(now())
@@ -155,28 +154,33 @@ model Holiday {
 }
 
 model SalaryRecord {
-  id                   String   @id @default(cuid())
-  userId               String
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month                String
-  baseSalary           Float
-  seniorityPay         Float    @default(0)
-  otherAdjustment      Float    @default(0)
-  adjustmentNote       String?
-  workdayOvertimeHours Float    @default(0)
-  workdayOvertimePay   Float    @default(0)
-  weekendOvertimeHours Float    @default(0)
-  weekendOvertimePay   Float    @default(0)
-  holidayOvertimeHours Float    @default(0)
-  holidayOvertimePay   Float    @default(0)
-  totalOvertimePay     Float    @default(0)
-  compensatoryHours    Float    @default(0)
-  deduction            Float    @default(0)
-  netSalary            Float
-  status               String   @default("DRAFT")
-  paidAt               DateTime?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month                  String
+  baseSalary             Float
+  seniorityPay           Float    @default(0)
+  otherAdjustment        Float    @default(0)
+  classLeaderAllowance   Float    @default(0)
+  dormHeadAllowance      Float    @default(0)
+  electricityAllowance   Float    @default(0)
+  supplementalPay        Float    @default(0)
+  deductionAdjustment    Float    @default(0)
+  adjustmentNote         String?
+  workdayOvertimeHours   Float    @default(0)
+  workdayOvertimePay     Float    @default(0)
+  weekendOvertimeHours   Float    @default(0)
+  weekendOvertimePay     Float    @default(0)
+  holidayOvertimeHours   Float    @default(0)
+  holidayOvertimePay     Float    @default(0)
+  totalOvertimePay       Float    @default(0)
+  compensatoryHours      Float    @default(0)
+  deduction              Float    @default(0)
+  netSalary              Float
+  status                 String   @default("DRAFT")
+  paidAt                 DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   overtimeSettlements OvertimeSettlement[]
 

@@ -1,4 +1,4 @@
-import { calculateHourlyRate, formatDateTime } from './utils'
+import { formatDateTime } from './utils'
 
 export interface SalaryExportRecord {
   id: string
@@ -7,6 +7,11 @@ export interface SalaryExportRecord {
   baseSalary: number
   seniorityPay: number
   otherAdjustment: number
+  classLeaderAllowance: number
+  dormHeadAllowance: number
+  electricityAllowance: number
+  supplementalPay: number
+  deductionAdjustment: number
   adjustmentNote?: string | null
   workdayOvertimeHours: number
   workdayOvertimePay: number
@@ -28,21 +33,12 @@ export interface SalaryExportRecord {
   user?: {
     username?: string | null
     level?: string | null
+    educationSalary?: number | null
   }
 }
 
 export interface SalaryExportRow {
   [key: string]: string | number
-}
-
-export function getSalaryStatusLabel(status: string) {
-  const statusMap: Record<string, string> = {
-    DRAFT: '草稿',
-    CONFIRMED: '已确认',
-    PAID: '已支付',
-  }
-
-  return statusMap[status] || status
 }
 
 function toDate(value?: Date | string | null) {
@@ -55,41 +51,22 @@ function toDate(value?: Date | string | null) {
 
 export function buildSalaryExportRows(records: SalaryExportRecord[]): SalaryExportRow[] {
   return records.map((record) => {
-    const paidOvertimeHours =
-      record.workdayOvertimeHours + record.weekendOvertimeHours + record.holidayOvertimeHours
-    const totalOvertimeHours = paidOvertimeHours + record.compensatoryHours
-    const hourlySalary = Math.round(calculateHourlyRate(record.baseSalary + record.seniorityPay) * 100) / 100
+    const educationSalary = record.user?.educationSalary ?? 0
+    const pureBaseSalary = record.baseSalary - educationSalary
 
     return {
-      薪资单ID: record.id,
-      员工ID: record.userId,
       姓名: record.userName || '',
-      账户名: record.user?.username || '',
-      部门: record.departmentName || '',
-      岗位: record.positionName || '',
-      职级: record.user?.level || '',
-      月份: record.month,
-      基本工资: record.baseSalary,
+      基础工资: pureBaseSalary,
       工龄工资: record.seniorityPay,
-      其他调整: record.otherAdjustment,
-      调整说明: record.adjustmentNote || '',
-      小时工资: hourlySalary,
-      工作日加班时长: record.workdayOvertimeHours,
-      工作日加班费: record.workdayOvertimePay,
-      周末加班时长: record.weekendOvertimeHours,
-      周末加班费: record.weekendOvertimePay,
-      法定节假日加班时长: record.holidayOvertimeHours,
-      法定节假日加班费: record.holidayOvertimePay,
-      计薪加班时长: paidOvertimeHours,
-      加班费合计: record.totalOvertimePay,
-      调休时长: record.compensatoryHours,
-      总加班时长: totalOvertimeHours,
-      扣款: record.deduction,
-      应发工资: record.netSalary,
-      状态: getSalaryStatusLabel(record.status),
-      支付时间: toDate(record.paidAt) ? formatDateTime(toDate(record.paidAt) as Date) : '',
-      创建时间: formatDateTime(toDate(record.createdAt) as Date),
-      更新时间: toDate(record.updatedAt) ? formatDateTime(toDate(record.updatedAt) as Date) : '',
+      学历工资: educationSalary,
+      班长补助: record.classLeaderAllowance,
+      宿舍负责人补助: record.dormHeadAllowance,
+      电费补助: record.electricityAllowance,
+      加班费: record.totalOvertimePay,
+      补发工资: record.supplementalPay,
+      补扣工资: record.deductionAdjustment,
+      请假: record.deduction,
+      小计: record.netSalary,
     }
   })
 }

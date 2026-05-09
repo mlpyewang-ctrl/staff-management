@@ -3,17 +3,22 @@ import { describe, expect, it } from 'vitest'
 import { buildSalaryExcelContent, buildSalaryExportRows } from '../salary-export'
 
 describe('buildSalaryExportRows', () => {
-  it('should include all salary export fields', () => {
+  it('should include all 12 salary export fields', () => {
     const rows = buildSalaryExportRows([
       {
         id: 'salary-1',
         userId: 'user-1',
         userName: '张三',
         month: '2026-02',
-        baseSalary: 12000,
+        baseSalary: 12500,
         seniorityPay: 300,
-        otherAdjustment: 1000,
-        adjustmentNote: '清明节过节费',
+        otherAdjustment: 200,
+        classLeaderAllowance: 500,
+        dormHeadAllowance: 300,
+        electricityAllowance: 100,
+        supplementalPay: 0,
+        deductionAdjustment: 0,
+        adjustmentNote: null,
         workdayOvertimeHours: 2,
         workdayOvertimePay: 200,
         weekendOvertimeHours: 3,
@@ -23,7 +28,7 @@ describe('buildSalaryExportRows', () => {
         totalOvertimePay: 875,
         compensatoryHours: 4,
         deduction: 300,
-        netSalary: 13875,
+        netSalary: 14175,
         status: 'PAID',
         paidAt: new Date('2026-03-10T08:30:00.000Z'),
         createdAt: new Date('2026-03-01T01:00:00.000Z'),
@@ -33,43 +38,26 @@ describe('buildSalaryExportRows', () => {
         user: {
           username: 'zhangsan@example.com',
           level: 'P6',
+          educationSalary: 500,
         },
       },
     ])
 
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
-      薪资单ID: 'salary-1',
-      员工ID: 'user-1',
       姓名: '张三',
-      账户名: 'zhangsan@example.com',
-      部门: '研发部',
-      岗位: '工程师',
-      职级: 'P6',
-      月份: '2026-02',
-      基本工资: 12000,
+      基础工资: 12000,
       工龄工资: 300,
-      其他调整: 1000,
-      调整说明: '清明节过节费',
-      工作日加班时长: 2,
-      工作日加班费: 200,
-      周末加班时长: 3,
-      周末加班费: 450,
-      法定节假日加班时长: 1,
-      法定节假日加班费: 225,
-      计薪加班时长: 6,
-      加班费合计: 875,
-      调休时长: 4,
-      总加班时长: 10,
-      扣款: 300,
-      应发工资: 13875,
-      状态: '已支付',
+      学历工资: 500,
+      班长补助: 500,
+      宿舍负责人补助: 300,
+      电费补助: 100,
+      加班费: 875,
+      补发工资: 0,
+      补扣工资: 0,
+      请假: 300,
+      小计: 14175,
     })
-
-    expect(rows[0].支付时间).toBeTypeOf('string')
-    expect(rows[0].创建时间).toBeTypeOf('string')
-    expect(rows[0].更新时间).toBeTypeOf('string')
-    expect(rows[0].小时工资).toBeGreaterThan(0)
   })
 })
 
@@ -78,7 +66,7 @@ describe('buildSalaryExcelContent', () => {
     const html = buildSalaryExcelContent([
       {
         姓名: '张三<&>',
-        应发工资: 8888,
+        小计: 8888,
       },
     ])
 

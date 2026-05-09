@@ -38,16 +38,15 @@ export function calculateCompletedYears(startDate?: Date | string | null, endDat
 }
 
 export function calculateAnnualLeaveEntitlement(
-  seniorityStartDate?: Date | string | null,
-  seniorityEndDate?: Date | string | null
+  firstWorkDate?: Date | string | null
 ) {
-  const seniorityYears = calculateCompletedYears(seniorityStartDate, seniorityEndDate)
+  const workYears = calculateCompletedYears(firstWorkDate)
 
-  if (seniorityYears >= 15) {
+  if (workYears >= 15) {
     return 15
   }
 
-  if (seniorityYears >= 10) {
+  if (workYears >= 10) {
     return 10
   }
 

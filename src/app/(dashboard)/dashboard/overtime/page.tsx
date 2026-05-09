@@ -104,7 +104,7 @@ export default function OvertimePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {role === 'EMPLOYEE' && (
+          {canCreate && (
             <Button asChild>
               <Link href="/dashboard/overtime/new">新增加班申请</Link>
             </Button>

@@ -12,10 +12,10 @@ describe('seniority helpers', () => {
     expect(calculateCompletedYears('2016-03-25', '2026-03-24')).toBe(9)
   })
 
-  it('calculates annual leave entitlement by seniority range', () => {
-    expect(calculateAnnualLeaveEntitlement('2018-01-01', '2026-03-24')).toBe(5)
-    expect(calculateAnnualLeaveEntitlement('2014-01-01', '2026-03-24')).toBe(10)
-    expect(calculateAnnualLeaveEntitlement('2008-01-01', '2026-03-24')).toBe(15)
+  it('calculates annual leave entitlement by first work date', () => {
+    expect(calculateAnnualLeaveEntitlement('2018-01-01')).toBe(5)
+    expect(calculateAnnualLeaveEntitlement('2014-01-01')).toBe(10)
+    expect(calculateAnnualLeaveEntitlement('2008-01-01')).toBe(15)
   })
 
   it('calculates seniority pay with a 1000 cap', () => {

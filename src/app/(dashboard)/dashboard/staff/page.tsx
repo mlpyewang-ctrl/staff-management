@@ -14,7 +14,7 @@ import {
   calculateSeniorityPay,
   formatDateInputValue,
 } from '@/lib/seniority'
-import { formatDate } from '@/lib/utils'
+import { calculateHourlyRate, formatDate, formatCurrency } from '@/lib/utils'
 import { getDepartments } from '@/server/actions/department'
 import { getPositions } from '@/server/actions/position'
 import { getStaffJobAssignments, updateUserJobAssignment } from '@/server/actions/user'
@@ -43,8 +43,7 @@ interface StaffUser {
   salary?: number | null
   educationSalary?: number | null
   startDate?: string | Date | null
-  seniorityStartDate?: string | Date | null
-  seniorityEndDate?: string | Date | null
+  firstWorkDate?: string | Date | null
   departmentId?: string | null
   positionId?: string | null
   department?: DepartmentOption | null
@@ -57,8 +56,7 @@ const emptyFormState = {
   departmentId: '',
   positionId: '',
   startDate: '',
-  seniorityStartDate: '',
-  seniorityEndDate: '',
+  firstWorkDate: '',
   versionRemark: '',
   role: 'EMPLOYEE' as EditableRole,
   educationSalary: '',
@@ -162,8 +160,7 @@ export default function StaffDashboardPage() {
       departmentId: selectedUser.departmentId || '',
       positionId: selectedUser.positionId || '',
       startDate: formatDateInputValue(selectedUser.startDate),
-      seniorityStartDate: formatDateInputValue(selectedUser.seniorityStartDate),
-      seniorityEndDate: formatDateInputValue(selectedUser.seniorityEndDate),
+      firstWorkDate: formatDateInputValue(selectedUser.firstWorkDate),
       versionRemark: '',
       role: ['MANAGER', 'ATTENDANCE_CLERK'].includes(selectedUser.role) ? (selectedUser.role as EditableRole) : 'EMPLOYEE',
       educationSalary: selectedUser.educationSalary ? String(selectedUser.educationSalary) : '',
@@ -185,19 +182,16 @@ export default function StaffDashboardPage() {
   }, [keyword, staff])
 
   const employmentYears = calculateCompletedYears(formState.startDate || selectedUser?.startDate)
-  const seniorityYears = calculateCompletedYears(
-    formState.seniorityStartDate || selectedUser?.seniorityStartDate,
-    formState.seniorityEndDate || selectedUser?.seniorityEndDate
-  )
+  const baseSalaryPreview = (selectedPosition?.baseSalary ?? selectedUser?.salary ?? 0) + (Number(formState.educationSalary) || selectedUser?.educationSalary || 0)
   const seniorityPayPreview = calculateSeniorityPay(
     formState.startDate || selectedUser?.startDate,
     undefined,
     selectedPosition?.seniorityPayPerYear,
     selectedPosition?.maxSeniorityPay
   )
+  const hourlyRatePreview = Math.round(calculateHourlyRate(baseSalaryPreview + seniorityPayPreview) * 100) / 100
   const annualLeaveEntitlement = calculateAnnualLeaveEntitlement(
-    formState.seniorityStartDate || selectedUser?.seniorityStartDate,
-    formState.seniorityEndDate || selectedUser?.seniorityEndDate
+    formState.firstWorkDate || selectedUser?.firstWorkDate
   )
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -215,8 +209,7 @@ export default function StaffDashboardPage() {
     submitData.append('departmentId', formState.departmentId)
     submitData.append('positionId', formState.positionId)
     submitData.append('startDate', formState.startDate)
-    submitData.append('seniorityStartDate', formState.seniorityStartDate)
-    submitData.append('seniorityEndDate', formState.seniorityEndDate)
+    submitData.append('firstWorkDate', formState.firstWorkDate)
     submitData.append('versionRemark', formState.versionRemark)
     submitData.append('educationSalary', formState.educationSalary)
     if (selectedUser.role !== 'ADMIN') {
@@ -358,40 +351,33 @@ export default function StaffDashboardPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="seniorityStartDate">工龄起始日期</Label>
+                    <Label htmlFor="firstWorkDate">初次工作时间</Label>
                     <Input
-                      id="seniorityStartDate"
+                      id="firstWorkDate"
                       type="date"
-                      value={formState.seniorityStartDate}
+                      value={formState.firstWorkDate}
                       onChange={(event) =>
                         setFormState((current) => ({
                           ...current,
-                          seniorityStartDate: event.target.value,
+                          firstWorkDate: event.target.value,
                         }))
                       }
                     />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="seniorityEndDate">工龄截止日期</Label>
-                    <Input
-                      id="seniorityEndDate"
-                      type="date"
-                      value={formState.seniorityEndDate}
-                      onChange={(event) =>
-                        setFormState((current) => ({
-                          ...current,
-                          seniorityEndDate: event.target.value,
-                        }))
-                      }
-                    />
+                    <p className="text-xs text-gray-500">用于计算年假天数</p>
                   </div>
 
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                     <div>入职满 {employmentYears} 年</div>
-                    <div className="mt-1">工龄满 {seniorityYears} 年</div>
                     <div className="mt-1">年假标准：{annualLeaveEntitlement} 天</div>
                     <div className="mt-1">工龄工资：{seniorityPayPreview.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</div>
+                    <div className="mt-1 border-t border-emerald-200 pt-2">
+                      <div>时薪：{formatCurrency(hourlyRatePreview)}/小时</div>
+                      <div className="mt-1 text-xs text-emerald-700">
+                        工作日加班 {formatCurrency(hourlyRatePreview * 1.5)}/小时 ·
+                        周末 {formatCurrency(hourlyRatePreview * 2)}/小时 ·
+                        节假日 {formatCurrency(hourlyRatePreview * 3)}/小时
+                      </div>
+                    </div>
                     {selectedPosition && !selectedPosition.hasSeniorityPay && (
                       <div className="mt-1 text-amber-600">当前岗位无工龄工资</div>
                     )}
@@ -524,10 +510,10 @@ export default function StaffDashboardPage() {
                 </div>
                 <div className="space-y-1">
                   <Label>默认密码</Label>
-                  <div className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600">
-                    Aa@12345!
+                  <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                    系统已分配默认密码
                   </div>
-                  <p className="text-xs text-gray-500">创建后请通知用户尽快修改密码</p>
+                  <p className="text-xs text-gray-500">创建后请通知用户尽快在个人页面修改密码</p>
                 </div>
                 {createMessage && (
                   <div className={`text-sm ${createMessage.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
@@ -563,15 +549,14 @@ export default function StaffDashboardPage() {
                     <TableHead>岗位</TableHead>
                     <TableHead>学历工资</TableHead>
                     <TableHead>入职日期</TableHead>
-                    <TableHead>工龄起始</TableHead>
-                    <TableHead>工龄截止</TableHead>
+                    <TableHead>初次工作时间</TableHead>
                     <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredStaff.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-8 text-center text-gray-500">
+                      <TableCell colSpan={10} className="py-8 text-center text-gray-500">
                         暂无匹配人员
                       </TableCell>
                     </TableRow>
@@ -590,8 +575,7 @@ export default function StaffDashboardPage() {
                           <TableCell>{item.position?.name || '-'}</TableCell>
                           <TableCell>{item.educationSalary ? item.educationSalary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' }) : '-'}</TableCell>
                           <TableCell>{item.startDate ? formatDate(new Date(item.startDate)) : '-'}</TableCell>
-                          <TableCell>{item.seniorityStartDate ? formatDate(new Date(item.seniorityStartDate)) : '-'}</TableCell>
-                          <TableCell>{item.seniorityEndDate ? formatDate(new Date(item.seniorityEndDate)) : '-'}</TableCell>
+                          <TableCell>{item.firstWorkDate ? formatDate(new Date(item.firstWorkDate)) : '-'}</TableCell>
                           <TableCell>
                             <Button variant={isActive ? 'default' : 'outline'} size="sm" onClick={() => setSelectedUserId(item.id)}>
                               {isActive ? '编辑中' : '编辑'}

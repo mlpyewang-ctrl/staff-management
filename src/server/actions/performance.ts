@@ -3,7 +3,7 @@
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
-import { requireSessionUser } from '@/lib/action-auth'
+import { isEmployeeRole, requireSessionUser } from '@/lib/action-auth'
 import { prisma } from '@/lib/prisma'
 import { performanceSchema } from '@/lib/validations'
 
@@ -178,12 +178,9 @@ export async function deletePerformanceReview(id: string) {
 export async function getPerformanceReviews(_userId?: string, _role?: string) {
   try {
     const sessionUser = await requireSessionUser()
-    const where: Prisma.PerformanceReviewWhereInput =
-      sessionUser.role === 'EMPLOYEE'
-        ? {
-            userId: sessionUser.id,
-          }
-        : {}
+    const where: Prisma.PerformanceReviewWhereInput = {
+      userId: sessionUser.id,
+    }
 
     const reviews = await prisma.performanceReview.findMany({
       where,

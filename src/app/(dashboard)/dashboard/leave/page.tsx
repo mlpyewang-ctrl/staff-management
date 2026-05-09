@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 
 import { authOptions } from '@/lib/auth'
 import { getCompensatorySourceHistory } from '@/server/actions/compensatory'
-import { getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
+import { getLeaveApplications } from '@/server/actions/leave'
+import { ensureLeaveBalance } from '@/lib/leave-balance'
 
 import { LeaveClientPage } from './leave-client-page'
 
@@ -17,9 +18,21 @@ export default async function LeavePage() {
   const viewerId = session.user.id
   const viewerRole = session.user.role
 
-  const [initialApplications, initialBalances, initialSourceHistory] = await Promise.all([
+  if (!viewerId) {
+    redirect('/auth/login')
+  }
+
+  let initialBalances = null
+  try {
+    if (viewerId) {
+      initialBalances = await ensureLeaveBalance(viewerId)
+    }
+  } catch {
+    initialBalances = null
+  }
+
+  const [initialApplications, initialSourceHistory] = await Promise.all([
     getLeaveApplications(),
-    viewerId ? getLeaveBalances(viewerId) : Promise.resolve(null),
     viewerId ? getCompensatorySourceHistory(viewerId) : Promise.resolve([]),
   ])
 

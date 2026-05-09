@@ -83,16 +83,18 @@ export default function GenerateSalaryPage() {
         </CardHeader>
         <CardContent>
           <ul className="list-disc list-inside space-y-2 text-gray-600">
-            <li>薪资月份：生成上个月的薪资记录</li>
-            <li>截止日期：每月20号截止，21号开始可以生成上月薪资</li>
-            <li>基本工资：取员工个人薪资或岗位薪资</li>
-            <li>加班费计算：
+            <li>薪资月份：可生成过去任意月份的薪资记录</li>
+            <li>基本工资：岗位基础工资 + 学历工资</li>
+            <li>工龄工资：根据入职日期自动计算</li>
+            <li>计薪基数：基本工资 + 工龄工资（用于计算时薪）</li>
+            <li>加班费计算（以计薪基数为基准计算时薪）：
               <ul className="list-disc list-inside ml-4 mt-1">
                 <li>工作日加班：时薪 x 1.5</li>
                 <li>周末加班：时薪 x 2</li>
                 <li>节假日加班：时薪 x 3</li>
               </ul>
             </li>
+            <li>请假扣款：以计薪基数为基准，按请假天数扣除（仅限事假）</li>
             <li>调休规则：月加班超过36小时的部分自动转调休</li>
             <li>调休优先级：节假日 &gt; 周末 &gt; 工作日（优先计薪）</li>
           </ul>

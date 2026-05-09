@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -35,12 +35,14 @@ type DepartmentsData = Awaited<ReturnType<typeof getDepartments>>
 type SalaryRecordItem = SalaryRecordsData[number]
 type SalaryStats = Exclude<SalaryStatsData, null>
 
-const adjustmentTemplates = [
-  { label: '清明节 +1000', amount: '1000', note: '清明节过节费' },
-  { label: '端午节 +1000', amount: '1000', note: '端午节过节费' },
-  { label: '中秋节 +1000', amount: '1000', note: '中秋节过节费' },
-  { label: '国庆节 +1000', amount: '1000', note: '国庆节过节费' },
-]
+const ADJUSTABLE_FIELDS = [
+  { value: 'otherAdjustment', label: '其他调整' },
+  { value: 'classLeaderAllowance', label: '班长补助' },
+  { value: 'dormHeadAllowance', label: '宿舍负责人补助' },
+  { value: 'electricityAllowance', label: '电费补助' },
+  { value: 'supplementalPay', label: '补发工资' },
+  { value: 'deductionAdjustment', label: '补扣工资' },
+] as const
 
 const emptyFilters = {
   month: '',
@@ -68,7 +70,10 @@ export function SalaryClientPage({
   const [loading, setLoading] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
   const [filters, setFilters] = useState(emptyFilters)
+  const [searchName, setSearchName] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [adjustmentForm, setAdjustmentForm] = useState({
+    field: 'otherAdjustment',
     amount: '',
     note: '',
   })
@@ -104,6 +109,7 @@ export function SalaryClientPage({
     setStats(statsData)
     setDepartments(departmentOptions)
     setMonths(monthOptions)
+    setSelectedIds(new Set())
     setLoading(false)
   }, [filters])
 
@@ -115,6 +121,38 @@ export function SalaryClientPage({
 
     void loadData()
   }, [loadData])
+
+  const filteredRecords = records.filter((record) => {
+    if (!searchName.trim()) return true
+    return record.userName?.toLowerCase().includes(searchName.trim().toLowerCase())
+  })
+
+  const draftRecords = filteredRecords.filter((r) => r.status === 'DRAFT')
+  const allDraftSelected = draftRecords.length > 0 && draftRecords.every((r) => selectedIds.has(r.id))
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSelected = new Set(selectedIds)
+      draftRecords.forEach((r) => newSelected.add(r.id))
+      setSelectedIds(newSelected)
+    } else {
+      const newSelected = new Set(selectedIds)
+      draftRecords.forEach((r) => newSelected.delete(r.id))
+      setSelectedIds(newSelected)
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { variant: 'default' | 'success' | 'warning' | 'danger'; text: string }> = {
@@ -181,8 +219,8 @@ export function SalaryClientPage({
   }
 
   const handleBatchAdjustment = async () => {
-    if (!filters.month) {
-      alert('请先选择月份')
+    if (selectedIds.size === 0) {
+      alert('请先勾选要调整的薪资记录')
       return
     }
 
@@ -193,11 +231,9 @@ export function SalaryClientPage({
 
     setAdjusting(true)
     const formData = new FormData()
-    formData.append('month', filters.month)
+    selectedIds.forEach((id) => formData.append('recordIds', id))
+    formData.append('field', adjustmentForm.field)
     formData.append('amount', adjustmentForm.amount)
-    if (filters.departmentId) {
-      formData.append('departmentId', filters.departmentId)
-    }
     if (adjustmentForm.note) {
       formData.append('note', adjustmentForm.note)
     }
@@ -207,6 +243,7 @@ export function SalaryClientPage({
 
     if (result.success) {
       alert(result.success)
+      setSelectedIds(new Set())
       await loadData()
       return
     }
@@ -276,42 +313,21 @@ export function SalaryClientPage({
               <option value="CONFIRMED">已确认</option>
               <option value="PAID">已支付</option>
             </FilterSelect>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">搜索姓名</label>
+              <Input
+                type="text"
+                placeholder="输入员工姓名"
+                value={searchName}
+                onChange={(event) => setSearchName(event.target.value)}
+                className="w-40"
+              />
+            </div>
           </div>
 
           <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            导出字段包含基本工资、工龄工资、其他调整、加班费、扣款、应发工资与调整说明。
-          </div>
-
-          <div className="mt-4 grid gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 md:grid-cols-[180px_1fr_auto]">
-            <Input
-              type="number"
-              placeholder="调整金额，如 1000"
-              value={adjustmentForm.amount}
-              onChange={(event) => setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))}
-            />
-            <Textarea
-              rows={2}
-              placeholder="调整说明，如：本月节日补贴"
-              value={adjustmentForm.note}
-              onChange={(event) => setAdjustmentForm((current) => ({ ...current, note: event.target.value }))}
-            />
-            <Button onClick={handleBatchAdjustment} disabled={adjusting || !filters.month}>
-              {adjusting ? '调整中...' : '批量调整'}
-            </Button>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {adjustmentTemplates.map((template) => (
-              <Button
-                key={template.label}
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setAdjustmentForm({ amount: template.amount, note: template.note })}
-              >
-                {template.label}
-              </Button>
-            ))}
+            导出字段包含：姓名、基础工资、工龄工资、学历工资、班长补助、宿舍负责人补助、电费补助、加班费、补发工资、补扣工资、请假、小计。
           </div>
         </CardContent>
       </Card>
@@ -321,43 +337,121 @@ export function SalaryClientPage({
           {loading ? (
             <div className="py-6 text-sm text-gray-500">正在加载筛选结果...</div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>员工</TableHead>
-                  <TableHead>部门</TableHead>
-                  <TableHead>月份</TableHead>
-                  <TableHead>基本工资</TableHead>
-                  <TableHead>工龄工资</TableHead>
-                  <TableHead>其他调整</TableHead>
-                  <TableHead>加班费</TableHead>
-                  <TableHead>扣款</TableHead>
-                  <TableHead>应发工资</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {records.length === 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center text-gray-500">
-                      暂无数据
-                    </TableCell>
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300"
+                        checked={allDraftSelected}
+                        onChange={(event) => handleSelectAll(event.target.checked)}
+                        disabled={draftRecords.length === 0}
+                      />
+                    </TableHead>
+                    <TableHead>员工</TableHead>
+                    <TableHead>部门</TableHead>
+                    <TableHead>月份</TableHead>
+                    <TableHead>基础工资</TableHead>
+                    <TableHead>工龄工资</TableHead>
+                    <TableHead>学历工资</TableHead>
+                    <TableHead>班长补助</TableHead>
+                    <TableHead>宿舍负责人补助</TableHead>
+                    <TableHead>电费补助</TableHead>
+                    <TableHead>加班费</TableHead>
+                    <TableHead>补发工资</TableHead>
+                    <TableHead>补扣工资</TableHead>
+                    <TableHead>请假</TableHead>
+                    <TableHead>小计</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>操作</TableHead>
                   </TableRow>
-                ) : (
-                  records.map((record) => (
-                    <SalaryRecordRow
-                      key={record.id}
-                      getStatusBadge={getStatusBadge}
-                      onDelete={handleDelete}
-                      onStatusChange={handleStatusChange}
-                      record={record}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredRecords.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={17} className="text-center text-gray-500">
+                        暂无数据
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredRecords.map((record) => (
+                      <SalaryRecordRow
+                        key={record.id}
+                        getStatusBadge={getStatusBadge}
+                        isSelected={selectedIds.has(record.id)}
+                        onDelete={handleDelete}
+                        onSelect={handleSelectOne}
+                        onStatusChange={handleStatusChange}
+                        record={record}
+                      />
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>批量调整</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">调整字段</label>
+              <select
+                className="block rounded-md border border-gray-300 px-3 py-2 text-sm"
+                value={adjustmentForm.field}
+                onChange={(event) =>
+                  setAdjustmentForm((current) => ({ ...current, field: event.target.value }))
+                }
+              >
+                {ADJUSTABLE_FIELDS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">调整金额</label>
+              <Input
+                type="number"
+                placeholder="如 500"
+                value={adjustmentForm.amount}
+                onChange={(event) =>
+                  setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))
+                }
+                className="w-40"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700">调整说明</label>
+              <Input
+                type="text"
+                placeholder="可选"
+                value={adjustmentForm.note}
+                onChange={(event) =>
+                  setAdjustmentForm((current) => ({ ...current, note: event.target.value }))
+                }
+              />
+            </div>
+            <Button
+              onClick={handleBatchAdjustment}
+              disabled={adjusting || selectedIds.size === 0 || !adjustmentForm.amount}
+            >
+              {adjusting ? '调整中...' : '批量调整'}
+            </Button>
+          </div>
+          <div className="text-sm text-gray-500">
+            {selectedIds.size > 0
+              ? `已勾选 ${selectedIds.size} 条草稿记录，将对选中记录的「${ADJUSTABLE_FIELDS.find((f) => f.value === adjustmentForm.field)?.label}」字段进行累加调整。`
+              : '请先在上方的表格中勾选需要调整的草稿记录。'}
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -415,24 +509,48 @@ function FilterSelect({
 
 function SalaryRecordRow({
   getStatusBadge,
+  isSelected,
   onDelete,
+  onSelect,
   onStatusChange,
   record,
 }: {
   getStatusBadge: (status: string) => ReactNode
+  isSelected: boolean
   onDelete: (id: string) => Promise<void>
+  onSelect: (id: string, checked: boolean) => void
   onStatusChange: (id: string, newStatus: string) => Promise<void>
   record: SalaryRecordItem
 }) {
+  const isDraft = record.status === 'DRAFT'
+  const pureBaseSalary = record.baseSalary - (record.educationSalary ?? 0)
+
   return (
     <TableRow>
+      <TableCell>
+        {isDraft ? (
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-gray-300"
+            checked={isSelected}
+            onChange={(event) => onSelect(record.id, event.target.checked)}
+          />
+        ) : (
+          <span className="inline-block h-4 w-4" />
+        )}
+      </TableCell>
       <TableCell>{record.userName}</TableCell>
       <TableCell>{record.departmentName || '-'}</TableCell>
       <TableCell>{record.month}</TableCell>
-      <TableCell>{formatCurrency(record.baseSalary)}</TableCell>
+      <TableCell>{formatCurrency(pureBaseSalary)}</TableCell>
       <TableCell>{formatCurrency(record.seniorityPay)}</TableCell>
-      <TableCell title={record.adjustmentNote || undefined}>{formatCurrency(record.otherAdjustment)}</TableCell>
+      <TableCell>{formatCurrency(record.educationSalary ?? 0)}</TableCell>
+      <TableCell>{formatCurrency(record.classLeaderAllowance)}</TableCell>
+      <TableCell>{formatCurrency(record.dormHeadAllowance)}</TableCell>
+      <TableCell>{formatCurrency(record.electricityAllowance)}</TableCell>
       <TableCell>{formatCurrency(record.totalOvertimePay)}</TableCell>
+      <TableCell>{formatCurrency(record.supplementalPay)}</TableCell>
+      <TableCell>{formatCurrency(record.deductionAdjustment)}</TableCell>
       <TableCell>{formatCurrency(record.deduction)}</TableCell>
       <TableCell className="font-semibold">{formatCurrency(record.netSalary)}</TableCell>
       <TableCell>{getStatusBadge(record.status)}</TableCell>

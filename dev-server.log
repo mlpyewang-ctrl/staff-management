@@ -1,0 +1,20 @@
+
+> staff-management@1.0.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 2.3s
+ ○ Compiling /api/auth/[...nextauth] ...
+ ✓ Compiled /api/auth/[...nextauth] in 2.1s (269 modules)
+ GET /api/auth/csrf 200 in 2970ms
+ POST /api/auth/callback/credentials 200 in 315ms
+ ○ Compiling /src/middleware ...
+ ✓ Compiled /src/middleware in 1029ms (171 modules)
+ ○ Compiling /dashboard/leave ...
+ ✓ Compiled /dashboard/leave in 9.3s (997 modules)
+ GET /dashboard/leave 200 in 10257ms
+ ✓ Compiled in 915ms (325 modules)

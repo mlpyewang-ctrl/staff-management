@@ -202,8 +202,7 @@ export async function getStaffJobAssignments() {
       salary: true,
       educationSalary: true,
       startDate: true,
-      seniorityStartDate: true,
-      seniorityEndDate: true,
+      firstWorkDate: true,
       departmentId: true,
       positionId: true,
       department: {
@@ -241,8 +240,7 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       departmentId: getString('departmentId'),
       positionId: getString('positionId'),
       startDate: getString('startDate'),
-      seniorityStartDate: getString('seniorityStartDate'),
-      seniorityEndDate: getString('seniorityEndDate'),
+      firstWorkDate: getString('firstWorkDate'),
       versionRemark: getString('versionRemark'),
       educationSalary: getString('educationSalary'),
     })
@@ -316,49 +314,10 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
     }
 
     const startDate = parseOptionalDate(validated.startDate, '入职日期')
-    const seniorityStartDate = parseOptionalDate(validated.seniorityStartDate, '工龄起始日期')
-    const seniorityEndDate = parseOptionalDate(validated.seniorityEndDate, '工龄截止日期')
-
-    if (seniorityStartDate && seniorityEndDate && seniorityEndDate < seniorityStartDate) {
-      return { error: '工龄截止日期不能早于工龄起始日期' }
-    }
+    const firstWorkDate = parseOptionalDate(validated.firstWorkDate, '初次工作时间')
 
     const nextRole = normalizedRole || existingUser.role
     const isPositionChanging = validated.positionId !== undefined && validated.positionId !== existingUser.positionId
-
-    let finalSeniorityStartDate = seniorityStartDate ?? existingUser.seniorityStartDate
-
-    // 调岗工龄逻辑
-    if (isPositionChanging && nextPosition) {
-      const oldPosition = existingUser.position
-
-      if (oldPosition) {
-        const sameSeniorityConfig =
-          oldPosition.hasSeniorityPay === true &&
-          nextPosition.hasSeniorityPay === true &&
-          oldPosition.seniorityPayPerYear === nextPosition.seniorityPayPerYear &&
-          oldPosition.maxSeniorityPay === nextPosition.maxSeniorityPay
-
-        const fromNoSeniorityToYes =
-          oldPosition.hasSeniorityPay === false &&
-          nextPosition.hasSeniorityPay === true
-
-        if (sameSeniorityConfig) {
-          // 工龄连续，seniorityStartDate 保持不变
-        } else if (fromNoSeniorityToYes) {
-          // 从无工龄岗位调到有工龄岗位，从调岗时间开始计算
-          finalSeniorityStartDate = new Date()
-          finalSeniorityStartDate.setHours(0, 0, 0, 0)
-        } else {
-          return { error: '当前岗位工龄配置不支持直接调岗，请联系管理员处理' }
-        }
-      } else {
-        // 之前无岗位，新岗位有工龄工资：若没有工龄起始日期，则设为入职日期
-        if (nextPosition.hasSeniorityPay === true && !finalSeniorityStartDate) {
-          finalSeniorityStartDate = startDate ?? existingUser.startDate
-        }
-      }
-    }
 
     const educationSalaryValue = validated.educationSalary ? Number(validated.educationSalary) : 0
 
@@ -366,8 +325,7 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       departmentId: string | null
       positionId: string | null
       startDate: Date | null
-      seniorityStartDate: Date | null
-      seniorityEndDate: Date | null
+      firstWorkDate: Date | null
       role?: string
       salary?: null
       educationSalary?: number
@@ -375,8 +333,7 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
       departmentId: validated.departmentId || null,
       positionId: validated.positionId || null,
       startDate,
-      seniorityStartDate: finalSeniorityStartDate,
-      seniorityEndDate,
+      firstWorkDate,
       ...(normalizedRole ? { role: normalizedRole } : {}),
       ...(isPositionChanging ? { salary: null } : {}),
       educationSalary: educationSalaryValue,
@@ -427,8 +384,7 @@ export async function updateUserJobAssignment(userId: string, formData: FormData
           { label: '部门', before: existingUser.department?.name || null, after: departmentName },
           { label: '岗位', before: existingUser.position?.name || null, after: positionName },
           { label: '入职日期', before: existingUser.startDate, after: startDate },
-          { label: '工龄起始日期', before: existingUser.seniorityStartDate, after: finalSeniorityStartDate },
-          { label: '工龄截止日期', before: existingUser.seniorityEndDate, after: seniorityEndDate },
+          { label: '初次工作时间', before: existingUser.firstWorkDate, after: firstWorkDate },
           { label: '学历工资', before: existingUser.educationSalary, after: educationSalaryValue },
         ],
       })

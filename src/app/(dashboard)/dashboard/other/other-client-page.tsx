@@ -54,7 +54,7 @@ export function OtherClientPage({
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const canCreate = Boolean(viewerId)
-  const canEdit = viewerRole === 'EMPLOYEE'
+  const canEdit = viewerRole === 'EMPLOYEE' || viewerRole === 'ADMIN'
 
   useEffect(() => {
     setApplications(initialApplications)

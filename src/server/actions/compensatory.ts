@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdminUser, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { requireAdminUser, requireSelfOrManager, requireSessionUser } from '@/lib/action-auth'
 import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import { compensatoryUseSchema } from '@/lib/validations'
@@ -10,7 +10,7 @@ import { SALARY_CONSTANTS } from '@/types'
 
 export async function getCompensatoryInfo(userId: string) {
   try {
-    await requireSelfOrAdmin(userId)
+    await requireSelfOrManager(userId)
 
     const leaveBalance = await ensureLeaveBalance(userId)
     const settledOvertime = await prisma.overtimeSettlement.findMany({
@@ -94,7 +94,7 @@ export async function useCompensatory(formData: FormData) {
 
 export async function getCompensatoryUsageHistory(userId: string) {
   try {
-    await requireSelfOrAdmin(userId)
+    await requireSelfOrManager(userId)
 
     const leaveApplications = await prisma.leaveApplication.findMany({
       where: {
@@ -123,7 +123,7 @@ export async function getCompensatoryUsageHistory(userId: string) {
 
 export async function getCompensatorySourceHistory(userId: string) {
   try {
-    await requireSelfOrAdmin(userId)
+    await requireSelfOrManager(userId)
 
     const settlements = await prisma.overtimeSettlement.findMany({
       where: {

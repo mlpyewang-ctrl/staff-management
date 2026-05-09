@@ -122,7 +122,7 @@ export function LeaveClientPage({
           <p className="mt-1 text-gray-600">调休作为一种假期类型统一在此申请，并共用请假审批流程。</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {viewerRole === 'EMPLOYEE' && (
+          {canCreate && (
             <Button asChild>
               <Link href="/dashboard/leave/new">新增申请</Link>
             </Button>
@@ -158,10 +158,15 @@ export function LeaveClientPage({
             <CardTitle>假期余额（{new Date().getFullYear()} 年）</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <BalanceCard label="年假" tone="blue" unit="天" value={balances.annual} />
-              <BalanceCard label="病假" tone="green" unit="天" value={balances.sick} />
-              <BalanceCard label="事假" tone="yellow" unit="天" value={balances.personal} />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <BalanceCard
+                label="年假"
+                tone="blue"
+                unit="天"
+                value={balances.annual}
+                entitlement={balances.annualEntitlement}
+                used={balances.annualEntitlement ? Math.round((balances.annualEntitlement - balances.annual) * 10) / 10 : undefined}
+              />
               <div className="rounded-lg bg-orange-50 p-4">
                 <div className="text-sm text-gray-600">调休可用</div>
                 <div className="text-2xl font-bold text-orange-700">
@@ -233,6 +238,8 @@ export function LeaveClientPage({
                 <TableHead>开始/结束时段</TableHead>
                 <TableHead>天数</TableHead>
                 <TableHead>调休时长</TableHead>
+                {viewerRole !== 'EMPLOYEE' && <TableHead>年假剩余</TableHead>}
+                {viewerRole !== 'EMPLOYEE' && <TableHead>调休可用</TableHead>}
                 <TableHead>事由</TableHead>
                 <TableHead>前往地点</TableHead>
                 <TableHead>状态</TableHead>
@@ -243,7 +250,7 @@ export function LeaveClientPage({
             <TableBody>
               {applications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={viewerRole === 'EMPLOYEE' ? 11 : 12} className="py-8 text-center text-gray-500">
+                  <TableCell colSpan={viewerRole === 'EMPLOYEE' ? 11 : (canEdit ? 14 : 13)} className="py-8 text-center text-gray-500">
                     暂无申请记录
                   </TableCell>
                 </TableRow>
@@ -294,11 +301,15 @@ function BalanceCard({
   tone,
   unit,
   value,
+  entitlement,
+  used,
 }: {
   label: string
   tone: 'blue' | 'green' | 'yellow'
   unit: string
   value: number
+  entitlement?: number
+  used?: number
 }) {
   const classNameMap = {
     blue: 'bg-blue-50 text-blue-700',
@@ -312,6 +323,11 @@ function BalanceCard({
       <div className="text-2xl font-bold">
         {value} {unit}
       </div>
+      {entitlement !== undefined && used !== undefined && (
+        <div className="mt-1 text-xs text-gray-500">
+          总 {entitlement} {unit} / 已用 {used} {unit}
+        </div>
+      )}
     </div>
   )
 }
@@ -347,6 +363,11 @@ function LeaveApplicationRow({
   isAttendanceClerk: boolean
   onDelete: (id: string) => void
 }) {
+  const compensatoryAvailable =
+    application.applicantCompensatory !== null && application.applicantUsedCompensatory !== null
+      ? (application.applicantCompensatory || 0) - (application.applicantUsedCompensatory || 0)
+      : null
+
   return (
     <TableRow>
       <TableCell>{application.leaveTypeText}</TableCell>
@@ -359,6 +380,16 @@ function LeaveApplicationRow({
       </TableCell>
       <TableCell>{application.days}</TableCell>
       <TableCell>{application.type === 'COMPENSATORY' ? `${application.compensatoryHours} 小时` : '-'}</TableCell>
+      {showApplicant && (
+        <TableCell>
+          {application.applicantAnnual !== null ? `${application.applicantAnnual} 天` : '-'}
+        </TableCell>
+      )}
+      {showApplicant && (
+        <TableCell>
+          {compensatoryAvailable !== null ? `${compensatoryAvailable} 小时` : '-'}
+        </TableCell>
+      )}
       <TableCell className="max-w-xs truncate">{application.reason}</TableCell>
       <TableCell>{application.destination || '-'}</TableCell>
       <TableCell>

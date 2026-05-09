@@ -108,8 +108,6 @@ describe('user actions', () => {
       positionId: 'pos-1',
       level: 'P5',
       startDate: new Date('2024-01-01T00:00:00.000Z'),
-      seniorityStartDate: new Date('2024-01-01T00:00:00.000Z'),
-      seniorityEndDate: null,
       department: { name: '研发部' },
       position: { name: '工程师' },
     } as never)
@@ -154,8 +152,6 @@ describe('user actions', () => {
       departmentId: 'old-dept',
       level: 'P5',
       startDate: new Date('2024-01-15T00:00:00.000Z'),
-      seniorityStartDate: new Date('2024-01-15T00:00:00.000Z'),
-      seniorityEndDate: null,
       salary: 8000,
       department: { name: '旧部门' },
       position: { name: '旧岗位', hasSeniorityPay: true, seniorityPayPerYear: 100, maxSeniorityPay: 1000 },
@@ -180,8 +176,6 @@ describe('user actions', () => {
     formData.append('positionId', 'pos-1')
     formData.append('role', 'MANAGER')
     formData.append('startDate', '2024-01-15')
-    formData.append('seniorityStartDate', '2024-01-15')
-    formData.append('seniorityEndDate', '2026-12-31')
 
     const result = await updateUserJobAssignment('user-1', formData)
 
@@ -218,8 +212,6 @@ describe('user actions', () => {
       departmentId: null,
       level: null,
       startDate: null,
-      seniorityStartDate: null,
-      seniorityEndDate: null,
       salary: null,
       department: null,
       position: null,

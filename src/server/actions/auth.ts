@@ -3,7 +3,7 @@
 import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
-import { registerSchema, createUserSchema } from '@/lib/validations'
+import { registerSchema, createUserSchema, changePasswordSchema } from '@/lib/validations'
 import { requireSessionUser } from '@/lib/action-auth'
 import { revalidatePath } from 'next/cache'
 
@@ -112,6 +112,49 @@ export async function createUser(formData: FormData) {
       return { error: error.message }
     }
     return { error: '创建失败，请稍后重试' }
+  }
+}
+
+export async function changePassword(formData: FormData) {
+  try {
+    const sessionUser = await requireSessionUser()
+
+    const validatedData = changePasswordSchema.parse({
+      currentPassword: formData.get('currentPassword'),
+      newPassword: formData.get('newPassword'),
+      confirmPassword: formData.get('confirmPassword'),
+    })
+
+    const user = await prisma.user.findUnique({
+      where: { id: sessionUser.id },
+    })
+
+    if (!user) {
+      return { error: '用户不存在' }
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      validatedData.currentPassword,
+      user.password
+    )
+
+    if (!isPasswordValid) {
+      return { error: '当前密码错误' }
+    }
+
+    const hashedPassword = await bcrypt.hash(validatedData.newPassword, 10)
+
+    await prisma.user.update({
+      where: { id: sessionUser.id },
+      data: { password: hashedPassword },
+    })
+
+    return { success: '密码修改成功' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '修改密码失败，请稍后重试' }
   }
 }
 

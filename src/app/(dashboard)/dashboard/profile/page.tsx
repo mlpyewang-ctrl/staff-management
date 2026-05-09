@@ -16,8 +16,10 @@ import {
   calculateSeniorityPay,
   formatDateInputValue,
 } from '@/lib/seniority'
+import { calculateHourlyRate, formatCurrency } from '@/lib/utils'
 import { WordPreview } from '@/components/word-preview'
 import { getUserProfile, updateUserProfile } from '@/server/actions/user'
+import { changePassword } from '@/server/actions/auth'
 
 interface UserProfile {
   id: string
@@ -30,8 +32,7 @@ interface UserProfile {
   educationSalary?: number | null
   level?: string | null
   startDate?: string | Date | null
-  seniorityStartDate?: string | Date | null
-  seniorityEndDate?: string | Date | null
+  firstWorkDate?: string | Date | null
   resumeDoc?: string | null
   partyInfoDoc?: string | null
   department?: {
@@ -51,6 +52,10 @@ export default function ProfileDashboardPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
+
+  const [pwdLoading, setPwdLoading] = useState(false)
+  const [pwdMessage, setPwdMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
+  const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
 
   useEffect(() => {
     const load = async () => {
@@ -106,14 +111,14 @@ export default function ProfileDashboardPage() {
     baseSalaryValue !== null
       ? (baseSalaryValue + educationSalary + seniorityPay).toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
       : '未设置'
+  const hourlyRate = baseSalaryValue !== null
+    ? Math.round(calculateHourlyRate(baseSalaryValue + educationSalary + seniorityPay) * 100) / 100
+    : null
 
 
   const employmentYears = calculateCompletedYears(profile?.startDate)
-  const annualLeaveYears = calculateCompletedYears(profile?.seniorityStartDate, profile?.seniorityEndDate)
-  const annualLeaveEntitlement = calculateAnnualLeaveEntitlement(
-    profile?.seniorityStartDate,
-    profile?.seniorityEndDate
-  )
+  const annualLeaveYears = calculateCompletedYears(profile?.firstWorkDate)
+  const annualLeaveEntitlement = calculateAnnualLeaveEntitlement(profile?.firstWorkDate)
 
   return (
     <div className="space-y-6">
@@ -171,25 +176,15 @@ export default function ProfileDashboardPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="seniorityStartDate">工龄起始日期</Label>
+                <Label htmlFor="firstWorkDate">初次工作时间</Label>
                 <Input
-                  id="seniorityStartDate"
-                  name="seniorityStartDate"
+                  id="firstWorkDate"
+                  name="firstWorkDate"
                   type="date"
-                  defaultValue={formatDateInputValue(profile?.seniorityStartDate)}
+                  defaultValue={formatDateInputValue(profile?.firstWorkDate)}
                   disabled
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="seniorityEndDate">工龄截止日期</Label>
-                <Input
-                  id="seniorityEndDate"
-                  name="seniorityEndDate"
-                  type="date"
-                  defaultValue={formatDateInputValue(profile?.seniorityEndDate)}
-                  disabled
-                />
-                <p className="text-xs text-gray-500">由管理员在人员岗位页面维护</p>
+                <p className="text-xs text-gray-500">由管理员在人员岗位页面维护，用于计算年假天数</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="departmentDisplay">部门</Label>
@@ -221,10 +216,18 @@ export default function ProfileDashboardPage() {
                 <Input id="totalSalaryDisplay" value={totalSalaryText} disabled />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="hourlyRateDisplay">小时工资</Label>
+                <Input
+                  id="hourlyRateDisplay"
+                  value={hourlyRate !== null ? `${formatCurrency(hourlyRate)}/小时` : '未设置'}
+                  disabled
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="annualLeaveEntitlementDisplay">年假标准</Label>
                 <Input
                   id="annualLeaveEntitlementDisplay"
-                  value={`${annualLeaveEntitlement} 天 (按 ${annualLeaveYears} 年工龄计算)`}
+                  value={`${annualLeaveEntitlement} 天 (按初次工作时间计算，已满 ${annualLeaveYears} 年)`}
                   disabled
                 />
               </div>
@@ -289,6 +292,80 @@ export default function ProfileDashboardPage() {
           ) : (
             <div className="text-sm text-gray-500">暂无党员信息文档</div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>修改密码</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setPwdLoading(true)
+              setPwdMessage({ type: '', text: '' })
+              const formData = new FormData()
+              formData.append('currentPassword', pwdForm.currentPassword)
+              formData.append('newPassword', pwdForm.newPassword)
+              formData.append('confirmPassword', pwdForm.confirmPassword)
+              const result = await changePassword(formData)
+              setPwdLoading(false)
+              if (result.error) {
+                setPwdMessage({ type: 'error', text: result.error })
+              } else {
+                setPwdMessage({ type: 'success', text: result.success || '密码修改成功' })
+                setPwdForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="currentPassword">当前密码</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  placeholder="请输入当前密码"
+                  value={pwdForm.currentPassword}
+                  onChange={(e) => setPwdForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newPassword">新密码</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  placeholder="至少 6 个字符"
+                  value={pwdForm.newPassword}
+                  onChange={(e) => setPwdForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">确认新密码</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="再次输入新密码"
+                  value={pwdForm.confirmPassword}
+                  onChange={(e) => setPwdForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  required
+                  minLength={6}
+                />
+              </div>
+            </div>
+            {pwdMessage.text && (
+              <div className={`text-sm ${pwdMessage.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                {pwdMessage.text}
+              </div>
+            )}
+            <Button type="submit" disabled={pwdLoading}>
+              {pwdLoading ? '修改中...' : '修改密码'}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

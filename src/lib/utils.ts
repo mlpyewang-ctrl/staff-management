@@ -49,6 +49,41 @@ export function getLeaveSessionLabel(session?: LeaveSession | string | null): st
   return '-'
 }
 
+export function calculateLeaveDaysInMonth(
+  leaveStart: Date,
+  leaveEnd: Date,
+  leaveStartSession: string | null,
+  leaveEndSession: string | null,
+  monthStart: Date,
+  monthEnd: Date,
+  options?: {
+    legalHolidayDates?: string[]
+    compensatoryWorkDates?: string[]
+  }
+): number {
+  const effectiveStart = leaveStart < monthStart ? monthStart : leaveStart
+  const effectiveEnd = leaveEnd > monthEnd ? monthEnd : leaveEnd
+
+  if (effectiveStart > effectiveEnd) {
+    return 0
+  }
+
+  const effectiveStartSession =
+    formatDateKey(effectiveStart) === formatDateKey(leaveStart)
+      ? leaveStartSession
+      : 'AM'
+  const effectiveEndSession =
+    formatDateKey(effectiveEnd) === formatDateKey(leaveEnd)
+      ? leaveEndSession
+      : 'PM'
+
+  return calculateLeaveDaysExcludingNonWorkingDays(effectiveStart, effectiveEnd, {
+    ...options,
+    startSession: (effectiveStartSession as LeaveSession) || 'AM',
+    endSession: (effectiveEndSession as LeaveSession) || 'PM',
+  })
+}
+
 export function calculateLeaveDaysExcludingNonWorkingDays(
   start: Date,
   end: Date,
@@ -127,11 +162,11 @@ export function calculateLeaveDaysExcludingNonWorkingDays(
 
 /**
  * 计算时薪
- * @param baseSalary 月基本工资
+ * @param monthlySalaryBase 月计薪基数（如基本工资 + 工龄工资）
  * @returns 时薪
  */
-export function calculateHourlyRate(baseSalary: number): number {
-  return baseSalary / SALARY_CONSTANTS.WORKDAYS_PER_MONTH / SALARY_CONSTANTS.HOURS_PER_DAY
+export function calculateHourlyRate(monthlySalaryBase: number): number {
+  return monthlySalaryBase / SALARY_CONSTANTS.WORKDAYS_PER_MONTH / SALARY_CONSTANTS.HOURS_PER_DAY
 }
 
 /**
@@ -246,31 +281,21 @@ export function getPreviousMonth(date: Date = new Date()): string {
 
 /**
  * 检查是否可以生成指定月份的薪资
- * 规则：每月20号截止，21号开始可以生成上月薪资
+ * 规则：只能生成过去月份（非当前月及未来月）
  * @param month 月份 YYYY-MM
  * @returns 是否可以生成
  */
 export function canGenerateSalary(month: string): { canGenerate: boolean; message: string } {
   const now = new Date()
-  const currentDay = now.getDate()
-  
-  // 解析目标月份
-  const [_year, _monthNum] = month.split('-').map(Number)
-  
-  // 上个月份
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const lastMonthStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`
-  
-  // 只能生成上个月的薪资
-  if (month !== lastMonthStr) {
-    return { canGenerate: false, message: '只能生成上个月的薪资' }
+  const [year, monthNum] = month.split('-').map(Number)
+  const targetDate = new Date(year, monthNum - 1, 1)
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  // 不能生成当前月及未来月的薪资
+  if (targetDate >= currentMonthStart) {
+    return { canGenerate: false, message: '只能生成过去月份的薪资' }
   }
-  
-  // 必须21号之后
-  if (currentDay < SALARY_CONSTANTS.SALARY_CUTOFF_DAY + 1) {
-    return { canGenerate: false, message: `每月${SALARY_CONSTANTS.SALARY_CUTOFF_DAY + 1}号之后才能生成上月薪资` }
-  }
-  
+
   return { canGenerate: true, message: '' }
 }
 

@@ -18,6 +18,10 @@ export function isAttendanceClerk(role: Role) {
   return role === 'ATTENDANCE_CLERK'
 }
 
+export function isEmployeeRole(role: Role) {
+  return role === 'EMPLOYEE'
+}
+
 export async function requireSessionUser(): Promise<SessionUser> {
   const session = await getServerSession(authOptions)
 

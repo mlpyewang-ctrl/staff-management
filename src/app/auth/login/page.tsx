@@ -82,7 +82,7 @@ export default function LoginPage() {
             </Button>
           </form>
           <div className="mt-4 text-center text-xs text-gray-500">
-            测试账号：admin / password123
+            忘记密码请联系管理员重置
           </div>
         </CardContent>
       </Card>

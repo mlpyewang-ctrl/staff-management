@@ -2,8 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { calculateAnnualLeaveEntitlement } from '@/lib/seniority'
 
 const DEFAULT_ANNUAL_LEAVE_DAYS = 5
-const DEFAULT_SICK_LEAVE_DAYS = 10
-const DEFAULT_PERSONAL_LEAVE_DAYS = 5
 
 type LeaveBalanceDbClient = Pick<typeof prisma, 'user' | 'leaveBalance'>
 
@@ -11,8 +9,7 @@ async function getAnnualLeaveEntitlement(client: LeaveBalanceDbClient, userId: s
   const user = await client.user.findUnique({
     where: { id: userId },
     select: {
-      seniorityStartDate: true,
-      seniorityEndDate: true,
+      firstWorkDate: true,
     },
   })
 
@@ -20,7 +17,7 @@ async function getAnnualLeaveEntitlement(client: LeaveBalanceDbClient, userId: s
     return DEFAULT_ANNUAL_LEAVE_DAYS
   }
 
-  return calculateAnnualLeaveEntitlement(user.seniorityStartDate, user.seniorityEndDate)
+  return calculateAnnualLeaveEntitlement(user.firstWorkDate)
 }
 
 export async function ensureLeaveBalance(userId: string, client: LeaveBalanceDbClient = prisma) {
@@ -38,8 +35,6 @@ export async function ensureLeaveBalance(userId: string, client: LeaveBalanceDbC
         year: currentYear,
         annual: annualEntitlement,
         annualEntitlement,
-        sick: DEFAULT_SICK_LEAVE_DAYS,
-        personal: DEFAULT_PERSONAL_LEAVE_DAYS,
         compensatory: 0,
         usedCompensatory: 0,
       },
@@ -53,8 +48,6 @@ export async function ensureLeaveBalance(userId: string, client: LeaveBalanceDbC
         year: currentYear,
         annual: annualEntitlement,
         annualEntitlement,
-        sick: DEFAULT_SICK_LEAVE_DAYS,
-        personal: DEFAULT_PERSONAL_LEAVE_DAYS,
       },
     })
   }

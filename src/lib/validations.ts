@@ -94,8 +94,7 @@ export const userJobAssignmentSchema = z.object({
   departmentId: optionalText,
   positionId: optionalText,
   startDate: optionalText,
-  seniorityStartDate: optionalText,
-  seniorityEndDate: optionalText,
+  firstWorkDate: optionalText,
   versionRemark: optionalText,
   educationSalary: z
     .string()
@@ -129,8 +128,15 @@ export const salaryStatusSchema = z.object({
 })
 
 export const salaryBatchAdjustmentSchema = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/, '请选择有效的月份'),
-  departmentId: optionalText,
+  recordIds: z.array(z.string().min(1)).min(1, '请至少选择一条记录'),
+  field: z.enum([
+    'otherAdjustment',
+    'classLeaderAllowance',
+    'dormHeadAllowance',
+    'electricityAllowance',
+    'supplementalPay',
+    'deductionAdjustment',
+  ]),
   amount: z
     .string()
     .refine((value) => value.trim().length > 0 && !Number.isNaN(Number(value)), '请输入有效的调整金额'),
@@ -155,6 +161,15 @@ export const holidaySchema = z.object({
   name: z.string().min(2, '节假日名称至少需要 2 个字符'),
   date: z.string(),
   type: z.enum(['LEGAL_HOLIDAY', 'COMPENSATORY']),
+})
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, '请输入当前密码'),
+  newPassword: z.string().min(6, '新密码至少需要 6 个字符'),
+  confirmPassword: z.string().min(1, '请确认新密码'),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: '两次输入的新密码不一致',
+  path: ['confirmPassword'],
 })
 
 export const otherApplicationSchema = z.object({

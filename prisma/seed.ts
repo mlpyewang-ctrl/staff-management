@@ -170,6 +170,7 @@ async function main() {
       positionId: hrSpecialist.id,
       companyId: company.id,
       startDate: new Date("2020-01-01"),
+      firstWorkDate: new Date("2015-01-01"),
     },
   });
   console.log(`创建管理员: ${admin.name}`);
@@ -188,6 +189,7 @@ async function main() {
       positionId: seniorEng.id,
       companyId: company.id,
       startDate: new Date("2020-03-15"),
+      firstWorkDate: new Date("2012-03-15"),
     },
   });
 
@@ -204,6 +206,7 @@ async function main() {
       positionId: hrSpecialist.id,
       companyId: company.id,
       startDate: new Date("2020-06-01"),
+      firstWorkDate: new Date("2014-06-01"),
     },
   });
   console.log(`创建 2 位部门经理`);
@@ -222,6 +225,7 @@ async function main() {
       positionId: hrSpecialist.id,
       companyId: company.id,
       startDate: new Date("2021-03-01"),
+      firstWorkDate: new Date("2018-03-01"),
     },
   });
   console.log(`创建考勤员: ${attendanceClerk.name}`);
@@ -241,6 +245,7 @@ async function main() {
         positionId: engineer.id,
         companyId: company.id,
         startDate: new Date("2022-01-10"),
+      firstWorkDate: new Date("2019-01-10"),
       },
     }),
     prisma.user.create({
@@ -256,6 +261,7 @@ async function main() {
         positionId: juniorEng.id,
         companyId: company.id,
         startDate: new Date("2023-03-20"),
+        firstWorkDate: new Date("2020-03-20"),
       },
     }),
     prisma.user.create({
@@ -271,6 +277,7 @@ async function main() {
         positionId: seniorEng.id,
         companyId: company.id,
         startDate: new Date("2021-07-01"),
+        firstWorkDate: new Date("2013-07-01"),
       },
     }),
     prisma.user.create({
@@ -286,6 +293,7 @@ async function main() {
         positionId: hrSpecialist.id,
         companyId: company.id,
         startDate: new Date("2023-08-15"),
+        firstWorkDate: new Date("2021-08-15"),
       },
     }),
     prisma.user.create({
@@ -301,6 +309,7 @@ async function main() {
         positionId: financeSpecialist.id,
         companyId: company.id,
         startDate: new Date("2022-11-01"),
+        firstWorkDate: new Date("2018-11-01"),
       },
     }),
     prisma.user.create({
@@ -316,6 +325,7 @@ async function main() {
         positionId: financeSpecialist.id,
         companyId: company.id,
         startDate: new Date("2024-01-15"),
+        firstWorkDate: new Date("2022-01-15"),
       },
     }),
   ]);
@@ -331,8 +341,8 @@ async function main() {
         userId: user.id,
         year: currentYear,
         annual: 5,
-        sick: 10,
-        personal: 5,
+        sick: 0,
+        personal: 0,
       },
     });
   }

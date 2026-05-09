@@ -55,7 +55,9 @@
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
+    "iconv-lite": "^0.7.2",
     "jsdom": "^29.0.0",
+    "pinyin": "^4.0.0",
     "tsx": "^4.21.0",
     "vitest": "^4.1.0"
   },
