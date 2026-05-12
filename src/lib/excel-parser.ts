@@ -223,7 +223,7 @@ export function parseLeaveExcel(buffer: ArrayBuffer): ParseResult<ParsedLeaveRow
   return { data, errors }
 }
 
-export function generateOvertimeTemplate(): ArrayBufferLike {
+export function generateOvertimeTemplate(): ArrayBuffer {
   const headers = ['员工用户名', '员工姓名', '加班日期', '开始时间', '结束时间', '加班类型', '加班事由']
   const note = [
     '（说明）',
@@ -248,10 +248,10 @@ export function generateOvertimeTemplate(): ArrayBufferLike {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, '加班导入模板')
   const result = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
-  return result instanceof ArrayBuffer ? result : (result as Uint8Array).buffer
+  return result instanceof ArrayBuffer ? result : (result as Uint8Array).buffer as ArrayBuffer
 }
 
-export function generateLeaveTemplate(): ArrayBufferLike {
+export function generateLeaveTemplate(): ArrayBuffer {
   const headers = ['员工用户名', '员工姓名', '请假类型', '开始日期', '结束日期', '开始时段', '结束时段', '请假事由', '前往地点']
   const note = [
     '（说明）',
@@ -280,5 +280,5 @@ export function generateLeaveTemplate(): ArrayBufferLike {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, '请假导入模板')
   const result = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
-  return result instanceof ArrayBuffer ? result : (result as Uint8Array).buffer
+  return result instanceof ArrayBuffer ? result : (result as Uint8Array).buffer as ArrayBuffer
 }

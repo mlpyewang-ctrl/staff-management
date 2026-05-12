@@ -835,11 +835,11 @@ export async function getPendingApprovals(_approverId?: string) {
         })
       : []
 
-    function getStepsForApplication(
+    const getStepsForApplication = (
       departmentId: string | null | undefined,
       applicationType: string,
       applicantUserId: string
-    ): ApprovalFlowStep[] | null {
+    ): ApprovalFlowStep[] | null => {
       if (!departmentId) return null
       const matchedFlow = findFlowForUser(flows, departmentId, applicationType, applicantUserId)
       if (matchedFlow) {
