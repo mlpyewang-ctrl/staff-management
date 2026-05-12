@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   canApproveCurrentStep,
+  findFlowForUser,
   normalizeApprovalFlowSteps,
+  parseApplicableUserIds,
   resolveApprovalWorkflowState,
 } from '../approval-workflow'
 
@@ -163,5 +165,99 @@ describe('canApproveCurrentStep', () => {
         approverRole: 'EMPLOYEE',
       })
     ).toBe(false)
+  })
+})
+
+describe('parseApplicableUserIds', () => {
+  it('should parse valid JSON array', () => {
+    expect(parseApplicableUserIds(JSON.stringify(['user-1', 'user-2']))).toEqual(['user-1', 'user-2'])
+  })
+
+  it('should return empty array for null', () => {
+    expect(parseApplicableUserIds(null)).toEqual([])
+  })
+
+  it('should return empty array for invalid JSON', () => {
+    expect(parseApplicableUserIds('not-json')).toEqual([])
+  })
+
+  it('should return empty array for non-array JSON', () => {
+    expect(parseApplicableUserIds('{"key":"value"}')).toEqual([])
+  })
+})
+
+describe('findFlowForUser', () => {
+  const makeFlow = (
+    id: string,
+    departmentId: string,
+    types: string[],
+    userIds: string[] | null,
+    config: string
+  ) => ({
+    departmentId,
+    types: JSON.stringify(types),
+    applicableUserIds: userIds ? JSON.stringify(userIds) : null,
+    config,
+  })
+
+  it('should return user-specific flow when user is bound', () => {
+    const flows = [
+      makeFlow('f1', 'dept-a', ['LEAVE'], ['user-1'], '[{"step":1,"role":"MANAGER"}]'),
+      makeFlow('f2', 'dept-a', ['LEAVE'], null, '[{"step":1,"role":"ADMIN"}]'),
+    ]
+
+    const result = findFlowForUser(flows, 'dept-a', 'LEAVE', 'user-1')
+    expect(result).not.toBeNull()
+    expect(result?.config).toBe('[{"step":1,"role":"MANAGER"}]')
+  })
+
+  it('should return null when user is not bound to any flow', () => {
+    const flows = [
+      makeFlow('f1', 'dept-a', ['LEAVE'], ['user-1'], '[{"step":1,"role":"MANAGER"}]'),
+      makeFlow('f2', 'dept-a', ['LEAVE'], ['user-3'], '[{"step":1,"role":"ADMIN"}]'),
+    ]
+
+    const result = findFlowForUser(flows, 'dept-a', 'LEAVE', 'user-2')
+    expect(result).toBeNull()
+  })
+
+  it('should return null when no matching flow exists', () => {
+    const flows = [
+      makeFlow('f1', 'dept-a', ['LEAVE'], ['user-1'], '[{"step":1,"role":"MANAGER"}]'),
+    ]
+
+    const result = findFlowForUser(flows, 'dept-b', 'LEAVE', 'user-1')
+    expect(result).toBeNull()
+  })
+
+  it('should return null when user not bound in the department', () => {
+    const flows = [
+      makeFlow('f1', 'dept-a', ['LEAVE'], ['user-1'], '[{"step":1,"role":"MANAGER"}]'),
+    ]
+
+    const result = findFlowForUser(flows, 'dept-a', 'LEAVE', 'user-2')
+    expect(result).toBeNull()
+  })
+
+  it('should return user-specific flow when matched', () => {
+    const flows = [
+      makeFlow('f1', 'dept-a', ['LEAVE'], ['user-2'], '[{"step":1,"role":"ADMIN"}]'),
+      makeFlow('f2', 'dept-a', ['LEAVE'], ['user-1'], '[{"step":1,"role":"MANAGER"}]'),
+    ]
+
+    const result = findFlowForUser(flows, 'dept-a', 'LEAVE', 'user-1')
+    expect(result).not.toBeNull()
+    expect(result?.config).toBe('[{"step":1,"role":"MANAGER"}]')
+  })
+
+  it('should match by application type', () => {
+    const flows = [
+      makeFlow('f1', 'dept-a', ['OVERTIME'], ['user-1'], '[{"step":1,"role":"ADMIN"}]'),
+      makeFlow('f2', 'dept-a', ['LEAVE'], ['user-1'], '[{"step":1,"role":"MANAGER"}]'),
+    ]
+
+    const result = findFlowForUser(flows, 'dept-a', 'LEAVE', 'user-1')
+    expect(result).not.toBeNull()
+    expect(result?.config).toBe('[{"step":1,"role":"MANAGER"}]')
   })
 })

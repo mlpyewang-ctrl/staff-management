@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useAsyncAction } from '@/lib/use-async-action'
 import { getPositions, createPosition, updatePosition, deletePosition } from '@/server/actions/position'
 import { getDepartments } from '@/server/actions/department'
 
@@ -22,33 +24,23 @@ export default function PositionsDashboardPage() {
   const [positions, setPositions] = useState<PositionItem[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [editingPosition, setEditingPosition] = useState<PositionItem | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
 
   useEffect(() => {
     const load = async () => {
+      setPageLoading(true)
       const [data, deptData] = await Promise.all([getPositions(), getDepartments()])
       setPositions(data)
       setDepartments(deptData)
+      setPageLoading(false)
     }
     load()
   }, [])
 
-  if (session?.user?.role !== 'ADMIN') {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">岗位管理</h1>
-        <p className="text-gray-600">仅管理员可以访问此页面。</p>
-      </div>
-    )
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const { loading: submitLoading, execute: executeSubmit } = useAsyncAction(async (e: React.FormEvent) => {
     setMessage({ type: '', text: '' })
-
-    const formData = new FormData(e.target as HTMLFormElement)
+    const formData = new FormData(e.currentTarget as HTMLFormElement)
     const result = editingPosition
       ? await updatePosition(editingPosition.id, formData)
       : await createPosition(formData)
@@ -60,15 +52,16 @@ export default function PositionsDashboardPage() {
       const data = await getPositions()
       setPositions(data)
       setEditingPosition(null)
-      ;(e.target as HTMLFormElement).reset()
+      ;(e.currentTarget as HTMLFormElement).reset()
     }
+  })
 
-    setLoading(false)
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    executeSubmit(e)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除此岗位吗？')) return
-
+  const { loading: deleteLoading, execute: executeDelete } = useAsyncAction(async (id: string) => {
     const result = await deletePosition(id)
     if (result.error) {
       setMessage({ type: 'error', text: result.error })
@@ -77,6 +70,20 @@ export default function PositionsDashboardPage() {
       const data = await getPositions()
       setPositions(data)
     }
+  })
+
+  const handleDelete = (id: string) => {
+    if (!confirm('确定要删除此岗位吗？')) return
+    executeDelete(id)
+  }
+
+  if (session?.user?.role !== 'ADMIN') {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold text-gray-900">岗位管理</h1>
+        <p className="text-gray-600">仅管理员可以访问此页面。</p>
+      </div>
+    )
   }
 
   return (
@@ -176,8 +183,8 @@ export default function PositionsDashboardPage() {
               </div>
             )}
             <div className="flex space-x-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? '保存中...' : '保存'}
+              <Button type="submit" loading={submitLoading}>
+                保存
               </Button>
               {editingPosition && (
                 <Button
@@ -201,59 +208,67 @@ export default function PositionsDashboardPage() {
           <CardTitle>岗位列表</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>岗位名称</TableHead>
-                <TableHead>所属部门</TableHead>
-                <TableHead>基础工资</TableHead>
-                <TableHead>工龄工资</TableHead>
-                <TableHead>每年涨幅</TableHead>
-                <TableHead>工龄上限</TableHead>
-                <TableHead>关联员工数</TableHead>
-                <TableHead>操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {positions.length === 0 ? (
+          {pageLoading ? (
+            <div className="py-8 flex flex-col items-center justify-center gap-2 text-sm text-gray-500">
+              <LoadingSpinner size="md" />
+              <span>正在加载岗位数据...</span>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-gray-500 py-8">
-                    暂无岗位
-                  </TableCell>
+                  <TableHead>岗位名称</TableHead>
+                  <TableHead>所属部门</TableHead>
+                  <TableHead>基础工资</TableHead>
+                  <TableHead>工龄工资</TableHead>
+                  <TableHead>每年涨幅</TableHead>
+                  <TableHead>工龄上限</TableHead>
+                  <TableHead>关联员工数</TableHead>
+                  <TableHead>操作</TableHead>
                 </TableRow>
-              ) : (
-                positions.map((pos) => (
-                  <TableRow key={pos.id}>
-                    <TableCell>{pos.name}</TableCell>
-                    <TableCell>{pos.department?.name || '-'}</TableCell>
-                    <TableCell>{pos.baseSalary?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
-                    <TableCell>{pos.hasSeniorityPay ? '有' : '无'}</TableCell>
-                    <TableCell>{pos.seniorityPayPerYear?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
-                    <TableCell>{pos.maxSeniorityPay?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
-                    <TableCell>{pos._count?.users || 0}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingPosition(pos)}
-                        >
-                          编辑
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(pos.id)}
-                        >
-                          删除
-                        </Button>
-                      </div>
+              </TableHeader>
+              <TableBody>
+                {positions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                      暂无岗位
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  positions.map((pos) => (
+                    <TableRow key={pos.id}>
+                      <TableCell>{pos.name}</TableCell>
+                      <TableCell>{pos.department?.name || '-'}</TableCell>
+                      <TableCell>{pos.baseSalary?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
+                      <TableCell>{pos.hasSeniorityPay ? '有' : '无'}</TableCell>
+                      <TableCell>{pos.seniorityPayPerYear?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
+                      <TableCell>{pos.maxSeniorityPay?.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</TableCell>
+                      <TableCell>{pos._count?.users || 0}</TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingPosition(pos)}
+                          >
+                            编辑
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            loading={deleteLoading}
+                            onClick={() => handleDelete(pos.id)}
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

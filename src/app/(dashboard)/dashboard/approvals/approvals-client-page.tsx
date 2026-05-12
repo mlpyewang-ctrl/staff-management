@@ -32,6 +32,8 @@ import {
 } from '@/server/actions/approval'
 import type { Role } from '@/types'
 import { WordPreview } from '@/components/word-preview'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useAsyncAction } from '@/lib/use-async-action'
 
 type PendingApprovalsData = Awaited<ReturnType<typeof getPendingApprovals>>
 type ApprovalHistoryData = Awaited<ReturnType<typeof getApprovalHistory>>
@@ -57,7 +59,6 @@ export function ApprovalsClientPage({
 }: ApprovalsClientPageProps) {
   const [pendingApps, setPendingApps] = useState(initialPendingApps)
   const [history, setHistory] = useState(initialHistory)
-  const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
   const [remark, setRemark] = useState('')
   const [selectedApp, setSelectedApp] = useState<SelectedApproval | null>(null)
@@ -167,32 +168,40 @@ export function ApprovalsClientPage({
     setHistory(nextHistory)
   }
 
-  const handleApprove = async (status: 'APPROVED' | 'REJECTED') => {
-    if (!selectedApp) {
-      return
+  const { loading, error, execute: executeApprove } = useAsyncAction(
+    async (status: 'APPROVED' | 'REJECTED') => {
+      if (!selectedApp) {
+        throw new Error('未选择申请')
+      }
+
+      const formData = new FormData()
+      formData.set('applicationId', selectedApp.id)
+      formData.set('applicationType', selectedApp.type)
+      formData.set('status', status)
+      formData.set('remark', remark)
+
+      const result = await approveApplication(formData)
+
+      if ('error' in result) {
+        throw new Error(result.error)
+      }
+
+      return result
+    },
+    {
+      onError: (msg) => setMessage({ type: 'error', text: msg }),
     }
+  )
 
-    setLoading(true)
+  const handleApprove = async (status: 'APPROVED' | 'REJECTED') => {
     setMessage({ type: '', text: '' })
-
-    const formData = new FormData()
-    formData.set('applicationId', selectedApp.id)
-    formData.set('applicationType', selectedApp.type)
-    formData.set('status', status)
-    formData.set('remark', remark)
-
-    const result = await approveApplication(formData)
-
-    if ('error' in result) {
-      setMessage({ type: 'error', text: result.error })
-    } else if ('success' in result) {
+    const result = await executeApprove(status)
+    if (result && !('error' in result)) {
       setMessage({ type: 'success', text: result.success })
       setSelectedApp(null)
       setRemark('')
       await refreshApprovals()
     }
-
-    setLoading(false)
   }
 
   if (viewerRole === 'EMPLOYEE') {
@@ -326,12 +335,12 @@ export function ApprovalsClientPage({
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={() => handleApprove('APPROVED')}
-                disabled={loading}
+                loading={loading}
                 className="bg-emerald-600 hover:bg-emerald-700"
               >
                 通过
               </Button>
-              <Button onClick={() => handleApprove('REJECTED')} variant="destructive" disabled={loading}>
+              <Button onClick={() => handleApprove('REJECTED')} variant="destructive" loading={loading}>
                 退回
               </Button>
               <Button

@@ -57,6 +57,7 @@ export default function OvertimePage() {
   const showApplicant = role !== 'EMPLOYEE'
   const showActions = role === 'EMPLOYEE' || role === 'ATTENDANCE_CLERK'
   const isAttendanceClerk = role === 'ATTENDANCE_CLERK'
+  const canImport = role === 'ADMIN' || isAttendanceClerk
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -109,7 +110,7 @@ export default function OvertimePage() {
               <Link href="/dashboard/overtime/new">新增加班申请</Link>
             </Button>
           )}
-          {isAttendanceClerk && (
+          {canImport && (
             <>
               <Button asChild>
                 <Link href="/dashboard/overtime/import">批量导入</Link>

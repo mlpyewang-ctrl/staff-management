@@ -3,7 +3,7 @@
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
-import { isAttendanceClerk, isEmployeeRole, requireAttendanceClerk, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
+import { isAttendanceClerk, isEmployeeRole, requireAdminOrAttendanceClerk, requireSelfOrAdmin, requireSessionUser } from '@/lib/action-auth'
 import { ensureLeaveBalance } from '@/lib/leave-balance'
 import { prisma } from '@/lib/prisma'
 import { calculateLeaveDaysExcludingNonWorkingDays, formatDateKey } from '@/lib/utils'
@@ -589,7 +589,7 @@ export async function getLeaveStats(userId?: string, departmentId?: string, refe
 
 export async function batchImportLeave(rows: ParsedLeaveRow[]) {
   try {
-    await requireAttendanceClerk()
+    await requireAdminOrAttendanceClerk()
 
     if (!rows || rows.length === 0) {
       return { error: '没有数据需要导入' }

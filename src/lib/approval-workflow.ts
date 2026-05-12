@@ -42,6 +42,51 @@ export function getDefaultApprovalFlowSteps() {
   return DEFAULT_FLOW_STEPS
 }
 
+export function parseFlowTypes(types: string): string[] {
+  try {
+    const parsed = JSON.parse(types)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+export function parseApplicableUserIds(value: string | null): string[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+export interface ApprovalFlowMatchInput {
+  departmentId: string
+  types: string
+  applicableUserIds: string | null
+  config: string
+}
+
+export function findFlowForUser(
+  flows: ApprovalFlowMatchInput[],
+  departmentId: string,
+  applicationType: string,
+  userId: string
+): ApprovalFlowMatchInput | null {
+  // 只匹配用户专属流程，不返回兜底流程
+  const userSpecificFlow = flows.find((flow) => {
+    if (flow.departmentId !== departmentId) return false
+    const types = parseFlowTypes(flow.types)
+    if (!types.includes(applicationType)) return false
+    const userIds = parseApplicableUserIds(flow.applicableUserIds)
+    return userIds.includes(userId)
+  })
+  if (userSpecificFlow) return userSpecificFlow
+
+  return null
+}
+
 function parseApprovalFlowConfig(config: unknown) {
   if (Array.isArray(config)) {
     return config

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useAsyncAction } from '@/lib/use-async-action'
 import { getDepartments, createDepartment, updateDepartment } from '@/server/actions/department'
 
 type DepartmentItem = Awaited<ReturnType<typeof getDepartments>>[number]
@@ -15,32 +17,22 @@ export default function DepartmentsDashboardPage() {
   const { data: session } = useSession()
   const [departments, setDepartments] = useState<DepartmentItem[]>([])
   const [editingDept, setEditingDept] = useState<DepartmentItem | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | '' ; text: string }>({ type: '', text: '' })
 
   useEffect(() => {
     const load = async () => {
+      setPageLoading(true)
       const depts = await getDepartments()
       setDepartments(depts)
+      setPageLoading(false)
     }
     load()
   }, [])
 
-  if (session?.user?.role !== 'ADMIN') {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">部门管理</h1>
-        <p className="text-gray-600">仅管理员可以访问此页面。</p>
-      </div>
-    )
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const { loading: submitLoading, execute: executeSubmit } = useAsyncAction(async (e: React.FormEvent) => {
     setMessage({ type: '', text: '' })
-
-    const formData = new FormData(e.target as HTMLFormElement)
+    const formData = new FormData(e.currentTarget as HTMLFormElement)
     const result = editingDept
       ? await updateDepartment(editingDept.id, formData)
       : await createDepartment(formData)
@@ -52,10 +44,22 @@ export default function DepartmentsDashboardPage() {
       const depts = await getDepartments()
       setDepartments(depts)
       setEditingDept(null)
-      ;(e.target as HTMLFormElement).reset()
+      ;(e.currentTarget as HTMLFormElement).reset()
     }
+  })
 
-    setLoading(false)
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    executeSubmit(e)
+  }
+
+  if (session?.user?.role !== 'ADMIN') {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold text-gray-900">部门管理</h1>
+        <p className="text-gray-600">仅管理员可以访问此页面。</p>
+      </div>
+    )
   }
 
   return (
@@ -99,8 +103,8 @@ export default function DepartmentsDashboardPage() {
               </div>
             )}
             <div className="flex space-x-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? '保存中...' : '保存'}
+              <Button type="submit" loading={submitLoading}>
+                保存
               </Button>
               {editingDept && (
                 <Button
@@ -121,43 +125,49 @@ export default function DepartmentsDashboardPage() {
           <CardTitle>部门列表</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>编码</TableHead>
-                <TableHead>操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {departments.length === 0 ? (
+          {pageLoading ? (
+            <div className="py-8 flex flex-col items-center justify-center gap-2 text-sm text-gray-500">
+              <LoadingSpinner size="md" />
+              <span>正在加载部门数据...</span>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-gray-500 py-8">
-                    暂无部门
-                  </TableCell>
+                  <TableHead>名称</TableHead>
+                  <TableHead>编码</TableHead>
+                  <TableHead>操作</TableHead>
                 </TableRow>
-              ) : (
-                departments.map((dept) => (
-                  <TableRow key={dept.id}>
-                    <TableCell>{dept.name}</TableCell>
-                    <TableCell>{dept.code}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setEditingDept(dept)}
-                      >
-                        编辑
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {departments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-gray-500 py-8">
+                      暂无部门
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  departments.map((dept) => (
+                    <TableRow key={dept.id}>
+                      <TableCell>{dept.name}</TableCell>
+                      <TableCell>{dept.code}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingDept(dept)}
+                        >
+                          编辑
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
   )
 }
-

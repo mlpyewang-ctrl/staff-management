@@ -5,8 +5,11 @@ import { revalidatePath } from 'next/cache'
 
 import {
   canApproveCurrentStep,
+  findFlowForUser,
   getDefaultApprovalFlowSteps,
   normalizeApprovalFlowSteps,
+  parseApplicableUserIds,
+  parseFlowTypes,
   resolveApprovalWorkflowState,
   type ApprovalFlowStep,
   type OvertimePhase,
@@ -34,21 +37,13 @@ const otherApplicationTypeMap: Record<string, string> = {
   PARTY_INFO_UPDATE: '党员信息更新',
 }
 
-function parseFlowTypes(types: string) {
-  try {
-    const parsed = JSON.parse(types)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
 async function getApprovalSteps(
   departmentId: string | null | undefined,
-  applicationType: SupportedApplicationType | string
-) {
+  applicationType: SupportedApplicationType | string,
+  userId?: string | null
+): Promise<ApprovalFlowStep[]> {
   if (!departmentId) {
-    return getDefaultApprovalFlowSteps()
+    throw new Error('用户未分配部门，无法匹配审批流程')
   }
 
   const flows = await prisma.approvalFlow.findMany({
@@ -61,13 +56,12 @@ async function getApprovalSteps(
     },
   })
 
-  const matchedFlow = flows.find((flow) => parseFlowTypes(flow.types).includes(applicationType))
-
-  if (!matchedFlow) {
-    return getDefaultApprovalFlowSteps()
+  const matchedFlow = findFlowForUser(flows, departmentId, applicationType, userId || '')
+  if (matchedFlow) {
+    return normalizeApprovalFlowSteps(matchedFlow.config)
   }
 
-  return normalizeApprovalFlowSteps(matchedFlow.config)
+  throw new Error('该用户未绑定审批流程，请联系管理员配置')
 }
 
 function getCurrentStepLabel(step: ApprovalFlowStep | null) {
@@ -166,7 +160,7 @@ export async function approveApplication(formData: FormData) {
         return { error: '该申请已事前通过，等待申请人提交加班确认' }
       }
 
-      const steps = await getApprovalSteps(overtimeApplication.user.departmentId, 'OVERTIME')
+      const steps = await getApprovalSteps(overtimeApplication.user.departmentId, 'OVERTIME', overtimeApplication.userId)
       const approvals = await prisma.approval.findMany({
         where: {
           applicationId: overtimeApplication.id,
@@ -350,7 +344,7 @@ export async function approveApplication(formData: FormData) {
       return { error: '该申请已退回申请人，请等待申请人修改后重新提交' }
     }
 
-    const steps = await getApprovalSteps(leaveApplication.user.departmentId, 'LEAVE')
+    const steps = await getApprovalSteps(leaveApplication.user.departmentId, 'LEAVE', leaveApplication.userId)
     const approvals = await prisma.approval.findMany({
       where: {
         applicationId: leaveApplication.id,
@@ -527,7 +521,7 @@ async function handleOtherApplicationApproval(
     return { error: '该申请已退回申请人，请等待申请人修改后重新提交' }
   }
 
-  const steps = await getApprovalSteps(otherApplication.user.departmentId, validatedData.applicationType)
+  const steps = await getApprovalSteps(otherApplication.user.departmentId, validatedData.applicationType, otherApplication.userId)
   const approvals = await prisma.approval.findMany({
     where: {
       applicationId: otherApplication.id,
@@ -841,16 +835,17 @@ export async function getPendingApprovals(_approverId?: string) {
         })
       : []
 
-    const flowStepMap = new Map<string, ApprovalFlowStep[]>()
-    for (const flow of flows) {
-      const types = parseFlowTypes(flow.types)
-      const steps = normalizeApprovalFlowSteps(flow.config)
-      for (const type of types) {
-        const key = `${flow.departmentId}:${type}`
-        if (!flowStepMap.has(key)) {
-          flowStepMap.set(key, steps)
-        }
+    function getStepsForApplication(
+      departmentId: string | null | undefined,
+      applicationType: string,
+      applicantUserId: string
+    ): ApprovalFlowStep[] | null {
+      if (!departmentId) return null
+      const matchedFlow = findFlowForUser(flows, departmentId, applicationType, applicantUserId)
+      if (matchedFlow) {
+        return normalizeApprovalFlowSteps(matchedFlow.config)
       }
+      return null
     }
 
     const approvalHistoryMap = new Map<string, typeof approvalHistory>()
@@ -863,8 +858,12 @@ export async function getPendingApprovals(_approverId?: string) {
 
     const overtime = overtimeApplications
       .map((application) => {
-        const steps =
-          flowStepMap.get(`${application.user.departmentId}:${'OVERTIME'}`) || getDefaultApprovalFlowSteps()
+        const steps = getStepsForApplication(
+          application.user.departmentId,
+          'OVERTIME',
+          application.userId
+        )
+        if (!steps) return null
         const history = approvalHistoryMap.get(`OVERTIME:${application.id}`) || []
         const workflow = resolveApprovalWorkflowState({
           steps,
@@ -903,8 +902,12 @@ export async function getPendingApprovals(_approverId?: string) {
 
     const leave = leaveApplications
       .map((application) => {
-        const steps =
-          flowStepMap.get(`${application.user.departmentId}:${'LEAVE'}`) || getDefaultApprovalFlowSteps()
+        const steps = getStepsForApplication(
+          application.user.departmentId,
+          'LEAVE',
+          application.userId
+        )
+        if (!steps) return null
         const history = approvalHistoryMap.get(`LEAVE:${application.id}`) || []
         const workflow = resolveApprovalWorkflowState({
           steps,
@@ -940,8 +943,12 @@ export async function getPendingApprovals(_approverId?: string) {
 
     const other = otherApplications
       .map((application) => {
-        const steps =
-          flowStepMap.get(`${application.user.departmentId}:${application.type}`) || getDefaultApprovalFlowSteps()
+        const steps = getStepsForApplication(
+          application.user.departmentId,
+          application.type,
+          application.userId
+        )
+        if (!steps) return null
         const history = approvalHistoryMap.get(`${application.type}:${application.id}`) || []
         const workflow = resolveApprovalWorkflowState({
           steps,

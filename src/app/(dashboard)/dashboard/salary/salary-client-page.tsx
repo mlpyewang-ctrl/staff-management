@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
@@ -17,10 +17,16 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { buildSalaryExcelContent, type SalaryExportRow } from '@/lib/salary-export'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, getPaginationState } from '@/lib/pagination'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 import { formatCurrency } from '@/lib/utils'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useAsyncAction } from '@/lib/use-async-action'
 import { getDepartments } from '@/server/actions/department'
 import {
   applySalaryBatchAdjustment,
+  batchConfirmSalaryRecords,
+  batchDeleteSalaryRecords,
   deleteSalaryRecord,
   getSalaryExportData,
   getSalaryMonths,
@@ -68,7 +74,6 @@ export function SalaryClientPage({
   const [departments, setDepartments] = useState(initialDepartments)
   const [months, setMonths] = useState(initialMonths)
   const [loading, setLoading] = useState(false)
-  const [adjusting, setAdjusting] = useState(false)
   const [filters, setFilters] = useState(emptyFilters)
   const [searchName, setSearchName] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -76,6 +81,27 @@ export function SalaryClientPage({
     field: 'otherAdjustment',
     amount: '',
     note: '',
+  })
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+
+  const batchAdjustmentAction = useAsyncAction(applySalaryBatchAdjustment, {
+    onError: (message) => alert(message),
+  })
+  const batchDeleteAction = useAsyncAction(batchDeleteSalaryRecords, {
+    onError: (message) => alert(message),
+  })
+  const batchConfirmAction = useAsyncAction(batchConfirmSalaryRecords, {
+    onError: (message) => alert(message),
+  })
+  const exportAction = useAsyncAction(getSalaryExportData, {
+    onError: (message) => alert(message),
+  })
+  const statusAction = useAsyncAction(updateSalaryStatus, {
+    onError: (message) => alert(message),
+  })
+  const deleteRecordAction = useAsyncAction(deleteSalaryRecord, {
+    onError: (message) => alert(message),
   })
 
   const hasInitialized = useRef(false)
@@ -127,8 +153,27 @@ export function SalaryClientPage({
     return record.userName?.toLowerCase().includes(searchName.trim().toLowerCase())
   })
 
+  const pagination = useMemo(
+    () => getPaginationState(filteredRecords.length, currentPage, pageSize),
+    [filteredRecords.length, currentPage, pageSize]
+  )
+  const paginatedRecords = useMemo(
+    () => filteredRecords.slice(pagination.startIndex, pagination.endIndex),
+    [filteredRecords, pagination.endIndex, pagination.startIndex]
+  )
+
   const draftRecords = filteredRecords.filter((r) => r.status === 'DRAFT')
   const allDraftSelected = draftRecords.length > 0 && draftRecords.every((r) => selectedIds.has(r.id))
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters, searchName, pageSize])
+
+  useEffect(() => {
+    if (pagination.currentPage !== currentPage) {
+      setCurrentPage(pagination.currentPage)
+    }
+  }, [currentPage, pagination.currentPage])
 
   const handleSelectOne = (id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -170,7 +215,11 @@ export function SalaryClientPage({
     formData.append('salaryId', id)
     formData.append('status', newStatus)
 
-    const result = await updateSalaryStatus(formData)
+    const result = await statusAction.execute(formData)
+    if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
+      return
+    }
+
     if (result.success) {
       await loadData()
       return
@@ -184,7 +233,11 @@ export function SalaryClientPage({
       return
     }
 
-    const result = await deleteSalaryRecord(id)
+    const result = await deleteRecordAction.execute(id)
+    if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
+      return
+    }
+
     if (result.success) {
       await loadData()
       return
@@ -199,13 +252,17 @@ export function SalaryClientPage({
       return
     }
 
-    const exportData = (await getSalaryExportData(filters)) as SalaryExportRow[]
-    if (exportData.length === 0) {
+    const exportData = await exportAction.execute(filters)
+    if (exportData && typeof exportData === 'object' && 'error' in exportData && !Array.isArray(exportData)) {
+      return
+    }
+
+    if ((exportData as SalaryExportRow[]).length === 0) {
       alert('当前月份没有可导出的薪资数据')
       return
     }
 
-    const excelContent = buildSalaryExcelContent(exportData)
+    const excelContent = buildSalaryExcelContent(exportData as SalaryExportRow[])
     const blob = new Blob(['\ufeff', excelContent], {
       type: 'application/vnd.ms-excel;charset=utf-8;',
     })
@@ -229,7 +286,6 @@ export function SalaryClientPage({
       return
     }
 
-    setAdjusting(true)
     const formData = new FormData()
     selectedIds.forEach((id) => formData.append('recordIds', id))
     formData.append('field', adjustmentForm.field)
@@ -238,8 +294,60 @@ export function SalaryClientPage({
       formData.append('note', adjustmentForm.note)
     }
 
-    const result = await applySalaryBatchAdjustment(formData)
-    setAdjusting(false)
+    const result = await batchAdjustmentAction.execute(formData)
+    if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
+      return
+    }
+
+    if (result.success) {
+      alert(result.success)
+      setSelectedIds(new Set())
+      await loadData()
+      return
+    }
+
+    alert(result.error)
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) {
+      alert('请先勾选要删除的薪资记录')
+      return
+    }
+
+    if (!confirm(`确定要删除选中的 ${selectedIds.size} 条薪资记录吗？`)) {
+      return
+    }
+
+    const result = await batchDeleteAction.execute(Array.from(selectedIds))
+    if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
+      return
+    }
+
+    if (result.success) {
+      alert(result.success)
+      setSelectedIds(new Set())
+      await loadData()
+      return
+    }
+
+    alert(result.error)
+  }
+
+  const handleBatchConfirm = async () => {
+    if (selectedIds.size === 0) {
+      alert('请先勾选要确认的薪资记录')
+      return
+    }
+
+    if (!confirm(`确定要确认选中的 ${selectedIds.size} 条薪资记录吗？确认后不可重新生成覆盖。`)) {
+      return
+    }
+
+    const result = await batchConfirmAction.execute(Array.from(selectedIds))
+    if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
+      return
+    }
 
     if (result.success) {
       alert(result.success)
@@ -263,8 +371,9 @@ export function SalaryClientPage({
             <Button>生成薪资</Button>
           </Link>
           <Button
-            onClick={handleExport}
+            onClick={() => void handleExport()}
             disabled={!filters.month}
+            loading={exportAction.loading}
             className="border border-emerald-700 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:border-emerald-300 disabled:bg-emerald-300"
           >
             按月导出 Excel
@@ -335,7 +444,10 @@ export function SalaryClientPage({
       <Card>
         <CardContent className="pt-4">
           {loading ? (
-            <div className="py-6 text-sm text-gray-500">正在加载筛选结果...</div>
+            <div className="flex items-center justify-center py-8">
+              <LoadingSpinner size="md" />
+              <span className="ml-2 text-sm text-gray-500">加载中...</span>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -369,14 +481,14 @@ export function SalaryClientPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRecords.length === 0 ? (
+                  {paginatedRecords.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={17} className="text-center text-gray-500">
                         暂无数据
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredRecords.map((record) => (
+                    paginatedRecords.map((record) => (
                       <SalaryRecordRow
                         key={record.id}
                         getStatusBadge={getStatusBadge}
@@ -392,6 +504,18 @@ export function SalaryClientPage({
               </Table>
             </div>
           )}
+          <div className="px-4 pb-4">
+            <PaginationControls
+              currentPage={pagination.currentPage}
+              itemLabel="条记录"
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              totalItems={filteredRecords.length}
+              totalPages={pagination.totalPages}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -441,16 +565,33 @@ export function SalaryClientPage({
               />
             </div>
             <Button
-              onClick={handleBatchAdjustment}
-              disabled={adjusting || selectedIds.size === 0 || !adjustmentForm.amount}
+              onClick={() => void handleBatchAdjustment()}
+              disabled={selectedIds.size === 0 || !adjustmentForm.amount}
+              loading={batchAdjustmentAction.loading}
             >
-              {adjusting ? '调整中...' : '批量调整'}
+              批量调整
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => void handleBatchConfirm()}
+              disabled={selectedIds.size === 0}
+              loading={batchConfirmAction.loading}
+            >
+              {`批量确认 (${selectedIds.size})`}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleBatchDelete()}
+              disabled={selectedIds.size === 0}
+              loading={batchDeleteAction.loading}
+            >
+              {`批量删除 (${selectedIds.size})`}
             </Button>
           </div>
           <div className="text-sm text-gray-500">
             {selectedIds.size > 0
-              ? `已勾选 ${selectedIds.size} 条草稿记录，将对选中记录的「${ADJUSTABLE_FIELDS.find((f) => f.value === adjustmentForm.field)?.label}」字段进行累加调整。`
-              : '请先在上方的表格中勾选需要调整的草稿记录。'}
+              ? `已勾选 ${selectedIds.size} 条草稿记录，可进行批量调整或批量删除。`
+              : '请先在上方的表格中勾选需要操作的草稿记录。'}
           </div>
         </CardContent>
       </Card>

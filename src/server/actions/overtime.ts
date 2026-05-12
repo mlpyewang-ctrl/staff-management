@@ -3,7 +3,7 @@
 import type { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 
-import { isAttendanceClerk, isEmployeeRole, requireAttendanceClerk, requireSessionUser } from '@/lib/action-auth'
+import { isAttendanceClerk, isEmployeeRole, requireAdminOrAttendanceClerk, requireSessionUser } from '@/lib/action-auth'
 import { prisma } from '@/lib/prisma'
 import { calculateHours } from '@/lib/utils'
 import { overtimeSchema } from '@/lib/validations'
@@ -398,7 +398,7 @@ export async function submitOvertimeConfirmation(formData: FormData) {
 
 export async function batchImportOvertime(rows: ParsedOvertimeRow[]) {
   try {
-    await requireAttendanceClerk()
+    await requireAdminOrAttendanceClerk()
 
     if (!rows || rows.length === 0) {
       return { error: '没有数据需要导入' }

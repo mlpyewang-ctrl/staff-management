@@ -248,15 +248,16 @@ model Department {
 }
 
 model ApprovalFlow {
-  id           String     @id @default(cuid())
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  name         String
-  types        String
-  config       String
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  departmentId      String
+  department        Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  name              String
+  types             String
+  config            String
+  applicableUserIds String?    // JSON 数组：绑定的用户 ID 列表；空/null 表示兜底流程
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   @@index([departmentId, isActive])
   @@map("approval_flows")

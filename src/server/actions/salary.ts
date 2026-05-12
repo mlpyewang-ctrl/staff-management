@@ -872,68 +872,164 @@ export async function updateSalaryStatus(formData: FormData) {
   }
 }
 
+export async function batchConfirmSalaryRecords(recordIds: string[]) {
+  try {
+    await requireAdminUser()
+
+    if (!recordIds || recordIds.length === 0) {
+      return { error: '请选择要确认的记录' }
+    }
+
+    const records = await prisma.salaryRecord.findMany({
+      where: {
+        id: { in: recordIds },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    })
+
+    const draftIds = records.filter((r) => r.status === 'DRAFT').map((r) => r.id)
+    const nonDraftCount = records.length - draftIds.length
+
+    if (draftIds.length === 0) {
+      return { error: '选中的记录均不是草稿状态，无法确认' }
+    }
+
+    await prisma.salaryRecord.updateMany({
+      where: {
+        id: { in: draftIds },
+      },
+      data: {
+        status: 'CONFIRMED',
+      },
+    })
+
+    revalidatePath('/dashboard/salary')
+    return {
+      success: `成功确认 ${draftIds.length} 条薪资记录${nonDraftCount > 0 ? `，跳过 ${nonDraftCount} 条非草稿记录` : ''}`,
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '批量确认失败，请稍后重试' }
+  }
+}
+
+async function deleteSingleSalaryRecord(tx: Prisma.TransactionClient, id: string) {
+  const record = await tx.salaryRecord.findUnique({
+    where: { id },
+  })
+
+  if (!record) {
+    return { error: '薪资记录不存在' } as const
+  }
+
+  if (record.status !== 'DRAFT') {
+    return { error: '只有草稿状态的薪资记录可以删除' } as const
+  }
+
+  const compensatorySettlements = await tx.overtimeSettlement.findMany({
+    where: {
+      salaryRecordId: id,
+      settlementType: 'COMPENSATORY',
+    },
+    select: {
+      hours: true,
+    },
+  })
+
+  const compensatoryHours = compensatorySettlements.reduce((sum, settlement) => sum + settlement.hours, 0)
+
+  await tx.overtimeSettlement.deleteMany({
+    where: { salaryRecordId: id },
+  })
+
+  if (compensatoryHours > 0) {
+    const leaveBalance = await tx.leaveBalance.findUnique({
+      where: { userId: record.userId },
+    })
+
+    if (leaveBalance) {
+      await tx.leaveBalance.update({
+        where: { userId: record.userId },
+        data: {
+          compensatory: {
+            decrement: compensatoryHours,
+          },
+        },
+      })
+    }
+  }
+
+  await tx.salaryRecord.delete({
+    where: { id },
+  })
+
+  return { success: true } as const
+}
+
 export async function deleteSalaryRecord(id: string) {
   try {
     await requireAdminUser()
 
-    const record = await prisma.salaryRecord.findUnique({
-      where: { id },
-    })
-
-    if (!record) {
-      return { error: '薪资记录不存在' }
-    }
-
-    if (record.status !== 'DRAFT') {
-      return { error: '只有草稿状态的薪资记录可以删除' }
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const compensatorySettlements = await tx.overtimeSettlement.findMany({
-        where: {
-          salaryRecordId: id,
-          settlementType: 'COMPENSATORY',
-        },
-        select: {
-          hours: true,
-        },
-      })
-
-      const compensatoryHours = compensatorySettlements.reduce((sum, settlement) => sum + settlement.hours, 0)
-
-      await tx.overtimeSettlement.deleteMany({
-        where: { salaryRecordId: id },
-      })
-
-      if (compensatoryHours > 0) {
-        const leaveBalance = await tx.leaveBalance.findUnique({
-          where: { userId: record.userId },
-        })
-
-        if (leaveBalance) {
-          await tx.leaveBalance.update({
-            where: { userId: record.userId },
-            data: {
-              compensatory: {
-                decrement: compensatoryHours,
-              },
-            },
-          })
-        }
-      }
-
-      await tx.salaryRecord.delete({
-        where: { id },
-      })
+    const result = await prisma.$transaction(async (tx) => {
+      return deleteSingleSalaryRecord(tx, id)
     })
 
     revalidatePath('/dashboard/salary')
-    return { success: '薪资记录已删除' }
+    return result.success === true ? { success: '薪资记录已删除' } : { error: result.error }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message }
     }
     return { error: '删除失败，请稍后重试' }
+  }
+}
+
+export async function batchDeleteSalaryRecords(recordIds: string[]) {
+  try {
+    await requireAdminUser()
+
+    if (!recordIds || recordIds.length === 0) {
+      return { error: '请选择要删除的记录' }
+    }
+
+    let successCount = 0
+    let errorCount = 0
+    const errors: string[] = []
+
+    for (const id of recordIds) {
+      const result = await prisma.$transaction(async (tx) => {
+        return deleteSingleSalaryRecord(tx, id)
+      })
+
+      if (result.success === true) {
+        successCount += 1
+      } else {
+        errorCount += 1
+        if (!errors.includes(result.error)) {
+          errors.push(result.error)
+        }
+      }
+    }
+
+    revalidatePath('/dashboard/salary')
+
+    if (successCount === 0) {
+      return { error: errors.join('；') || '删除失败' }
+    }
+
+    return {
+      success: `成功删除 ${successCount} 条薪资记录${errorCount > 0 ? `，${errorCount} 条失败（${errors.join('；')}）` : ''}`,
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '批量删除失败，请稍后重试' }
   }
 }
 

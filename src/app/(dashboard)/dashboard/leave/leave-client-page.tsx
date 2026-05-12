@@ -63,6 +63,7 @@ export function LeaveClientPage({
   const canCreate = Boolean(viewerId)
   const canEdit = viewerRole === 'EMPLOYEE' || viewerRole === 'ATTENDANCE_CLERK'
   const isAttendanceClerk = viewerRole === 'ATTENDANCE_CLERK'
+  const canImport = viewerRole === 'ADMIN' || isAttendanceClerk
 
   useEffect(() => {
     setApplications(initialApplications)
@@ -127,7 +128,7 @@ export function LeaveClientPage({
               <Link href="/dashboard/leave/new">新增申请</Link>
             </Button>
           )}
-          {isAttendanceClerk && (
+          {canImport && (
             <>
               <Button asChild>
                 <Link href="/dashboard/leave/import">批量导入</Link>

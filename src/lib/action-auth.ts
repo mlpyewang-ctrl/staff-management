@@ -18,6 +18,10 @@ export function isAttendanceClerk(role: Role) {
   return role === 'ATTENDANCE_CLERK'
 }
 
+export function canImportRecords(role: Role) {
+  return role === 'ADMIN' || role === 'ATTENDANCE_CLERK'
+}
+
 export function isEmployeeRole(role: Role) {
   return role === 'EMPLOYEE'
 }
@@ -57,6 +61,16 @@ export async function requireAttendanceClerk() {
 
   if (!isAttendanceClerk(sessionUser.role)) {
     throw new Error('只有考勤员可以执行此操作')
+  }
+
+  return sessionUser
+}
+
+export async function requireAdminOrAttendanceClerk() {
+  const sessionUser = await requireSessionUser()
+
+  if (!canImportRecords(sessionUser.role)) {
+    throw new Error('只有管理员或考勤员可以执行此操作')
   }
 
   return sessionUser

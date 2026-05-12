@@ -223,8 +223,18 @@ export function parseLeaveExcel(buffer: ArrayBuffer): ParseResult<ParsedLeaveRow
   return { data, errors }
 }
 
-export function generateOvertimeTemplate(): ArrayBuffer {
+export function generateOvertimeTemplate(): ArrayBufferLike {
   const headers = ['员工用户名', '员工姓名', '加班日期', '开始时间', '结束时间', '加班类型', '加班事由']
+  const note = [
+    '（说明）',
+    '填写系统中唯一的用户名',
+    '与系统一致的真实姓名',
+    '格式 yyyy-MM-dd，如 2026-05-10',
+    '格式 HH:mm，如 18:00',
+    '格式 HH:mm，如 21:00',
+    'WORKDAY（工作日）/ WEEKEND（周末）/ HOLIDAY（节假日）',
+    '必填，简述加班原因',
+  ]
   const example = [
     'wangqiang',
     '王强',
@@ -234,14 +244,27 @@ export function generateOvertimeTemplate(): ArrayBuffer {
     'WORKDAY',
     '项目紧急上线支持',
   ]
-  const sheet = XLSX.utils.aoa_to_sheet([headers, example])
+  const sheet = XLSX.utils.aoa_to_sheet([headers, note, example])
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, '加班导入模板')
-  return XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }).buffer
+  const result = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
+  return result instanceof ArrayBuffer ? result : (result as Uint8Array).buffer
 }
 
-export function generateLeaveTemplate(): ArrayBuffer {
+export function generateLeaveTemplate(): ArrayBufferLike {
   const headers = ['员工用户名', '员工姓名', '请假类型', '开始日期', '结束日期', '开始时段', '结束时段', '请假事由', '前往地点']
+  const note = [
+    '（说明）',
+    '填写系统中唯一的用户名',
+    '与系统一致的真实姓名',
+    'ANNUAL（年假）/ SICK（病假）/ PERSONAL（事假）/ MARRIAGE（婚假）/ MATERNITY（产假）/ PATERNITY（陪产假）/ COMPENSATORY（调休）',
+    '格式 yyyy-MM-dd',
+    '格式 yyyy-MM-dd',
+    'AM（上午）/ PM（下午），默认 AM',
+    'AM（上午）/ PM（下午），默认 PM',
+    '必填，简述请假原因',
+    '选填',
+  ]
   const example = [
     'wangqiang',
     '王强',
@@ -253,8 +276,9 @@ export function generateLeaveTemplate(): ArrayBuffer {
     '家中有事需要处理',
     '山东老家',
   ]
-  const sheet = XLSX.utils.aoa_to_sheet([headers, example])
+  const sheet = XLSX.utils.aoa_to_sheet([headers, note, example])
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, '请假导入模板')
-  return XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }).buffer
+  const result = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
+  return result instanceof ArrayBuffer ? result : (result as Uint8Array).buffer
 }

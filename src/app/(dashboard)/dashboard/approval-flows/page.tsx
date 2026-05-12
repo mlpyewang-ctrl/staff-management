@@ -10,10 +10,12 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getDepartments } from '@/server/actions/department'
-import { getApprovalFlows, saveApprovalFlow } from '@/server/actions/approvalFlow'
+import { deleteApprovalFlow, getApprovalFlows, saveApprovalFlow } from '@/server/actions/approvalFlow'
 import { getStaffJobAssignments } from '@/server/actions/user'
 import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS, ApplicationType } from '@/lib/approval-constants'
 import { normalizeApprovalFlowSteps } from '@/lib/approval-workflow'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useAsyncAction } from '@/lib/use-async-action'
 
 interface DepartmentOption {
   id: string
@@ -36,6 +38,7 @@ interface ApprovalFlowRecord {
   name: string
   types: string
   config: string
+  applicableUserIds?: string | null
   department?: DepartmentOption | null
 }
 
@@ -51,6 +54,7 @@ interface ApprovalFlowFormState {
   departmentId: string
   name: string
   nodes: ApprovalNodeForm[]
+  applicableUserIds: string[]
 }
 
 const defaultNodes = (): ApprovalNodeForm[] => [
@@ -74,6 +78,7 @@ const createEmptyForm = (): ApprovalFlowFormState => ({
   departmentId: '',
   name: '',
   nodes: defaultNodes(),
+  applicableUserIds: [],
 })
 
 function roleLabel(role: string) {
@@ -116,6 +121,16 @@ function parseNodes(config: string): ApprovalNodeForm[] {
   }))
 }
 
+function parseApplicableUserIds(value: string | null | undefined): string[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function formatNodeTarget(node: ApprovalNodeForm, users: ApprovalUserOption[]) {
   const matchedUser = users.find((item) => item.id === node.approverUserId)
 
@@ -141,6 +156,17 @@ function getFlowSummary(flow: ApprovalFlowRecord) {
     .join(' / ')
 }
 
+function getBindingSummary(flow: ApprovalFlowRecord, users: ApprovalUserOption[]) {
+  const ids = parseApplicableUserIds(flow.applicableUserIds)
+  const names = ids
+    .map((id) => users.find((u) => u.id === id)?.name)
+    .filter(Boolean) as string[]
+  if (names.length <= 2) {
+    return names.join('、')
+  }
+  return `${names.slice(0, 2).join('、')} 等 ${names.length} 人`
+}
+
 function reindexNodes(nodes: ApprovalNodeForm[]) {
   return nodes.map((node, index) => ({
     ...node,
@@ -155,8 +181,14 @@ export default function ApprovalFlowsDashboardPage() {
   const [flows, setFlows] = useState<ApprovalFlowRecord[]>([])
   const [editingFlow, setEditingFlow] = useState<ApprovalFlowRecord | null>(null)
   const [formState, setFormState] = useState<ApprovalFlowFormState>(createEmptyForm())
-  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
+
+  const doSave = async (formData: FormData) => {
+    return await saveApprovalFlow(formData)
+  }
+  const { loading, error, execute } = useAsyncAction(doSave)
+  const { loading: deleting, execute: executeDelete } = useAsyncAction(deleteApprovalFlow)
   const [selectedTypes, setSelectedTypes] = useState<ApplicationType[]>([])
 
   useEffect(() => {
@@ -165,6 +197,7 @@ export default function ApprovalFlowsDashboardPage() {
       setDepartments(depts)
       setFlows(fs)
       setUsers(staffUsers)
+      setPageLoading(false)
     }
 
     load()
@@ -181,6 +214,7 @@ export default function ApprovalFlowsDashboardPage() {
       departmentId: editingFlow.departmentId,
       name: editingFlow.name,
       nodes: parseNodes(editingFlow.config),
+      applicableUserIds: parseApplicableUserIds(editingFlow.applicableUserIds),
     })
     setSelectedTypes(parseTypes(editingFlow.types))
   }, [editingFlow])
@@ -193,6 +227,11 @@ export default function ApprovalFlowsDashboardPage() {
       })),
     [users]
   )
+
+  const departmentUsers = useMemo(() => {
+    if (!formState.departmentId) return []
+    return users.filter((user) => user.department?.id === formState.departmentId)
+  }, [users, formState.departmentId])
 
   const flowLabels = useMemo(
     () =>
@@ -208,6 +247,15 @@ export default function ApprovalFlowsDashboardPage() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold text-gray-900">审批流程配置</h1>
         <p className="text-gray-600">仅管理员可以访问该页面。</p>
+      </div>
+    )
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner size="lg" />
+        <span className="ml-3 text-gray-500">加载中...</span>
       </div>
     )
   }
@@ -279,20 +327,24 @@ export default function ApprovalFlowsDashboardPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setLoading(true)
     setMessage({ type: '', text: '' })
 
+    if (!formState.departmentId || !formState.name.trim()) {
+      setMessage({ type: 'error', text: '请先填写部门和流程名称' })
+      return
+    }
+
+    if (selectedTypes.length === 0) {
+      setMessage({ type: 'error', text: '请至少选择一种申请类型' })
+      return
+    }
+
+    if (formState.applicableUserIds.length === 0) {
+      setMessage({ type: 'error', text: '请至少绑定一名人员' })
+      return
+    }
+
     try {
-      if (!formState.departmentId || !formState.name.trim()) {
-        setMessage({ type: 'error', text: '请先填写部门和流程名称' })
-        return
-      }
-
-      if (selectedTypes.length === 0) {
-        setMessage({ type: 'error', text: '请至少选择一种申请类型' })
-        return
-      }
-
       const nodes = formState.nodes.map((node, index) => {
         const matchedUser = users.find((item) => item.id === node.approverUserId)
 
@@ -318,24 +370,24 @@ export default function ApprovalFlowsDashboardPage() {
       }
       formData.set('types', JSON.stringify(selectedTypes))
       formData.set('config', JSON.stringify(nodes))
+      formData.set('applicableUserIds', JSON.stringify(formState.applicableUserIds))
 
-      const result = await saveApprovalFlow(formData)
+      const result = await execute(formData)
+      const response = result as { success?: string; error?: string }
 
-      if (result.error) {
-        setMessage({ type: 'error', text: result.error })
+      if (response.error) {
+        setMessage({ type: 'error', text: response.error })
         return
       }
 
-      setMessage({ type: 'success', text: result.success || '审批流程已保存' })
+      setMessage({ type: 'success', text: response.success || '审批流程已保存' })
       const fs = await getApprovalFlows()
       setFlows(fs)
       setEditingFlow(null)
       setFormState(createEmptyForm())
       setSelectedTypes([])
-    } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : '保存审批流程失败' })
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : '保存审批流程失败' })
     }
   }
 
@@ -409,7 +461,83 @@ export default function ApprovalFlowsDashboardPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-500">同一个部门下，同一类型只能配置一个流程。</p>
+              <p className="text-xs text-gray-500">每个流程必须至少绑定一名人员，未绑定人员的用户无法提交申请。</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>绑定人员</Label>
+                {departmentUsers.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          applicableUserIds: departmentUsers.map((u) => u.id),
+                        }))
+                      }
+                    >
+                      全选
+                    </Button>
+                    {formState.applicableUserIds.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setFormState((current) => ({
+                            ...current,
+                            applicableUserIds: [],
+                          }))
+                        }
+                      >
+                        清空
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {formState.departmentId ? (
+                departmentUsers.length === 0 ? (
+                  <p className="text-sm text-gray-500">该部门暂无人员</p>
+                ) : (
+                  <div className="flex flex-wrap gap-3">
+                    {departmentUsers.map((user) => {
+                      const checked = formState.applicableUserIds.includes(user.id)
+                      return (
+                        <label
+                          key={user.id}
+                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                            checked
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 cursor-pointer"
+                            checked={checked}
+                            onChange={(event) => {
+                              setFormState((current) => {
+                                const nextIds = event.target.checked
+                                  ? [...current.applicableUserIds, user.id]
+                                  : current.applicableUserIds.filter((id) => id !== user.id)
+                                return { ...current, applicableUserIds: nextIds }
+                              })
+                            }}
+                          />
+                          {user.name}（{roleLabel(user.role)}）
+                        </label>
+                      )
+                    })}
+                  </div>
+                )
+              ) : (
+                <p className="text-sm text-gray-500">请先选择部门</p>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -512,15 +640,15 @@ export default function ApprovalFlowsDashboardPage() {
               </div>
             </div>
 
-            {message.text && (
-              <div className={`text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
-                {message.text}
+            {(message.text || error) && (
+              <div className={`text-sm ${message.type === 'error' || error ? 'text-red-600' : 'text-green-600'}`}>
+                {message.text || error}
               </div>
             )}
 
             <div className="flex gap-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? '保存中...' : '保存审批流程'}
+              <Button type="submit" loading={loading}>
+                保存审批流程
               </Button>
               {editingFlow && (
                 <Button
@@ -551,6 +679,7 @@ export default function ApprovalFlowsDashboardPage() {
                 <TableHead>部门</TableHead>
                 <TableHead>流程名称</TableHead>
                 <TableHead>申请类型</TableHead>
+                <TableHead>绑定人员</TableHead>
                 <TableHead>节点摘要</TableHead>
                 <TableHead>操作</TableHead>
               </TableRow>
@@ -558,7 +687,7 @@ export default function ApprovalFlowsDashboardPage() {
             <TableBody>
               {flowLabels.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-gray-500">
+                  <TableCell colSpan={6} className="py-8 text-center text-gray-500">
                     暂无审批流程
                   </TableCell>
                 </TableRow>
@@ -568,11 +697,34 @@ export default function ApprovalFlowsDashboardPage() {
                     <TableCell>{flow.department?.name || '-'}</TableCell>
                     <TableCell>{flow.name}</TableCell>
                     <TableCell>{flow.labels.join('、') || '-'}</TableCell>
+                    <TableCell className="text-sm text-gray-600">{getBindingSummary(flow, users)}</TableCell>
                     <TableCell className="max-w-[360px] text-sm text-gray-600">{getFlowSummary(flow)}</TableCell>
                     <TableCell>
-                      <Button variant="outline" size="sm" onClick={() => setEditingFlow(flow)}>
-                        编辑
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setEditingFlow(flow)}>
+                          编辑
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 hover:bg-red-50"
+                          loading={deleting}
+                          onClick={async () => {
+                            if (!confirm('确定要删除该审批流程吗？')) return
+                            const res = await executeDelete(flow.id)
+                            const response = res as { success?: string; error?: string }
+                            if (response.success) {
+                              setMessage({ type: 'success', text: response.success })
+                              const fs = await getApprovalFlows()
+                              setFlows(fs)
+                            } else {
+                              setMessage({ type: 'error', text: response.error || '删除失败' })
+                            }
+                          }}
+                        >
+                          删除
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useAsyncAction } from '@/lib/use-async-action'
 import {
   calculateAnnualLeaveEntitlement,
   calculateCompletedYears,
@@ -89,13 +91,11 @@ export default function StaffDashboardPage() {
   const [selectedUserId, setSelectedUserId] = useState('')
   const [formState, setFormState] = useState(emptyFormState)
   const [keyword, setKeyword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [initialLoading, setInitialLoading] = useState(true)
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
+  const [pageLoading, setPageLoading] = useState(true)
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm] = useState({ username: '', name: '', role: 'EMPLOYEE' as EditableRole })
-  const [createLoading, setCreateLoading] = useState(false)
   const [createMessage, setCreateMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
 
   const loadData = async (preferredUserId?: string) => {
@@ -130,7 +130,7 @@ export default function StaffDashboardPage() {
   useEffect(() => {
     const load = async () => {
       if (session?.user?.role !== 'ADMIN') {
-        setInitialLoading(false)
+        setPageLoading(false)
         return
       }
 
@@ -140,7 +140,7 @@ export default function StaffDashboardPage() {
         const text = error instanceof Error ? error.message : '加载人员信息失败'
         setMessage({ type: 'error', text })
       } finally {
-        setInitialLoading(false)
+        setPageLoading(false)
       }
     }
 
@@ -194,15 +194,12 @@ export default function StaffDashboardPage() {
     formState.firstWorkDate || selectedUser?.firstWorkDate
   )
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
+  const { loading: submitLoading, execute: executeSubmit } = useAsyncAction(async () => {
     if (!selectedUserId || !selectedUser) {
       setMessage({ type: 'error', text: '请先选择需要维护的人员' })
       return
     }
 
-    setLoading(true)
     setMessage({ type: '', text: '' })
 
     const submitData = new FormData()
@@ -220,14 +217,33 @@ export default function StaffDashboardPage() {
 
     if (result.error) {
       setMessage({ type: 'error', text: result.error })
-      setLoading(false)
       return
     }
 
     await loadData(selectedUserId)
     setMessage({ type: 'success', text: result.success || '岗位信息已更新' })
-    setLoading(false)
+  })
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    executeSubmit()
   }
+
+  const { loading: createLoading, execute: executeCreate } = useAsyncAction(async () => {
+    const formData = new FormData()
+    formData.append('username', createForm.username)
+    formData.append('name', createForm.name)
+    formData.append('role', createForm.role)
+    const result = await createUser(formData)
+    if (result.error) {
+      setCreateMessage({ type: 'error', text: result.error })
+    } else {
+      setCreateMessage({ type: 'success', text: result.success || '账号创建成功' })
+      setCreateForm({ username: '', name: '', role: 'EMPLOYEE' })
+      await loadData()
+      setTimeout(() => setShowCreateForm(false), 1500)
+    }
+  })
 
   if (session?.user?.role !== 'ADMIN') {
     return (
@@ -410,7 +426,7 @@ export default function StaffDashboardPage() {
                   </div>
                 )}
 
-                                <div className="space-y-2">
+                <div className="space-y-2">
                   <Label htmlFor="versionRemark">变更备注</Label>
                   <Input
                     id="versionRemark"
@@ -432,8 +448,8 @@ export default function StaffDashboardPage() {
                   </div>
                 )}
 
-                <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? '保存中...' : '保存角色与岗位'}
+                <Button type="submit" loading={submitLoading} className="w-full">
+                  保存角色与岗位
                 </Button>
               </form>
             ) : (
@@ -452,24 +468,10 @@ export default function StaffDashboardPage() {
           <CardContent className="space-y-4">
             {showCreateForm && (
               <form
-                onSubmit={async (e) => {
+                onSubmit={(e) => {
                   e.preventDefault()
-                  setCreateLoading(true)
                   setCreateMessage(null)
-                  const formData = new FormData()
-                  formData.append('username', createForm.username)
-                  formData.append('name', createForm.name)
-                  formData.append('role', createForm.role)
-                  const result = await createUser(formData)
-                  setCreateLoading(false)
-                  if (result.error) {
-                    setCreateMessage({ type: 'error', text: result.error })
-                  } else {
-                    setCreateMessage({ type: 'success', text: result.success || '账号创建成功' })
-                    setCreateForm({ username: '', name: '', role: 'EMPLOYEE' })
-                    await loadData()
-                    setTimeout(() => setShowCreateForm(false), 1500)
-                  }
+                  executeCreate()
                 }}
                 className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
               >
@@ -521,8 +523,8 @@ export default function StaffDashboardPage() {
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <Button type="submit" disabled={createLoading} className="flex-1">
-                    {createLoading ? '创建中...' : '创建账号'}
+                  <Button type="submit" loading={createLoading} className="flex-1">
+                    创建账号
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
                     取消
@@ -537,8 +539,11 @@ export default function StaffDashboardPage() {
               onChange={(event) => setKeyword(event.target.value)}
             />
 
-            {initialLoading ? (
-              <div className="py-8 text-center text-sm text-gray-500">加载中...</div>
+            {pageLoading ? (
+              <div className="py-8 flex flex-col items-center justify-center gap-2 text-sm text-gray-500">
+                <LoadingSpinner size="md" />
+                <span>加载中...</span>
+              </div>
             ) : (
               <Table>
                 <TableHeader>
