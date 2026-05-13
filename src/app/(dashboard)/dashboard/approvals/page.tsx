@@ -14,10 +14,10 @@ export default async function ApprovalsPage() {
   }
 
   const viewerRole = session.user.role
-  const [initialPendingApps, initialHistory] =
-    viewerRole === 'ADMIN' || viewerRole === 'MANAGER'
-      ? await Promise.all([getPendingApprovals(), getApprovalHistory()])
-      : [{ overtime: [], leave: [], other: [] }, []]
+  const [initialPendingApps, initialHistory] = await Promise.all([
+    getPendingApprovals(),
+    getApprovalHistory(),
+  ])
 
   return (
     <ApprovalsClientPage

@@ -32,10 +32,6 @@ export async function middleware(req: NextRequest) {
   if (isDashboardPage && token) {
     const role = typeof token.role === 'string' ? token.role : ''
 
-    if (nextUrl.pathname.startsWith('/dashboard/approvals') && !['ADMIN', 'MANAGER'].includes(role)) {
-      return NextResponse.redirect(new URL('/dashboard', nextUrl))
-    }
-
     if (adminOnlyPaths.some((path) => nextUrl.pathname.startsWith(path)) && role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/dashboard', nextUrl))
     }

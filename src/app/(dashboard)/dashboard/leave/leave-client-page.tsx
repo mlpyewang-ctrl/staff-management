@@ -13,6 +13,7 @@ import { formatDate, formatDateTime, getLeaveSessionLabel } from '@/lib/utils'
 import { generateLeaveTemplate } from '@/lib/excel-parser'
 import { getCompensatorySourceHistory } from '@/server/actions/compensatory'
 import { deleteLeaveApplication, getLeaveApplications, getLeaveBalances } from '@/server/actions/leave'
+import { withdrawApplication } from '@/server/actions/approval'
 import type { Role } from '@/types'
 
 type LeaveApplicationsData = Awaited<ReturnType<typeof getLeaveApplications>>
@@ -274,6 +275,20 @@ export function LeaveClientPage({
                         setApplications(data)
                       }
                     }}
+                    onWithdraw={async (id) => {
+                      if (!confirm('确定撤回该请假申请吗？撤回后可重新编辑提交。')) return
+                      const formData = new FormData()
+                      formData.set('applicationId', id)
+                      formData.set('applicationType', 'LEAVE')
+                      const result = await withdrawApplication(formData)
+                      if (result.error) {
+                        alert(result.error)
+                      } else {
+                        alert(result.success)
+                        const data = await getLeaveApplications()
+                        setApplications(data)
+                      }
+                    }}
                   />
                 ))
               )}
@@ -357,12 +372,14 @@ function LeaveApplicationRow({
   showApplicant,
   isAttendanceClerk,
   onDelete,
+  onWithdraw,
 }: {
   application: LeaveApplicationItem
   canEdit: boolean
   showApplicant: boolean
   isAttendanceClerk: boolean
   onDelete: (id: string) => void
+  onWithdraw: (id: string) => void
 }) {
   const compensatoryAvailable =
     application.applicantCompensatory !== null && application.applicantUsedCompensatory !== null
@@ -404,6 +421,14 @@ function LeaveApplicationRow({
           {application.status === 'DRAFT' ? (
             <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/leave/${application.id}`}>编辑</Link>
+            </Button>
+          ) : application.status === 'PENDING' ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onWithdraw(application.id)}
+            >
+              撤回
             </Button>
           ) : isAttendanceClerk && application.status === 'COMPLETED' && application.approverId === null ? (
             <Button

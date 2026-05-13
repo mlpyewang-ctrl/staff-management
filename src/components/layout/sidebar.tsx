@@ -66,16 +66,14 @@ export function Sidebar() {
       })
     }
 
-    if (canApprove) {
-      groups.push({
-        title: '审批中心',
-        items: [
-          { name: '待办审批', href: '/dashboard/approvals', icon: '✅' },
-          { name: '查询统计', href: '/dashboard/query', icon: '🔍' },
-        ],
-        defaultOpen: true,
-      })
-    }
+    groups.push({
+      title: '审批中心',
+      items: [
+        { name: '待办审批', href: '/dashboard/approvals', icon: '✅' },
+        ...(canApprove ? [{ name: '查询统计', href: '/dashboard/query', icon: '🔍' }] : []),
+      ],
+      defaultOpen: true,
+    })
 
     if (isAttendanceClerk) {
       groups.push({

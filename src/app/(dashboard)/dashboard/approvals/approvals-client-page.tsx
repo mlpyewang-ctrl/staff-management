@@ -204,17 +204,6 @@ export function ApprovalsClientPage({
     }
   }
 
-  if (viewerRole === 'EMPLOYEE') {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">审批中心</h1>
-          <p className="mt-2 text-sm text-slate-600">当前账号没有访问审批中心的权限。</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

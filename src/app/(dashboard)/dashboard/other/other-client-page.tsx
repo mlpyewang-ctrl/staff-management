@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, getPaginationState } from '@/lib/pagination'
 import { formatDateTime } from '@/lib/utils'
 import { getOtherApplications } from '@/server/actions/otherApplication'
+import { withdrawApplication } from '@/server/actions/approval'
 import type { Role } from '@/types'
 
 type OtherApplicationsData = Awaited<ReturnType<typeof getOtherApplications>>
@@ -126,6 +127,20 @@ export function OtherClientPage({
                     application={application}
                     canEdit={canEdit}
                     showApplicant={viewerRole !== 'EMPLOYEE'}
+                    onWithdraw={async (id) => {
+                      if (!confirm('确定撤回该申请吗？撤回后可重新编辑提交。')) return
+                      const formData = new FormData()
+                      formData.set('applicationId', id)
+                      formData.set('applicationType', application.type)
+                      const result = await withdrawApplication(formData)
+                      if (result.error) {
+                        alert(result.error)
+                      } else {
+                        alert(result.success)
+                        const data = await getOtherApplications()
+                        setApplications(data)
+                      }
+                    }}
                   />
                 ))
               )}
@@ -153,10 +168,12 @@ function OtherApplicationRow({
   application,
   canEdit,
   showApplicant,
+  onWithdraw,
 }: {
   application: OtherApplicationItem
   canEdit: boolean
   showApplicant: boolean
+  onWithdraw: (id: string) => void
 }) {
   return (
     <TableRow>
@@ -178,6 +195,10 @@ function OtherApplicationRow({
           {application.status === 'DRAFT' ? (
             <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/other/${application.id}`}>编辑</Link>
+            </Button>
+          ) : application.status === 'PENDING' ? (
+            <Button size="sm" variant="outline" onClick={() => onWithdraw(application.id)}>
+              撤回
             </Button>
           ) : (
             <span className="text-xs text-gray-400">审批中 / 已完成</span>

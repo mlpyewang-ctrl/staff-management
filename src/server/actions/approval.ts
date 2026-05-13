@@ -14,7 +14,7 @@ import {
   type ApprovalFlowStep,
   type OvertimePhase,
 } from '@/lib/approval-workflow'
-import { requireManagerUser } from '@/lib/action-auth'
+import { requireSessionUser } from '@/lib/action-auth'
 import { recordDocumentVersionIfChanged } from '@/lib/profile-versioning'
 import { prisma } from '@/lib/prisma'
 import { approvalSchema } from '@/lib/validations'
@@ -90,7 +90,7 @@ function isDefined<T>(value: T | null): value is T {
 
 export async function approveApplication(formData: FormData) {
   try {
-    const sessionUser = await requireManagerUser()
+    const sessionUser = await requireSessionUser()
     const validatedData = approvalSchema.parse({
       applicationId: formData.get('applicationId'),
       applicationType: formData.get('applicationType'),
@@ -668,7 +668,7 @@ async function handleOtherApplicationApproval(
 
 export async function getPendingApprovals(_approverId?: string) {
   try {
-    const sessionUser = await requireManagerUser()
+    const sessionUser = await requireSessionUser()
     const approver = await prisma.user.findUnique({
       where: { id: sessionUser.id },
       select: {
@@ -678,7 +678,7 @@ export async function getPendingApprovals(_approverId?: string) {
       },
     })
 
-    if (!approver || approver.role === 'EMPLOYEE') {
+    if (!approver) {
       return { overtime: [], leave: [], other: [] }
     }
 
@@ -995,7 +995,7 @@ export async function getPendingApprovals(_approverId?: string) {
 
 export async function getApprovalHistory(_approverId?: string) {
   try {
-    const sessionUser = await requireManagerUser()
+    const sessionUser = await requireSessionUser()
     const approvals = await prisma.approval.findMany({
       where: { approverId: sessionUser.id },
       orderBy: { createdAt: 'desc' },
@@ -1039,5 +1039,113 @@ export async function getApprovalHistory(_approverId?: string) {
   } catch (error) {
     console.error('获取审批历史失败:', error)
     return []
+  }
+}
+
+
+export async function withdrawApplication(formData: FormData) {
+  try {
+    const sessionUser = await requireSessionUser()
+
+    const applicationId = formData.get('applicationId') as string
+    const applicationType = formData.get('applicationType') as string
+
+    if (!applicationId || !applicationType) {
+      return { error: '缺少申请信息' }
+    }
+
+    // 查询申请记录并校验归属
+    let application: { id: string; userId: string; status: string } | null = null
+
+    if (applicationType === 'OVERTIME') {
+      application = await prisma.overtimeApplication.findUnique({
+        where: { id: applicationId },
+        select: { id: true, userId: true, status: true },
+      })
+    } else if (applicationType === 'LEAVE') {
+      application = await prisma.leaveApplication.findUnique({
+        where: { id: applicationId },
+        select: { id: true, userId: true, status: true },
+      })
+    } else if (
+      applicationType === 'RESIGNATION_HANDOVER' ||
+      applicationType === 'RESUME_UPDATE' ||
+      applicationType === 'PARTY_INFO_UPDATE'
+    ) {
+      application = await prisma.otherApplication.findUnique({
+        where: { id: applicationId },
+        select: { id: true, userId: true, status: true },
+      })
+    } else {
+      return { error: '无效的申请类型' }
+    }
+
+    if (!application) {
+      return { error: '申请不存在' }
+    }
+
+    if (application.userId !== sessionUser.id) {
+      return { error: '无权操作该申请' }
+    }
+
+    if (application.status !== 'PENDING') {
+      return { error: '只有待审批状态的申请可以撤回' }
+    }
+
+    // 校验没有任何审批记录（第一岗确认前）
+    const approvalCount = await prisma.approval.count({
+      where: {
+        applicationId,
+        applicationType,
+      },
+    })
+
+    if (approvalCount > 0) {
+      return { error: '该申请已被处理，无法撤回' }
+    }
+
+    // 更新为草稿状态
+    if (applicationType === 'OVERTIME') {
+      await prisma.overtimeApplication.update({
+        where: { id: applicationId },
+        data: {
+          status: 'DRAFT',
+          approverId: null,
+          approvedAt: null,
+          remark: null,
+        },
+      })
+      revalidatePath('/dashboard/overtime')
+    } else if (applicationType === 'LEAVE') {
+      await prisma.leaveApplication.update({
+        where: { id: applicationId },
+        data: {
+          status: 'DRAFT',
+          approverId: null,
+          approvedAt: null,
+          remark: null,
+        },
+      })
+      revalidatePath('/dashboard/leave')
+      revalidatePath('/dashboard/compensatory')
+    } else {
+      await prisma.otherApplication.update({
+        where: { id: applicationId },
+        data: {
+          status: 'DRAFT',
+          approverId: null,
+          approvedAt: null,
+          remark: null,
+        },
+      })
+      revalidatePath('/dashboard/other')
+    }
+
+    return { success: '申请已撤回，恢复为草稿状态' }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '撤回失败，请稍后重试' }
   }
 }

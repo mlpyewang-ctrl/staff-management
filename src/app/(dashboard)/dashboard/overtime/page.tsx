@@ -24,6 +24,7 @@ import {
 import { TimeRange, isWithinTimeRange, timeRangeOptions } from '@/lib/time-range'
 import { generateOvertimeTemplate } from '@/lib/excel-parser'
 import { deleteOvertimeApplication, getOvertimeApplications } from '@/server/actions/overtime'
+import { withdrawApplication } from '@/server/actions/approval'
 
 type OvertimeApplicationItem = Awaited<ReturnType<typeof getOvertimeApplications>>[number]
 
@@ -208,6 +209,27 @@ export default function OvertimePage() {
                           <Button asChild size="sm" variant="default">
                             <Link href={`/dashboard/overtime/${application.id}/confirm`}>提交确认</Link>
                           </Button>
+                        ) : application.status === 'PENDING' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              if (!confirm('确定撤回该加班申请吗？撤回后可重新编辑提交。')) return
+                              const formData = new FormData()
+                              formData.set('applicationId', application.id)
+                              formData.set('applicationType', 'OVERTIME')
+                              const result = await withdrawApplication(formData)
+                              if (result.error) {
+                                alert(result.error)
+                              } else {
+                                alert(result.success)
+                                const data = await getOvertimeApplications(session?.user?.id, session?.user?.role)
+                                setApplications(data)
+                              }
+                            }}
+                          >
+                            撤回
+                          </Button>
                         ) : isAttendanceClerk && application.status === 'COMPLETED' && application.approverId === null ? (
                           <Button
                             size="sm"
@@ -228,7 +250,6 @@ export default function OvertimePage() {
                           </Button>
                         ) : (
                           <span className="text-xs text-slate-400">
-                            {application.status === 'PENDING' && '事前审批中'}
                             {application.status === 'CONFIRM_PENDING' && '确认审批中'}
                             {application.status === 'COMPLETED' && '已完成'}
                           </span>
