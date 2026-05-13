@@ -301,7 +301,7 @@ export function Sidebar() {
           <Button
             variant="outline"
             className="w-full border-white/15 bg-white/5 text-white hover:bg-white/10"
-            onClick={() => signOut({ callbackUrl: '/auth/login' })}
+            onClick={() => signOut({ callbackUrl: window.location.origin + '/auth/login' })}
           >
             退出登录
           </Button>

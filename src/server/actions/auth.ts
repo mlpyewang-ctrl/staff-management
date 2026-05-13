@@ -158,6 +158,42 @@ export async function changePassword(formData: FormData) {
   }
 }
 
+export async function resetPassword(formData: FormData) {
+  try {
+    const sessionUser = await requireSessionUser()
+    if (sessionUser.role !== 'ADMIN') {
+      return { error: '无权操作' }
+    }
+
+    const userId = formData.get('userId') as string
+    if (!userId) {
+      return { error: '用户ID不能为空' }
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+    })
+
+    if (!targetUser) {
+      return { error: '用户不存在' }
+    }
+
+    const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10)
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    })
+
+    return { success: `用户 ${targetUser.name} 的密码已重置为默认密码` }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '重置密码失败，请稍后重试' }
+  }
+}
+
 export async function createInitialAdmin() {
   try {
     const existingAdmin = await prisma.user.findFirst({

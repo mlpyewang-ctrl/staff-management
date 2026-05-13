@@ -20,7 +20,7 @@ import { calculateHourlyRate, formatDate, formatCurrency } from '@/lib/utils'
 import { getDepartments } from '@/server/actions/department'
 import { getPositions } from '@/server/actions/position'
 import { getStaffJobAssignments, updateUserJobAssignment } from '@/server/actions/user'
-import { createUser } from '@/server/actions/auth'
+import { createUser, resetPassword } from '@/server/actions/auth'
 
 interface DepartmentOption {
   id: string
@@ -582,9 +582,31 @@ export default function StaffDashboardPage() {
                           <TableCell>{item.startDate ? formatDate(new Date(item.startDate)) : '-'}</TableCell>
                           <TableCell>{item.firstWorkDate ? formatDate(new Date(item.firstWorkDate)) : '-'}</TableCell>
                           <TableCell>
-                            <Button variant={isActive ? 'default' : 'outline'} size="sm" onClick={() => setSelectedUserId(item.id)}>
-                              {isActive ? '编辑中' : '编辑'}
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button variant={isActive ? 'default' : 'outline'} size="sm" onClick={() => setSelectedUserId(item.id)}>
+                                {isActive ? '编辑中' : '编辑'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                onClick={async () => {
+                                  if (!window.confirm(`确定要重置用户 "${item.name}" 的密码吗？重置后将恢复为默认密码。`)) {
+                                    return
+                                  }
+                                  const formData = new FormData()
+                                  formData.append('userId', item.id)
+                                  const result = await resetPassword(formData)
+                                  if (result.error) {
+                                    setMessage({ type: 'error', text: result.error })
+                                  } else {
+                                    setMessage({ type: 'success', text: result.success || '密码重置成功' })
+                                  }
+                                }}
+                              >
+                                重置密码
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )

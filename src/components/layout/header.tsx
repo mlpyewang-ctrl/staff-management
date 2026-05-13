@@ -64,7 +64,7 @@ export function Header() {
             variant="outline"
             size="sm"
             className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800"
-            onClick={() => signOut({ callbackUrl: '/auth/login' })}
+            onClick={() => signOut({ callbackUrl: window.location.origin + '/auth/login' })}
           >
             退出登录
           </Button>
