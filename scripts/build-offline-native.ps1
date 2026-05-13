@@ -90,6 +90,17 @@ if (-not (Test-Path (Join-Path $cacheDir "schema-engine"))) {
   Write-Host "[2/5] Prisma engines for $platform already cached"
 }
 
+# Prisma CLI (ensureBinariesExist) looks for engines directly in
+# node_modules/@prisma/engines/ with platform-specific filenames,
+# NOT in the deep cache subdirectory. Copy them there.
+$enginesRoot = Join-Path $nodeModules "@prisma/engines"
+if (-not (Test-Path (Join-Path $enginesRoot "schema-engine-$platform"))) {
+  Copy-Item -Path (Join-Path $cacheDir "schema-engine") -Destination (Join-Path $enginesRoot "schema-engine-$platform") -Force
+}
+if (-not (Test-Path (Join-Path $enginesRoot "libquery_engine-$platform.so.node"))) {
+  Copy-Item -Path (Join-Path $cacheDir "libquery-engine") -Destination (Join-Path $enginesRoot "libquery_engine-$platform.so.node") -Force
+}
+
 Write-Host "[3/5] build application"
 pushd $root
 npm run build
