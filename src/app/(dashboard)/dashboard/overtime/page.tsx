@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -44,6 +44,26 @@ const statusVariant: Record<string, 'default' | 'warning' | 'success' | 'danger'
   CONFIRM_PENDING: 'warning',
   COMPLETED: 'success',
   REJECTED: 'danger',
+}
+
+function formatTimeRange(startTime: Date | string, endTime: Date | string): string {
+  const s = typeof startTime === 'string' ? new Date(startTime) : startTime
+  const e = typeof endTime === 'string' ? new Date(endTime) : endTime
+  const sTime = s.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const eTime = e.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+  const sameDay =
+    s.getFullYear() === e.getFullYear() &&
+    s.getMonth() === e.getMonth() &&
+    s.getDate() === e.getDate()
+
+  if (sameDay) {
+    return `${sTime} - ${eTime}`
+  }
+
+  const sDate = s.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+  const eDate = e.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+  return `${sDate} ${sTime} - ${eDate} ${eTime}`
 }
 
 export default function OvertimePage() {
@@ -179,17 +199,7 @@ export default function OvertimePage() {
                   <TableRow key={application.id}>
                     <TableCell>{new Date(application.date).toLocaleDateString('zh-CN')}</TableCell>
                     {showApplicant && <TableCell>{application.userName}</TableCell>}
-                    <TableCell>
-                      {new Date(application.startTime).toLocaleTimeString('zh-CN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}{' '}
-                      -{' '}
-                      {new Date(application.endTime).toLocaleTimeString('zh-CN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </TableCell>
+                    <TableCell>{formatTimeRange(application.startTime, application.endTime)}</TableCell>
                     <TableCell>{application.hours} 小时</TableCell>
                     <TableCell className="max-w-xs truncate">{application.reason}</TableCell>
                     <TableCell>

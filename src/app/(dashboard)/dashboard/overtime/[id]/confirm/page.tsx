@@ -5,12 +5,40 @@ import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
+import { TimePicker } from '@/components/ui/time-picker'
 import { getOvertimeApplication, submitOvertimeConfirmation } from '@/server/actions/overtime'
 import { calculateHours } from '@/lib/utils'
 
 type OvertimeApplicationDetail = Awaited<ReturnType<typeof getOvertimeApplication>>
+
+function formatDateInput(d: Date | string | null | undefined): string {
+  if (!d) return ''
+  const date = typeof d === 'string' ? new Date(d) : d
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatTimeInput(d: Date | string | null | undefined): string {
+  if (!d) return ''
+  const date = typeof d === 'string' ? new Date(d) : d
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${hour}:${minute}`
+}
+
+function isSameDay(a: Date | string, b: Date | string): boolean {
+  const da = typeof a === 'string' ? new Date(a) : a
+  const db = typeof b === 'string' ? new Date(b) : b
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  )
+}
 
 export default function OvertimeConfirmPage() {
   const params = useParams<{ id: string }>()
@@ -23,9 +51,9 @@ export default function OvertimeConfirmPage() {
   const [initial, setInitial] = useState<OvertimeApplicationDetail>(null)
   const [actualHours, setActualHours] = useState<number>(0)
 
-  // 实际时间表单状态
-  const [actualDate, setActualDate] = useState('')
+  const [actualStartDate, setActualStartDate] = useState('')
   const [actualStartTime, setActualStartTime] = useState('')
+  const [actualEndDate, setActualEndDate] = useState('')
   const [actualEndTime, setActualEndTime] = useState('')
 
   useEffect(() => {
@@ -36,21 +64,24 @@ export default function OvertimeConfirmPage() {
         return
       }
       setInitial(app)
-      // 初始化日期为申请日期
-      setActualDate(new Date(app.date).toISOString().slice(0, 10))
+      setActualStartDate(formatDateInput(app.startTime))
+      setActualStartTime(formatTimeInput(app.startTime))
+      setActualEndDate(formatDateInput(app.endTime))
+      setActualEndTime(formatTimeInput(app.endTime))
     }
     load()
   }, [id, router])
 
-  // 自动计算实际加班时长
   useEffect(() => {
-    if (actualDate && actualStartTime && actualEndTime) {
-      const start = new Date(`${actualDate} ${actualStartTime}`)
-      const end = new Date(`${actualDate} ${actualEndTime}`)
+    if (actualStartDate && actualStartTime && actualEndDate && actualEndTime) {
+      const start = new Date(`${actualStartDate} ${actualStartTime}`)
+      const end = new Date(`${actualEndDate} ${actualEndTime}`)
       const hours = calculateHours(start, end)
       setActualHours(hours > 0 ? hours : 0)
+    } else {
+      setActualHours(0)
     }
-  }, [actualDate, actualStartTime, actualEndTime])
+  }, [actualStartDate, actualStartTime, actualEndDate, actualEndTime])
 
   const canSubmit = !!session?.user?.id && session?.user?.id === initial?.userId && initial?.status === 'PRE_APPROVED'
 
@@ -71,8 +102,9 @@ export default function OvertimeConfirmPage() {
 
     const formData = new FormData()
     formData.set('id', id)
-    formData.set('date', actualDate)
+    formData.set('startDate', actualStartDate)
     formData.set('startTime', actualStartTime)
+    formData.set('endDate', actualEndDate)
     formData.set('endTime', actualEndTime)
 
     const result = await submitOvertimeConfirmation(formData)
@@ -98,6 +130,8 @@ export default function OvertimeConfirmPage() {
       </div>
     )
   }
+
+  const showDateInTimeRange = !isSameDay(initial.startTime, initial.endTime)
 
   return (
     <div className="space-y-6">
@@ -125,8 +159,9 @@ export default function OvertimeConfirmPage() {
             <div>
               <span className="text-gray-500">申请时段：</span>
               <span>
-                {new Date(initial.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} -{' '}
-                {new Date(initial.endTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                {showDateInTimeRange
+                  ? `${new Date(initial.startTime).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} ${new Date(initial.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(initial.endTime).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} ${new Date(initial.endTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+                  : `${new Date(initial.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(initial.endTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`}
               </span>
             </div>
             <div>
@@ -149,47 +184,47 @@ export default function OvertimeConfirmPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
-                <Label htmlFor="actualDate">实际加班日期</Label>
-                <Input
-                  id="actualDate"
-                  name="date"
-                  type="date"
-                  required
-                  value={actualDate}
-                  onChange={(e) => setActualDate(e.target.value)}
+                <Label htmlFor="actualStartDate">实际开始日期</Label>
+                <DatePicker
+                  id="actualStartDate"
+                  value={actualStartDate}
+                  onChange={setActualStartDate}
                 />
               </div>
               <div className="space-y-2">
-                <Label>实际时间范围</Label>
-                <div className="flex space-x-2">
-                  <Input
-                    name="startTime"
-                    type="time"
-                    required
-                    className="flex-1"
-                    value={actualStartTime}
-                    onChange={(e) => setActualStartTime(e.target.value)}
-                  />
-                  <span className="text-gray-400 self-center">至</span>
-                  <Input
-                    name="endTime"
-                    type="time"
-                    required
-                    className="flex-1"
-                    value={actualEndTime}
-                    onChange={(e) => setActualEndTime(e.target.value)}
-                  />
-                </div>
+                <Label htmlFor="actualStartTime">实际开始时间</Label>
+                <TimePicker
+                  id="actualStartTime"
+                  value={actualStartTime}
+                  onChange={setActualStartTime}
+                />
               </div>
               <div className="space-y-2">
-                <Label>实际加班时长</Label>
-                <div className="flex items-center h-10 px-3 bg-gray-50 rounded-md border">
-                  <span className={`font-medium ${actualHours > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-                    {actualHours > 0 ? `${actualHours} 小时` : '自动计算'}
-                  </span>
-                </div>
+                <Label htmlFor="actualEndDate">实际结束日期</Label>
+                <DatePicker
+                  id="actualEndDate"
+                  value={actualEndDate}
+                  onChange={setActualEndDate}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="actualEndTime">实际结束时间</Label>
+                <TimePicker
+                  id="actualEndTime"
+                  value={actualEndTime}
+                  onChange={setActualEndTime}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>实际加班时长</Label>
+              <div className="flex items-center h-10 px-3 bg-gray-50 rounded-md border">
+                <span className={`font-medium ${actualHours > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                  {actualHours > 0 ? `${actualHours} 小时` : '自动计算'}
+                </span>
               </div>
             </div>
 

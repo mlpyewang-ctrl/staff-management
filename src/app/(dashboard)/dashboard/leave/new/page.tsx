@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -59,11 +59,7 @@ export default function LeaveNewPage() {
 
     if (result.success) {
       setMessage({ type: 'success', text: result.success })
-      if (action === 'save' && 'id' in result && result.id) {
-        router.push(`/dashboard/leave/${result.id}`)
-      } else {
-        router.push('/dashboard/leave')
-      }
+      router.push('/dashboard/leave')
     }
 
     setLoading(false)
@@ -84,7 +80,7 @@ export default function LeaveNewPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={(event) => submit(submitIntentRef.current, event)}>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="type">假期类型</Label>
                 <Select id="type" name="type" required value={leaveType} onChange={(event) => setLeaveType(event.target.value)}>
@@ -97,88 +93,65 @@ export default function LeaveNewPage() {
                   <option value="COMPENSATORY">调休</option>
                 </Select>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-                <div className="text-sm font-medium text-gray-700">开始信息</div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
-                  <div className="space-y-2">
-                    <Label htmlFor="startDate">开始日期</Label>
-                    <Input
-                      id="startDate"
-                      name="startDate"
-                      type="date"
-                      required
-                      value={startDate}
-                      onChange={(event) => setStartDate(event.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="startSession">开始时段</Label>
-                    <Select
-                      id="startSession"
-                      name="startSession"
-                      value={startSession}
-                      onChange={(event) => setStartSession(event.target.value as 'AM' | 'PM')}
-                    >
-                      <option value="AM">上午</option>
-                      <option value="PM">下午</option>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-                <div className="text-sm font-medium text-gray-700">结束信息</div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
-                  <div className="space-y-2">
-                    <Label htmlFor="endDate">结束日期</Label>
-                    <Input
-                      id="endDate"
-                      name="endDate"
-                      type="date"
-                      required
-                      value={endDate}
-                      min={startDate || undefined}
-                      onChange={(event) => setEndDate(event.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="endSession">结束时段</Label>
-                    <Select
-                      id="endSession"
-                      name="endSession"
-                      value={endSession}
-                      onChange={(event) => setEndSession(event.target.value as 'AM' | 'PM')}
-                    >
-                      <option value="AM">上午</option>
-                      <option value="PM">下午</option>
-                    </Select>
-                  </div>
+              <div className="space-y-2">
+                <Label>预计天数</Label>
+                <div className="flex items-center h-10 px-3 bg-gray-50 rounded-md border">
+                  <span className={`font-medium ${daysPreview > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {daysPreview > 0 ? `${daysPreview} 天` : '自动计算'}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-600">
-              计算规则：按工作日自动计算，请假最少 0.5 天；周末和法定节假日不计入请假天数。
-              {` 当前选择：${getLeaveSessionLabel(startSession)} → ${getLeaveSessionLabel(endSession)}`}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">开始日期</Label>
+                <DatePicker id="startDate" name="startDate" value={startDate} onChange={setStartDate} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="startSession">开始时段</Label>
+                <Select
+                  id="startSession"
+                  name="startSession"
+                  value={startSession}
+                  onChange={(event) => setStartSession(event.target.value as 'AM' | 'PM')}
+                >
+                  <option value="AM">上午</option>
+                  <option value="PM">下午</option>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">结束日期</Label>
+                <DatePicker id="endDate" name="endDate" value={endDate} onChange={setEndDate} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endSession">结束时段</Label>
+                <Select
+                  id="endSession"
+                  name="endSession"
+                  value={endSession}
+                  onChange={(event) => setEndSession(event.target.value as 'AM' | 'PM')}
+                >
+                  <option value="AM">上午</option>
+                  <option value="PM">下午</option>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="destination">前往地点</Label>
-              <Input id="destination" name="destination" type="text" placeholder="可选" />
+              <input
+                id="destination"
+                name="destination"
+                type="text"
+                placeholder="可选"
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="reason">{leaveType === 'COMPENSATORY' ? '调休事由' : '请假事由'}</Label>
               <Textarea id="reason" name="reason" rows={4} required />
-            </div>
-
-            <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-              预计天数：{daysPreview > 0 ? `${daysPreview} 天` : '请选择日期后自动计算'}
             </div>
 
             {message.text && (

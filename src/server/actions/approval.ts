@@ -75,12 +75,14 @@ function buildProgressText(completedSteps: number, totalSteps: number) {
 function normalizeApprovalStatuses(
   approvals: Array<{
     status: string
+    phase?: string | null
   }>
 ) {
   return approvals
     .filter((approval) => approval.status === 'APPROVED' || approval.status === 'REJECTED')
     .map((approval) => ({
       status: approval.status as 'APPROVED' | 'REJECTED',
+      phase: approval.phase,
     }))
 }
 
@@ -160,7 +162,9 @@ export async function approveApplication(formData: FormData) {
         return { error: '该申请已事前通过，等待申请人提交加班确认' }
       }
 
-      const steps = await getApprovalSteps(overtimeApplication.user.departmentId, 'OVERTIME', overtimeApplication.userId)
+      // 根据当前阶段匹配对应的审批流程类型
+      const flowType = overtimeApplication.status === 'CONFIRM_PENDING' ? 'OVERTIME_CONFIRM' : 'OVERTIME'
+      const steps = await getApprovalSteps(overtimeApplication.user.departmentId, flowType, overtimeApplication.userId)
       const approvals = await prisma.approval.findMany({
         where: {
           applicationId: overtimeApplication.id,
@@ -170,11 +174,16 @@ export async function approveApplication(formData: FormData) {
           createdAt: 'asc',
         },
       })
+      // 根据当前阶段过滤 approvals
+      const currentPhase = (overtimeApplication.currentPhase as OvertimePhase) || 'PRE'
+      const phaseApprovals = currentPhase === 'CONFIRM'
+        ? approvals.filter((a) => a.phase === 'CONFIRM')
+        : approvals.filter((a) => a.phase !== 'CONFIRM')
       const workflow = resolveApprovalWorkflowState({
         steps,
-        approvals: normalizeApprovalStatuses(approvals),
+        approvals: normalizeApprovalStatuses(phaseApprovals),
         applicationStatus: overtimeApplication.status,
-        currentPhase: (overtimeApplication.currentPhase as OvertimePhase) || 'PRE',
+        currentPhase,
         isOvertime: true,
       })
 
@@ -209,6 +218,7 @@ export async function approveApplication(formData: FormData) {
               applicantId: overtimeApplication.userId,
               approverId: approver.id,
               status: validatedData.status,
+              phase: isConfirmPhase ? 'CONFIRM' : 'PRE',
               remark: validatedData.remark,
             },
           })
@@ -277,6 +287,7 @@ export async function approveApplication(formData: FormData) {
             applicantId: overtimeApplication.userId,
             approverId: approver.id,
             status: validatedData.status,
+            phase: isConfirmPhase ? 'CONFIRM' : 'PRE',
             remark: validatedData.remark,
           },
         })
@@ -858,18 +869,25 @@ export async function getPendingApprovals(_approverId?: string) {
 
     const overtime = overtimeApplications
       .map((application) => {
+        // 根据当前状态匹配对应的流程类型
+        const flowType = application.status === 'CONFIRM_PENDING' ? 'OVERTIME_CONFIRM' : 'OVERTIME'
         const steps = getStepsForApplication(
           application.user.departmentId,
-          'OVERTIME',
+          flowType,
           application.userId
         )
         if (!steps) return null
         const history = approvalHistoryMap.get(`OVERTIME:${application.id}`) || []
+        const currentPhase = (application.currentPhase as OvertimePhase) || 'PRE'
+        // 根据当前阶段过滤审批记录
+        const phaseHistory = currentPhase === 'CONFIRM'
+          ? history.filter((a) => a.phase === 'CONFIRM')
+          : history.filter((a) => a.phase !== 'CONFIRM')
         const workflow = resolveApprovalWorkflowState({
           steps,
-          approvals: normalizeApprovalStatuses(history),
+          approvals: normalizeApprovalStatuses(phaseHistory),
           applicationStatus: application.status,
-          currentPhase: (application.currentPhase as OvertimePhase) || 'PRE',
+          currentPhase,
           isOvertime: true,
         })
 
@@ -1022,7 +1040,7 @@ export async function getApprovalHistory(_approverId?: string) {
     return approvals.map((approval) => {
       let applicationTypeText: string
       if (approval.applicationType === 'OVERTIME') {
-        applicationTypeText = '加班'
+        applicationTypeText = approval.phase === 'CONFIRM' ? '加班（完成审批）' : '加班（事前审批）'
       } else if (approval.applicationType === 'LEAVE') {
         applicationTypeText = '请假'
       } else {

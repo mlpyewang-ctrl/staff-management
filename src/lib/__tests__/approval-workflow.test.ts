@@ -106,6 +106,56 @@ describe('resolveApprovalWorkflowState', () => {
     expect(state.currentStep).toBeNull()
     expect(state.completedSteps).toBe(2)
   })
+
+  it('should count confirm phase approvals independently from pre phase', () => {
+    const preSteps = normalizeApprovalFlowSteps([
+      { step: 1, role: 'MANAGER', name: '部门主管审批' },
+      { step: 2, role: 'ADMIN', name: '管理员审批' },
+    ])
+
+    // PRE 阶段全部通过后进入 CONFIRM 阶段
+    const state = resolveApprovalWorkflowState({
+      steps: preSteps,
+      approvals: [
+        { status: 'APPROVED', phase: 'PRE' },
+        { status: 'APPROVED', phase: 'PRE' },
+      ],
+      applicationStatus: 'CONFIRM_PENDING',
+      currentPhase: 'CONFIRM',
+      isOvertime: true,
+    })
+
+    // CONFIRM 阶段应该从头开始，currentStepIndex 为 0
+    expect(state.currentStepIndex).toBe(0)
+    expect(state.currentStep?.role).toBe('MANAGER')
+    expect(state.completedSteps).toBe(0)
+    expect(state.isCompleted).toBe(false)
+    expect(state.phase).toBe('CONFIRM')
+  })
+
+  it('should progress confirm phase based on confirm approvals only', () => {
+    const confirmSteps = normalizeApprovalFlowSteps([
+      { step: 1, role: 'MANAGER', name: '部门主管审批' },
+      { step: 2, role: 'ADMIN', name: '管理员审批' },
+    ])
+
+    const state = resolveApprovalWorkflowState({
+      steps: confirmSteps,
+      approvals: [
+        { status: 'APPROVED', phase: 'PRE' },
+        { status: 'APPROVED', phase: 'PRE' },
+        { status: 'APPROVED', phase: 'CONFIRM' },
+      ],
+      applicationStatus: 'CONFIRM_PENDING',
+      currentPhase: 'CONFIRM',
+      isOvertime: true,
+    })
+
+    // 只计算 CONFIRM 阶段的 1 条 APPROVED，所以 currentStepIndex 为 1
+    expect(state.currentStepIndex).toBe(1)
+    expect(state.currentStep?.role).toBe('ADMIN')
+    expect(state.completedSteps).toBe(1)
+  })
 })
 
 describe('canApproveCurrentStep', () => {

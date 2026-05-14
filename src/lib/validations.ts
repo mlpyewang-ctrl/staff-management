@@ -37,11 +37,12 @@ export const createUserSchema = z.object({
 })
 
 export const overtimeSchema = z.object({
-  date: z.string(),
+  startDate: z.string(),
   startTime: z.string(),
+  endDate: z.string(),
   endTime: z.string(),
   type: z.enum(['WORKDAY', 'WEEKEND', 'HOLIDAY']),
-  reason: z.string().min(10, '请详细描述加班事由（至少 10 个字符）'),
+  reason: z.string().min(1, '请填写加班事由'),
 })
 
 export const leaveSchema = z.object({
@@ -51,7 +52,7 @@ export const leaveSchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
   destination: z.string().optional(),
-  reason: z.string().min(10, '请详细描述请假事由（至少 10 个字符）'),
+  reason: z.string().min(1, '请填写请假事由'),
 }).superRefine((data, ctx) => {
   if (data.startDate === data.endDate && data.startSession === 'PM' && data.endSession === 'AM') {
     ctx.addIssue({

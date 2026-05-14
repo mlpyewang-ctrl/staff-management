@@ -1,14 +1,16 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { DatePicker } from '@/components/ui/date-picker'
+import { TimePicker } from '@/components/ui/time-picker'
 import { createOvertimeApplication } from '@/server/actions/overtime'
+import { calculateHours } from '@/lib/utils'
 
 type CreateOvertimeApplicationResult = Awaited<ReturnType<typeof createOvertimeApplication>>
 
@@ -19,6 +21,23 @@ export default function OvertimeNewPage() {
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
   const submitIntentRef = useRef<'save' | 'submit'>('save')
 
+  const [startDate, setStartDate] = useState('')
+  const [startTime, setStartTime] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [endTime, setEndTime] = useState('')
+  const [hours, setHours] = useState(0)
+
+  useEffect(() => {
+    if (startDate && startTime && endDate && endTime) {
+      const start = new Date(`${startDate} ${startTime}`)
+      const end = new Date(`${endDate} ${endTime}`)
+      const h = calculateHours(start, end)
+      setHours(h > 0 ? h : 0)
+    } else {
+      setHours(0)
+    }
+  }, [startDate, startTime, endDate, endTime])
+
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
@@ -27,16 +46,16 @@ export default function OvertimeNewPage() {
     const formData = new FormData(e.currentTarget)
     formData.set('userId', session?.user?.id || '')
     formData.set('action', submitIntentRef.current)
+    formData.set('startDate', startDate)
+    formData.set('startTime', startTime)
+    formData.set('endDate', endDate)
+    formData.set('endTime', endTime)
 
     const result: CreateOvertimeApplicationResult = await createOvertimeApplication(formData)
     if (result.error) setMessage({ type: 'error', text: result.error })
     if (result.success) {
       setMessage({ type: 'success', text: result.success })
-      if (submitIntentRef.current === 'save' && 'id' in result && result.id) {
-        router.push(`/dashboard/overtime/${result.id}`)
-      } else {
-        router.push('/dashboard/overtime')
-      }
+      router.push('/dashboard/overtime')
     }
     setLoading(false)
   }
@@ -56,19 +75,26 @@ export default function OvertimeNewPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
-                <Label htmlFor="date">加班日期</Label>
-                <Input id="date" name="date" type="date" required />
+                <Label htmlFor="startDate">开始日期</Label>
+                <DatePicker id="startDate" value={startDate} onChange={setStartDate} />
               </div>
               <div className="space-y-2">
-                <Label>时间范围</Label>
-                <div className="flex space-x-2">
-                  <Input name="startTime" type="time" required className="flex-1" />
-                  <span className="text-gray-400">至</span>
-                  <Input name="endTime" type="time" required className="flex-1" />
-                </div>
+                <Label htmlFor="startTime">开始时间</Label>
+                <TimePicker id="startTime" value={startTime} onChange={setStartTime} />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">结束日期</Label>
+                <DatePicker id="endDate" value={endDate} onChange={setEndDate} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endTime">结束时间</Label>
+                <TimePicker id="endTime" value={endTime} onChange={setEndTime} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="type">加班类型</Label>
                 <select
@@ -82,6 +108,14 @@ export default function OvertimeNewPage() {
                   <option value="WEEKEND">周末</option>
                   <option value="HOLIDAY">节假日</option>
                 </select>
+              </div>
+              <div className="space-y-2">
+                <Label>预计加班时长</Label>
+                <div className="flex items-center h-10 px-3 bg-gray-50 rounded-md border">
+                  <span className={`font-medium ${hours > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {hours > 0 ? `${hours} 小时` : '自动计算'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -126,4 +160,3 @@ export default function OvertimeNewPage() {
     </div>
   )
 }
-

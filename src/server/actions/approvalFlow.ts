@@ -1,7 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS, ApplicationType } from '@/lib/approval-constants'
+import { APPLICATION_TYPES, ApplicationType } from '@/lib/approval-constants'
 
 export async function getApprovalFlows() {
   return prisma.approvalFlow.findMany({

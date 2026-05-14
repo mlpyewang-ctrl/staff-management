@@ -42,15 +42,16 @@ export async function createOvertimeApplication(formData: FormData) {
   try {
     const sessionUser = await requireSessionUser()
     const validatedData = overtimeSchema.parse({
-      date: formData.get('date'),
+      startDate: formData.get('startDate'),
       startTime: formData.get('startTime'),
+      endDate: formData.get('endDate'),
       endTime: formData.get('endTime'),
       type: formData.get('type'),
       reason: formData.get('reason'),
     })
 
-    const startDateTime = new Date(`${validatedData.date} ${validatedData.startTime}`)
-    const endDateTime = new Date(`${validatedData.date} ${validatedData.endTime}`)
+    const startDateTime = new Date(`${validatedData.startDate} ${validatedData.startTime}`)
+    const endDateTime = new Date(`${validatedData.endDate} ${validatedData.endTime}`)
     const hours = calculateHours(startDateTime, endDateTime)
 
     if (hours <= 0) {
@@ -152,8 +153,9 @@ export async function updateOvertimeApplication(formData: FormData) {
     }
 
     const validatedData = overtimeSchema.parse({
-      date: formData.get('date'),
+      startDate: formData.get('startDate'),
       startTime: formData.get('startTime'),
+      endDate: formData.get('endDate'),
       endTime: formData.get('endTime'),
       type: formData.get('type'),
       reason: formData.get('reason'),
@@ -169,8 +171,8 @@ export async function updateOvertimeApplication(formData: FormData) {
       return { error: '只有草稿状态的加班申请可以修改' }
     }
 
-    const startDateTime = new Date(`${validatedData.date} ${validatedData.startTime}`)
-    const endDateTime = new Date(`${validatedData.date} ${validatedData.endTime}`)
+    const startDateTime = new Date(`${validatedData.startDate} ${validatedData.startTime}`)
+    const endDateTime = new Date(`${validatedData.endDate} ${validatedData.endTime}`)
     const hours = calculateHours(startDateTime, endDateTime)
 
     if (hours <= 0) {
@@ -356,32 +358,43 @@ export async function submitOvertimeConfirmation(formData: FormData) {
       return { error: '只有事前审批通过的加班申请可以提交确认' }
     }
 
-    const date = formData.get('date') as string
+    const startDate = formData.get('startDate') as string
     const startTime = formData.get('startTime') as string
+    const endDate = formData.get('endDate') as string
     const endTime = formData.get('endTime') as string
 
-    if (!date || !startTime || !endTime) {
+    if (!startDate || !startTime || !endDate || !endTime) {
       return { error: '请填写完整的实际加班时间' }
     }
 
-    const actualStartTime = new Date(`${date} ${startTime}`)
-    const actualEndTime = new Date(`${date} ${endTime}`)
+    const actualStartTime = new Date(`${startDate} ${startTime}`)
+    const actualEndTime = new Date(`${endDate} ${endTime}`)
     const actualHours = calculateHours(actualStartTime, actualEndTime)
 
     if (actualHours <= 0) {
       return { error: '结束时间必须晚于开始时间' }
     }
 
-    await prisma.overtimeApplication.update({
-      where: { id },
-      data: {
-        actualStartTime,
-        actualEndTime,
-        actualHours,
-        status: 'CONFIRM_PENDING',
-        currentPhase: 'CONFIRM',
-      },
-    })
+    await prisma.$transaction([
+      // 清除之前 CONFIRM 阶段的审批记录（如被退回后重新提交）
+      prisma.approval.deleteMany({
+        where: {
+          applicationId: id,
+          applicationType: 'OVERTIME',
+          phase: 'CONFIRM',
+        },
+      }),
+      prisma.overtimeApplication.update({
+        where: { id },
+        data: {
+          actualStartTime,
+          actualEndTime,
+          actualHours,
+          status: 'CONFIRM_PENDING',
+          currentPhase: 'CONFIRM',
+        },
+      }),
+    ])
 
     revalidatePath('/dashboard/overtime')
     return { success: '加班确认已提交，进入确认审批流程' }

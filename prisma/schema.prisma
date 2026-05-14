@@ -271,6 +271,7 @@ model Approval {
   approverId      String
   approver        User     @relation(fields: [approverId], references: [id])
   status          String
+  phase           String?  // 'PRE' | 'CONFIRM'，用于加班两阶段审批区分
   remark          String?
   createdAt       DateTime @default(now())
 

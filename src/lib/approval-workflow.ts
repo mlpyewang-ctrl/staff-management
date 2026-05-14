@@ -9,6 +9,7 @@ export interface ApprovalFlowStep {
 
 export interface ApprovalHistoryItem {
   status: 'APPROVED' | 'REJECTED'
+  phase?: string | null
 }
 
 // 加班流程阶段
@@ -246,12 +247,8 @@ export function resolveApprovalWorkflowState(params: {
     // 确认审批中
     if (applicationStatus === 'CONFIRM_PENDING') {
       let currentStepIndex = 0
-      // 只计算 CONFIRM 阶段的审批记录
-      const confirmApprovals = params.approvals.filter((_, index) => {
-        // 假设前半部分是事前审批，后半部分是确认审批
-        // 实际上应该通过审批记录中的标记来区分，这里简化处理
-        return true
-      })
+      // 只计算 CONFIRM 阶段的审批记录（通过 phase 字段区分）
+      const confirmApprovals = params.approvals.filter((approval) => approval.phase === 'CONFIRM')
 
       for (const approval of confirmApprovals) {
         if (approval.status === 'APPROVED') {

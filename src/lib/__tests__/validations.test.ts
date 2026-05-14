@@ -85,8 +85,9 @@ describe('registerSchema', () => {
 describe('overtimeSchema', () => {
   it('should validate valid overtime data', () => {
     const result = overtimeSchema.safeParse({
-      date: '2024-01-15',
+      startDate: '2024-01-15',
       startTime: '09:00',
+      endDate: '2024-01-15',
       endTime: '18:00',
       type: 'WORKDAY',
       reason: 'This is a valid reason for overtime work.',
@@ -94,23 +95,13 @@ describe('overtimeSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('should reject reason shorter than 10 characters', () => {
-    const result = overtimeSchema.safeParse({
-      date: '2024-01-15',
-      startTime: '09:00',
-      endTime: '18:00',
-      type: 'WORKDAY',
-      reason: 'Too short',
-    })
-    expect(result.success).toBe(false)
-  })
-
   it('should accept all valid overtime types', () => {
     const types = ['WORKDAY', 'WEEKEND', 'HOLIDAY'] as const
     types.forEach((type) => {
       const result = overtimeSchema.safeParse({
-        date: '2024-01-15',
+        startDate: '2024-01-15',
         startTime: '09:00',
+        endDate: '2024-01-15',
         endTime: '18:00',
         type,
         reason: 'This is a valid reason for overtime work.',
@@ -141,16 +132,6 @@ describe('leaveSchema', () => {
       startSession: 'PM',
       endSession: 'AM',
       reason: 'This is a valid reason for leave request.',
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('should reject reason shorter than 10 characters', () => {
-    const result = leaveSchema.safeParse({
-      type: 'ANNUAL',
-      startDate: '2024-01-15',
-      endDate: '2024-01-16',
-      reason: 'Too short',
     })
     expect(result.success).toBe(false)
   })

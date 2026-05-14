@@ -7,8 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PaginationControls } from '@/components/ui/pagination-controls'
+import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, getPaginationState } from '@/lib/pagination'
+import { TimeRange, isWithinTimeRange, timeRangeOptions } from '@/lib/time-range'
 import { formatDate, formatDateTime, getLeaveSessionLabel } from '@/lib/utils'
 import { generateLeaveTemplate } from '@/lib/excel-parser'
 import { getCompensatorySourceHistory } from '@/server/actions/compensatory'
@@ -60,6 +62,7 @@ export function LeaveClientPage({
   const [applicationPageSize, setApplicationPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [sourcePage, setSourcePage] = useState(1)
   const [sourcePageSize, setSourcePageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [timeRange, setTimeRange] = useState<TimeRange>('all')
 
   const canCreate = Boolean(viewerId)
   const canEdit = viewerRole === 'EMPLOYEE' || viewerRole === 'ATTENDANCE_CLERK'
@@ -82,9 +85,14 @@ export function LeaveClientPage({
     () => getPaginationState(sourceHistory.length, sourcePage, sourcePageSize),
     [sourceHistory.length, sourcePage, sourcePageSize]
   )
+  const filteredApplications = useMemo(
+    () => applications.filter((application) => isWithinTimeRange(application.startDate, timeRange)),
+    [applications, timeRange]
+  )
+
   const applicationPagination = useMemo(
-    () => getPaginationState(applications.length, applicationPage, applicationPageSize),
-    [applicationPage, applicationPageSize, applications.length]
+    () => getPaginationState(filteredApplications.length, applicationPage, applicationPageSize),
+    [applicationPage, applicationPageSize, filteredApplications.length]
   )
 
   const paginatedSourceHistory = useMemo(
@@ -92,8 +100,8 @@ export function LeaveClientPage({
     [sourceHistory, sourcePagination.endIndex, sourcePagination.startIndex]
   )
   const paginatedApplications = useMemo(
-    () => applications.slice(applicationPagination.startIndex, applicationPagination.endIndex),
-    [applicationPagination.endIndex, applicationPagination.startIndex, applications]
+    () => filteredApplications.slice(applicationPagination.startIndex, applicationPagination.endIndex),
+    [filteredApplications, applicationPagination.endIndex, applicationPagination.startIndex]
   )
 
   useEffect(() => {
@@ -102,7 +110,7 @@ export function LeaveClientPage({
 
   useEffect(() => {
     setApplicationPage(1)
-  }, [applicationPageSize])
+  }, [applicationPageSize, timeRange])
 
   useEffect(() => {
     if (sourcePagination.currentPage !== sourcePage) {
@@ -118,10 +126,10 @@ export function LeaveClientPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">请假管理</h1>
-          <p className="mt-1 text-gray-600">调休作为一种假期类型统一在此申请，并共用请假审批流程。</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">请假管理</h1>
+          <p className="mt-2 text-sm text-slate-600">调休作为一种假期类型统一在此申请，并共用请假审批流程。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canCreate && (
@@ -155,7 +163,7 @@ export function LeaveClientPage({
       </div>
 
       {balances && canCreate && (
-        <Card>
+        <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
           <CardHeader>
             <CardTitle>假期余额（{new Date().getFullYear()} 年）</CardTitle>
           </CardHeader>
@@ -184,7 +192,7 @@ export function LeaveClientPage({
       )}
 
       {canCreate && (
-        <Card>
+        <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
           <CardHeader>
             <CardTitle>调休来源记录</CardTitle>
           </CardHeader>
@@ -225,9 +233,21 @@ export function LeaveClientPage({
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>申请记录</CardTitle>
+      <Card className="border-white/70 bg-white/85 shadow-lg backdrop-blur">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>申请记录</CardTitle>
+            <div className="mt-2 text-sm text-slate-500">当前共 {filteredApplications.length} 条记录</div>
+          </div>
+          <div className="w-full sm:w-52">
+            <Select value={timeRange} onChange={(event) => setTimeRange(event.target.value as TimeRange)}>
+              {timeRangeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -250,10 +270,10 @@ export function LeaveClientPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {applications.length === 0 ? (
+              {filteredApplications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={viewerRole === 'EMPLOYEE' ? 11 : (canEdit ? 14 : 13)} className="py-8 text-center text-gray-500">
-                    暂无申请记录
+                  <TableCell colSpan={viewerRole === 'EMPLOYEE' ? 11 : (canEdit ? 14 : 13)} className="py-8 text-center text-slate-500">
+                    当前筛选条件下暂无请假记录
                   </TableCell>
                 </TableRow>
               ) : (
@@ -298,12 +318,12 @@ export function LeaveClientPage({
         <CardContent className="pt-0">
           <PaginationControls
             currentPage={applicationPagination.currentPage}
-            itemLabel="条申请记录"
+            itemLabel="条记录"
             onPageChange={setApplicationPage}
             onPageSizeChange={setApplicationPageSize}
             pageSize={applicationPageSize}
             pageSizeOptions={PAGE_SIZE_OPTIONS}
-            totalItems={applications.length}
+            totalItems={filteredApplications.length}
             totalPages={applicationPagination.totalPages}
           />
         </CardContent>

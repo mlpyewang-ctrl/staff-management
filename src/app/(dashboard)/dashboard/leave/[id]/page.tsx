@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -151,12 +150,13 @@ export default function LeaveEditPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="type">假期类型</Label>
-                <Select
+                <select
                   id="type"
                   name="type"
+                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   required
                   disabled={isReadonly}
                   value={leaveType}
@@ -169,90 +169,65 @@ export default function LeaveEditPage() {
                   <option value="MATERNITY">产假</option>
                   <option value="PATERNITY">陪产假</option>
                   <option value="COMPENSATORY">调休</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>预计天数</Label>
+                <div className="flex items-center h-10 px-3 bg-gray-50 rounded-md border">
+                  <span className={`font-medium ${daysPreview > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {daysPreview > 0 ? `${daysPreview} 天` : '自动计算'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">开始日期</Label>
+                <DatePicker id="startDate" value={startDate} onChange={setStartDate} disabled={isReadonly} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="startSession">开始时段</Label>
+                <Select
+                  id="startSession"
+                  name="startSession"
+                  disabled={isReadonly}
+                  value={startSession}
+                  onChange={(event) => setStartSession(event.target.value as 'AM' | 'PM')}
+                >
+                  <option value="AM">上午</option>
+                  <option value="PM">下午</option>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">结束日期</Label>
+                <DatePicker id="endDate" value={endDate} onChange={setEndDate} disabled={isReadonly} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endSession">结束时段</Label>
+                <Select
+                  id="endSession"
+                  name="endSession"
+                  disabled={isReadonly}
+                  value={endSession}
+                  onChange={(event) => setEndSession(event.target.value as 'AM' | 'PM')}
+                >
+                  <option value="AM">上午</option>
+                  <option value="PM">下午</option>
                 </Select>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-                <div className="text-sm font-medium text-gray-700">开始信息</div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
-                  <div className="space-y-2">
-                    <Label htmlFor="startDate">开始日期</Label>
-                    <Input
-                      id="startDate"
-                      name="startDate"
-                      type="date"
-                      required
-                      disabled={isReadonly}
-                      value={startDate}
-                      onChange={(event) => setStartDate(event.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="startSession">开始时段</Label>
-                    <Select
-                      id="startSession"
-                      name="startSession"
-                      disabled={isReadonly}
-                      value={startSession}
-                      onChange={(event) => setStartSession(event.target.value as 'AM' | 'PM')}
-                    >
-                      <option value="AM">上午</option>
-                      <option value="PM">下午</option>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-                <div className="text-sm font-medium text-gray-700">结束信息</div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
-                  <div className="space-y-2">
-                    <Label htmlFor="endDate">结束日期</Label>
-                    <Input
-                      id="endDate"
-                      name="endDate"
-                      type="date"
-                      required
-                      disabled={isReadonly}
-                      value={endDate}
-                      min={startDate || undefined}
-                      onChange={(event) => setEndDate(event.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="endSession">结束时段</Label>
-                    <Select
-                      id="endSession"
-                      name="endSession"
-                      disabled={isReadonly}
-                      value={endSession}
-                      onChange={(event) => setEndSession(event.target.value as 'AM' | 'PM')}
-                    >
-                      <option value="AM">上午</option>
-                      <option value="PM">下午</option>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-600">
-              计算规则：按工作日自动计算，请假最少 0.5 天；周末和法定节假日不计入请假天数。
-              {` 当前选择：${getLeaveSessionLabel(startSession)} → ${getLeaveSessionLabel(endSession)}`}
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="destination">前往地点</Label>
-              <Input
+              <input
                 id="destination"
                 name="destination"
                 type="text"
                 disabled={isReadonly}
                 defaultValue={initial?.destination ?? ''}
+                placeholder="可选"
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -266,10 +241,6 @@ export default function LeaveEditPage() {
                 disabled={isReadonly}
                 defaultValue={initial?.reason ?? ''}
               />
-            </div>
-
-            <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-              预计天数：{daysPreview > 0 ? `${daysPreview} 天` : '请选择日期后自动计算'}
             </div>
 
             {message.text && (
@@ -305,8 +276,8 @@ export default function LeaveEditPage() {
                   </Button>
                 </>
               )}
-              <Button type="button" variant="outline" asChild>
-                <Link href="/dashboard/leave">返回</Link>
+              <Button type="button" variant="outline" onClick={() => router.push('/dashboard/leave')}>
+                返回
               </Button>
             </div>
             {isReadonly && <div className="text-sm text-gray-500">仅申请人本人可编辑草稿；提交后需等待下一步审批或退回。</div>}
