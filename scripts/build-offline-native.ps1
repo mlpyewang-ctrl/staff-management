@@ -119,6 +119,7 @@ $items = @(
   '.env.example',
   'prisma',
   'public',
+  'scripts',
   '.next',
   'node_modules'
 )

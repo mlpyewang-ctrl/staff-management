@@ -26,16 +26,22 @@ async function requireOvertimeOwnerOrAdmin(id: string) {
     return {
       sessionUser,
       application: null,
+      error: '加班申请不存在' as string,
     }
   }
 
   if (sessionUser.role !== 'ADMIN' && sessionUser.id !== application.userId) {
-    throw new Error('无权操作该加班申请')
+    return {
+      sessionUser,
+      application,
+      error: '无权操作该加班申请' as string,
+    }
   }
 
   return {
     sessionUser,
     application,
+    error: null,
   }
 }
 
@@ -57,6 +63,76 @@ export async function getOvertimeTypeByDate(date: Date): Promise<'WORKDAY' | 'WE
   return day === 0 || day === 6 ? 'WEEKEND' : 'WORKDAY'
 }
 
+const TYPE_TEXT_MAP: Record<string, string> = {
+  WORKDAY: '工作日',
+  WEEKEND: '周末',
+  HOLIDAY: '节假日',
+}
+
+async function validateOvertimeDateRange(
+  startDateTime: Date,
+  endDateTime: Date
+): Promise<{ type: 'WORKDAY' | 'WEEKEND' | 'HOLIDAY'; error?: string }> {
+  const start = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate())
+  const end = new Date(endDateTime.getFullYear(), endDateTime.getMonth(), endDateTime.getDate())
+
+  const types = new Set<string>()
+  let firstType: 'WORKDAY' | 'WEEKEND' | 'HOLIDAY' = 'WORKDAY'
+
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const type = await getOvertimeTypeByDate(new Date(d))
+    types.add(type)
+    if (types.size === 1) {
+      firstType = type
+    }
+  }
+
+  if (types.size > 1) {
+    return {
+      type: firstType,
+      error: '加班跨天包含不同类型（工作日/周末/节假日），请按天分开提交',
+    }
+  }
+
+  return { type: firstType }
+}
+
+export async function getOvertimeTypePreview(
+  startDate?: string,
+  startTime?: string,
+  endDate?: string,
+  endTime?: string
+) {
+  try {
+    await requireSessionUser()
+
+    if (!startDate || !startTime || !endDate || !endTime) {
+      return { type: undefined, typeText: undefined }
+    }
+
+    const startDateTime = new Date(`${startDate} ${startTime}`)
+    const endDateTime = new Date(`${endDate} ${endTime}`)
+
+    if (
+      Number.isNaN(startDateTime.getTime()) ||
+      Number.isNaN(endDateTime.getTime()) ||
+      endDateTime < startDateTime
+    ) {
+      return { type: undefined, typeText: undefined }
+    }
+
+    const result = await validateOvertimeDateRange(startDateTime, endDateTime)
+    if (result.error) {
+      return { error: result.error }
+    }
+
+    return { type: result.type, typeText: TYPE_TEXT_MAP[result.type] }
+  } catch (error) {
+    console.error('获取加班类型预览失败:', error)
+    return { type: undefined, typeText: undefined }
+  }
+}
+
 export async function createOvertimeApplication(formData: FormData) {
   try {
     const sessionUser = await requireSessionUser()
@@ -65,7 +141,6 @@ export async function createOvertimeApplication(formData: FormData) {
       startTime: formData.get('startTime'),
       endDate: formData.get('endDate'),
       endTime: formData.get('endTime'),
-      type: formData.get('type'),
       reason: formData.get('reason'),
     })
 
@@ -77,8 +152,11 @@ export async function createOvertimeApplication(formData: FormData) {
       return { error: '结束时间必须晚于开始时间' }
     }
 
-    // 根据加班日期自动判断类型（rat 关联薪资系数）
-    const autoType = await getOvertimeTypeByDate(startDateTime)
+    // 自动判断类型并检测跨天类型一致性
+    const typeResult = await validateOvertimeDateRange(startDateTime, endDateTime)
+    if (typeResult.error) {
+      return { error: typeResult.error }
+    }
 
     const action = formData.get('action') === 'submit' ? 'submit' : 'save'
     const created = await prisma.overtimeApplication.create({
@@ -88,7 +166,7 @@ export async function createOvertimeApplication(formData: FormData) {
         startTime: startDateTime,
         endTime: endDateTime,
         hours,
-        type: autoType,
+        type: typeResult.type,
         reason: validatedData.reason,
         status: action === 'submit' ? 'PENDING' : 'DRAFT',
       },
@@ -179,11 +257,14 @@ export async function updateOvertimeApplication(formData: FormData) {
       startTime: formData.get('startTime'),
       endDate: formData.get('endDate'),
       endTime: formData.get('endTime'),
-      type: formData.get('type'),
       reason: formData.get('reason'),
     })
 
-    const { application } = await requireOvertimeOwnerOrAdmin(id)
+    const { application, error } = await requireOvertimeOwnerOrAdmin(id)
+
+    if (error) {
+      return { error }
+    }
 
     if (!application) {
       return { error: '加班申请不存在' }
@@ -203,8 +284,11 @@ export async function updateOvertimeApplication(formData: FormData) {
 
     const nextStatus = formData.get('action') === 'submit' ? 'PENDING' : 'DRAFT'
 
-    // 根据加班日期自动判断类型（rat 关联薪资系数）
-    const autoType = await getOvertimeTypeByDate(startDateTime)
+    // 自动判断类型并检测跨天类型一致性
+    const typeResult = await validateOvertimeDateRange(startDateTime, endDateTime)
+    if (typeResult.error) {
+      return { error: typeResult.error }
+    }
 
     await prisma.$transaction([
       prisma.approval.deleteMany({
@@ -220,7 +304,7 @@ export async function updateOvertimeApplication(formData: FormData) {
           startTime: startDateTime,
           endTime: endDateTime,
           hours,
-          type: autoType,
+          type: typeResult.type,
           reason: validatedData.reason,
           status: nextStatus,
           approverId: null,
@@ -472,6 +556,17 @@ export async function batchImportOvertime(rows: ParsedOvertimeRow[]) {
       return { error: '数据校验失败', errors }
     }
 
+    // 预校验所有行：时间和类型
+    for (const row of rows) {
+      const startDateTime = new Date(`${row.date} ${row.startTime}`)
+      const endDateTime = new Date(`${row.date} ${row.endTime}`)
+      const hours = calculateHours(startDateTime, endDateTime)
+
+      if (hours <= 0) {
+        return { error: `第 ${row.rowIndex} 行：结束时间必须晚于开始时间` }
+      }
+    }
+
     const now = new Date()
 
     await prisma.$transaction(async (tx) => {
@@ -480,10 +575,6 @@ export async function batchImportOvertime(rows: ParsedOvertimeRow[]) {
         const startDateTime = new Date(`${row.date} ${row.startTime}`)
         const endDateTime = new Date(`${row.date} ${row.endTime}`)
         const hours = calculateHours(startDateTime, endDateTime)
-
-        if (hours <= 0) {
-          throw new Error(`第 ${row.rowIndex} 行：结束时间必须晚于开始时间`)
-        }
 
         // 根据加班日期自动判断类型（rat 关联薪资系数）
         const autoType = await getOvertimeTypeByDate(startDateTime)

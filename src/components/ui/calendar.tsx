@@ -8,15 +8,17 @@ interface Holiday {
   name: string
   date: Date
   type: string
+  isOffDay: boolean
 }
 
 interface CalendarProps {
   year?: number
   month?: number
   onDateSelect?: (date: Date) => void
+  onMonthChange?: (year: number, month: number) => void
 }
 
-export function Calendar({ year, month, onDateSelect }: CalendarProps) {
+export function Calendar({ year, month, onDateSelect, onMonthChange }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [holidays, setHolidays] = useState<Holiday[]>([])
 
@@ -26,7 +28,7 @@ export function Calendar({ year, month, onDateSelect }: CalendarProps) {
   useEffect(() => {
     const loadHolidays = async () => {
       const data = await getHolidaysByMonth(displayYear, displayMonth)
-      setHolidays(data)
+      setHolidays(data as Holiday[])
     }
     loadHolidays()
   }, [displayYear, displayMonth])
@@ -63,11 +65,15 @@ export function Calendar({ year, month, onDateSelect }: CalendarProps) {
   }
 
   const handlePrevMonth = () => {
-    setCurrentDate(new Date(displayYear, displayMonth - 2, 1))
+    const newDate = new Date(displayYear, displayMonth - 2, 1)
+    setCurrentDate(newDate)
+    onMonthChange?.(newDate.getFullYear(), newDate.getMonth() + 1)
   }
 
   const handleNextMonth = () => {
-    setCurrentDate(new Date(displayYear, displayMonth, 1))
+    const newDate = new Date(displayYear, displayMonth, 1)
+    setCurrentDate(newDate)
+    onMonthChange?.(newDate.getFullYear(), newDate.getMonth() + 1)
   }
 
   const daysInMonth = getDaysInMonth(displayYear, displayMonth)
@@ -81,20 +87,25 @@ export function Calendar({ year, month, onDateSelect }: CalendarProps) {
 
   for (let day = 1; day <= daysInMonth; day++) {
     const holiday = isHoliday(day)
+    const isWorkday = holiday && !holiday.isOffDay
     const todayClass = isToday(day) ? 'bg-blue-500 text-white rounded-full' : ''
     const weekendClass = isWeekend(day) && !holiday ? 'text-red-400' : ''
-    const holidayClass = holiday ? 'bg-red-100 text-red-600 font-medium' : ''
+    const holidayClass = holiday && holiday.isOffDay ? 'bg-red-100 text-red-600 font-medium' : ''
+    const workdayClass = isWorkday ? 'bg-blue-50 text-blue-600 font-medium' : ''
 
     days.push(
       <div
         key={day}
-        className={`h-10 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 rounded ${todayClass} ${weekendClass} ${holidayClass}`}
+        className={`h-10 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 rounded ${todayClass} ${weekendClass} ${holidayClass} ${workdayClass}`}
         onClick={() => onDateSelect?.(new Date(displayYear, displayMonth - 1, day))}
-        title={holiday?.name}
+        title={holiday ? holiday.name : undefined}
       >
         <span className="text-sm">{day}</span>
-        {holiday && (
+        {holiday && holiday.isOffDay && (
           <span className="text-xs text-red-500 truncate w-full text-center">{holiday.name}</span>
+        )}
+        {isWorkday && (
+          <span className="text-xs text-blue-500 truncate w-full text-center">补班</span>
         )}
       </div>
     )
@@ -104,7 +115,9 @@ export function Calendar({ year, month, onDateSelect }: CalendarProps) {
     <div className="bg-white rounded-lg shadow p-4">
       <div className="flex justify-between items-center mb-4">
         <button
+          type="button"
           onClick={handlePrevMonth}
+          onMouseDown={(e) => e.stopPropagation()}
           className="p-2 hover:bg-gray-100 rounded"
         >
           &lt;
@@ -113,7 +126,9 @@ export function Calendar({ year, month, onDateSelect }: CalendarProps) {
           {displayYear}年{displayMonth}月
         </h3>
         <button
+          type="button"
           onClick={handleNextMonth}
+          onMouseDown={(e) => e.stopPropagation()}
           className="p-2 hover:bg-gray-100 rounded"
         >
           &gt;
@@ -132,7 +147,11 @@ export function Calendar({ year, month, onDateSelect }: CalendarProps) {
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 bg-red-100 rounded"></div>
-          <span>法定节假日</span>
+          <span>法定节假日/放假</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 bg-blue-50 border border-blue-200 rounded"></div>
+          <span>补班</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 bg-blue-500 rounded-full"></div>

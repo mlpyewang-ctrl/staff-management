@@ -41,7 +41,7 @@ export const overtimeSchema = z.object({
   startTime: z.string(),
   endDate: z.string(),
   endTime: z.string(),
-  type: z.enum(['WORKDAY', 'WEEKEND', 'HOLIDAY']),
+  type: z.enum(['WORKDAY', 'WEEKEND', 'HOLIDAY']).optional(),
   reason: z.string().min(1, '请填写加班事由'),
 })
 

@@ -22,23 +22,19 @@ export default function Home() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-4xl mx-auto mt-12">
           <div className="p-6 bg-white rounded-lg shadow-sm">
-            <div className="text-3xl mb-2">⏰</div>
-            <h3 className="font-semibold">加班申请</h3>
+            <h3 className="font-semibold text-gray-900">加班申请</h3>
             <p className="text-sm text-gray-600 mt-2">在线提交和管理加班申请</p>
           </div>
           <div className="p-6 bg-white rounded-lg shadow-sm">
-            <div className="text-3xl mb-2">📅</div>
-            <h3 className="font-semibold">请假管理</h3>
+            <h3 className="font-semibold text-gray-900">请假管理</h3>
             <p className="text-sm text-gray-600 mt-2">假期余额查询和请假申请</p>
           </div>
           <div className="p-6 bg-white rounded-lg shadow-sm">
-            <div className="text-3xl mb-2">📈</div>
-            <h3 className="font-semibold">绩效管理</h3>
+            <h3 className="font-semibold text-gray-900">绩效管理</h3>
             <p className="text-sm text-gray-600 mt-2">多维度绩效评估和统计</p>
           </div>
           <div className="p-6 bg-white rounded-lg shadow-sm">
-            <div className="text-3xl mb-2">✅</div>
-            <h3 className="font-semibold">流程审批</h3>
+            <h3 className="font-semibold text-gray-900">流程审批</h3>
             <p className="text-sm text-gray-600 mt-2">便捷的在线审批流程</p>
           </div>
         </div>

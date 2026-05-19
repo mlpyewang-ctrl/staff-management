@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils'
 interface NavItem {
   name: string
   href: string
-  icon: string
 }
 
 interface NavGroup {
@@ -57,10 +56,10 @@ export function Sidebar() {
       groups.push({
         title: '我的申请',
         items: [
-          { name: '加班申请', href: '/dashboard/overtime', icon: '⏰' },
-          { name: '请假管理', href: '/dashboard/leave', icon: '🗓️' },
-          { name: '绩效管理', href: '/dashboard/performance', icon: '📈' },
-          { name: '其他事项', href: '/dashboard/other', icon: '📝' },
+          { name: '加班申请', href: '/dashboard/overtime' },
+          { name: '请假管理', href: '/dashboard/leave' },
+          { name: '绩效管理', href: '/dashboard/performance' },
+          { name: '其他事项', href: '/dashboard/other' },
         ],
         defaultOpen: true,
       })
@@ -69,8 +68,8 @@ export function Sidebar() {
     groups.push({
       title: '审批中心',
       items: [
-        { name: '待办审批', href: '/dashboard/approvals', icon: '✅' },
-        ...(canApprove ? [{ name: '查询统计', href: '/dashboard/query', icon: '🔍' }] : []),
+        { name: '待办审批', href: '/dashboard/approvals' },
+        ...(canApprove ? [{ name: '查询统计', href: '/dashboard/query' }] : []),
       ],
       defaultOpen: true,
     })
@@ -79,8 +78,8 @@ export function Sidebar() {
       groups.push({
         title: '考勤管理',
         items: [
-          { name: '加班导入', href: '/dashboard/overtime', icon: '📥' },
-          { name: '请假导入', href: '/dashboard/leave', icon: '📥' },
+          { name: '加班导入', href: '/dashboard/overtime' },
+          { name: '请假导入', href: '/dashboard/leave' },
         ],
         defaultOpen: true,
       })
@@ -90,13 +89,13 @@ export function Sidebar() {
       groups.push({
         title: '系统管理',
         items: [
-          { name: '部门管理', href: '/dashboard/departments', icon: '🏢' },
-          { name: '人员岗位', href: '/dashboard/staff', icon: '👥' },
-          { name: '变更记录', href: '/dashboard/profile-history', icon: '🕘' },
-          { name: '岗位管理', href: '/dashboard/positions', icon: '💼' },
-          { name: '审批流程', href: '/dashboard/approval-flows', icon: '🧭' },
-          { name: '薪资管理', href: '/dashboard/salary', icon: '💰' },
-          { name: '公示管理', href: '/dashboard/announcements', icon: '📢' },
+          { name: '部门管理', href: '/dashboard/departments' },
+          { name: '人员岗位', href: '/dashboard/staff' },
+          { name: '变更记录', href: '/dashboard/profile-history' },
+          { name: '岗位管理', href: '/dashboard/positions' },
+          { name: '审批流程', href: '/dashboard/approval-flows' },
+          { name: '薪资管理', href: '/dashboard/salary' },
+          { name: '公示管理', href: '/dashboard/announcements' },
         ],
         defaultOpen: true,
       })
@@ -108,8 +107,8 @@ export function Sidebar() {
   // 常驻项（始终显示在顶部）
   const topItems: NavItem[] = useMemo(
     () => [
-      { name: '仪表盘', href: '/dashboard', icon: '📊' },
-      { name: '个人信息', href: '/dashboard/profile', icon: '🙍' },
+      { name: '仪表盘', href: '/dashboard' },
+      { name: '个人信息', href: '/dashboard/profile' },
     ],
     []
   )
@@ -219,23 +218,13 @@ export function Sidebar() {
               key={item.name}
               href={item.href}
               className={cn(
-                'group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-colors',
+                'group flex items-center rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
                 isActivePath(pathname, item.href, allHrefs)
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:bg-white/10 hover:text-white'
               )}
             >
-              <span
-                className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-xl text-lg transition-colors',
-                  isActivePath(pathname, item.href, allHrefs)
-                    ? 'bg-slate-100 text-slate-900'
-                    : 'bg-white/10 text-white group-hover:bg-white/15'
-                )}
-              >
-                {item.icon}
-              </span>
-              <span>{item.name}</span>
+              {item.name}
             </Link>
           ))}
 
@@ -269,23 +258,13 @@ export function Sidebar() {
                         key={item.name}
                         href={item.href}
                         className={cn(
-                          'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                          'group flex items-center rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
                           isActivePath(pathname, item.href, allHrefs)
                             ? 'bg-white/10 text-white'
                             : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                         )}
                       >
-                        <span
-                          className={cn(
-                            'flex h-7 w-7 items-center justify-center rounded-lg text-base transition-colors',
-                            isActivePath(pathname, item.href, allHrefs)
-                              ? 'bg-sky-500/20 text-sky-400'
-                              : 'bg-white/5 text-slate-500 group-hover:bg-white/10 group-hover:text-slate-400'
-                          )}
-                        >
-                          {item.icon}
-                        </span>
-                        <span>{item.name}</span>
+                        {item.name}
                       </Link>
                     ))}
                   </div>

@@ -24,7 +24,17 @@ export function DatePicker({
   placeholder = '选择日期',
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
+  const [viewDate, setViewDate] = React.useState(() =>
+    value ? new Date(value) : new Date()
+  )
   const containerRef = React.useRef<HTMLDivElement>(null)
+
+  // 当 value 变化时，同步 viewDate（打开时显示选中的月份）
+  React.useEffect(() => {
+    if (value) {
+      setViewDate(new Date(value))
+    }
+  }, [value])
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -53,6 +63,10 @@ export function DatePicker({
     const day = String(date.getDate()).padStart(2, '0')
     onChange?.(`${year}-${month}-${day}`)
     setOpen(false)
+  }
+
+  const handleMonthChange = (year: number, month: number) => {
+    setViewDate(new Date(year, month - 1, 1))
   }
 
   return (
@@ -88,9 +102,10 @@ export function DatePicker({
       {open && (
         <div className="absolute z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white shadow-lg">
           <Calendar
-            year={value ? new Date(value).getFullYear() : undefined}
-            month={value ? new Date(value).getMonth() + 1 : undefined}
+            year={viewDate.getFullYear()}
+            month={viewDate.getMonth() + 1}
             onDateSelect={handleDateSelect}
+            onMonthChange={handleMonthChange}
           />
         </div>
       )}

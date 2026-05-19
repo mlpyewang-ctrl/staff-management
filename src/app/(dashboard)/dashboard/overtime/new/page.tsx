@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { DatePicker } from '@/components/ui/date-picker'
 import { TimePicker } from '@/components/ui/time-picker'
-import { createOvertimeApplication } from '@/server/actions/overtime'
+import { createOvertimeApplication, getOvertimeTypePreview } from '@/server/actions/overtime'
 import { calculateHours } from '@/lib/utils'
 
 type CreateOvertimeApplicationResult = Awaited<ReturnType<typeof createOvertimeApplication>>
@@ -26,6 +26,7 @@ export default function OvertimeNewPage() {
   const [endDate, setEndDate] = useState('')
   const [endTime, setEndTime] = useState('')
   const [hours, setHours] = useState(0)
+  const [typePreview, setTypePreview] = useState<string>('')
 
   useEffect(() => {
     if (startDate && startTime && endDate && endTime) {
@@ -33,8 +34,20 @@ export default function OvertimeNewPage() {
       const end = new Date(`${endDate} ${endTime}`)
       const h = calculateHours(start, end)
       setHours(h > 0 ? h : 0)
+
+      // 异步获取自动判断的加班类型
+      getOvertimeTypePreview(startDate, startTime, endDate, endTime).then((result) => {
+        if (result.error) {
+          setTypePreview(result.error)
+        } else if (result.typeText) {
+          setTypePreview(result.typeText)
+        } else {
+          setTypePreview('')
+        }
+      })
     } else {
       setHours(0)
+      setTypePreview('')
     }
   }, [startDate, startTime, endDate, endTime])
 
@@ -96,18 +109,12 @@ export default function OvertimeNewPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="type">加班类型</Label>
-                <select
-                  id="type"
-                  name="type"
-                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  defaultValue="WORKDAY"
-                  required
-                >
-                  <option value="WORKDAY">工作日</option>
-                  <option value="WEEKEND">周末</option>
-                  <option value="HOLIDAY">节假日</option>
-                </select>
+                <Label>加班类型</Label>
+                <div className="flex items-center h-10 px-3 bg-gray-50 rounded-md border">
+                  <span className={`font-medium ${typePreview && !typePreview.includes('不同类型') ? 'text-blue-600' : typePreview ? 'text-red-500' : 'text-gray-400'}`}>
+                    {typePreview || '自动判断'}
+                  </span>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>预计加班时长</Label>
