@@ -349,15 +349,15 @@ export async function generateSalaryRecords(formData: FormData) {
       },
       select: {
         date: true,
-        type: true,
+        isOffDay: true,
       },
     })
 
     const legalHolidayDates = holidays
-      .filter((h) => h.type === 'LEGAL_HOLIDAY')
+      .filter((h) => h.isOffDay)
       .map((h) => formatDateKey(new Date(h.date)))
     const compensatoryWorkDates = holidays
-      .filter((h) => h.type === 'COMPENSATORY')
+      .filter((h) => !h.isOffDay)
       .map((h) => formatDateKey(new Date(h.date)))
 
     let successCount = 0

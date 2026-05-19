@@ -161,7 +161,7 @@ export const compensatoryUseSchema = z.object({
 export const holidaySchema = z.object({
   name: z.string().min(2, '节假日名称至少需要 2 个字符'),
   date: z.string(),
-  type: z.enum(['LEGAL_HOLIDAY', 'COMPENSATORY']),
+  type: z.enum(['LEGAL_HOLIDAY', 'WEEKEND_HOLIDAY', 'COMPENSATORY_WORKDAY']),
 })
 
 export const changePasswordSchema = z.object({

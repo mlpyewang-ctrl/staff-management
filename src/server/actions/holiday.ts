@@ -100,7 +100,7 @@ export async function deleteHoliday(id: string) {
   }
 }
 
-// 检查某天是否是法定节假日
+// 检查某天是否是放假日期（含法定节假日和周末调休）
 export async function isHoliday(date: Date): Promise<boolean> {
   try {
     const holiday = await prisma.holiday.findFirst({
@@ -109,7 +109,7 @@ export async function isHoliday(date: Date): Promise<boolean> {
           gte: new Date(date.setHours(0, 0, 0, 0)),
           lte: new Date(date.setHours(23, 59, 59, 999)),
         },
-        type: 'LEGAL_HOLIDAY',
+        isOffDay: true,
       },
     })
     return !!holiday
@@ -124,6 +124,8 @@ export async function batchCreateHolidays(holidays: Array<{
   name: string
   date: Date
   type: string
+  rat?: number
+  isOffDay?: boolean
 }>) {
   try {
     const data = holidays.map(h => ({
@@ -131,6 +133,8 @@ export async function batchCreateHolidays(holidays: Array<{
       date: h.date,
       year: h.date.getFullYear(),
       type: h.type,
+      rat: h.rat ?? (h.type === 'LEGAL_HOLIDAY' ? 3 : h.type === 'WEEKEND_HOLIDAY' ? 2 : 1.5),
+      isOffDay: h.isOffDay ?? true,
     }))
 
     await prisma.holiday.createMany({
@@ -144,5 +148,32 @@ export async function batchCreateHolidays(holidays: Array<{
       return { error: error.message }
     }
     return { error: '批量添加失败' }
+  }
+}
+
+// 根据日期查询节假日信息
+export async function getHolidayByDate(date: Date) {
+  try {
+    const holiday = await prisma.holiday.findFirst({
+      where: {
+        date: {
+          gte: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
+          lte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59),
+        },
+      },
+    })
+
+    if (!holiday) {
+      return null
+    }
+
+    return {
+      isOffDay: holiday.isOffDay,
+      rat: holiday.rat,
+      type: holiday.type,
+    }
+  } catch (error) {
+    console.error('查询节假日信息失败:', error)
+    return null
   }
 }

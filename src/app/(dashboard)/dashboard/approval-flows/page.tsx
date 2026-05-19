@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { getDepartments } from '@/server/actions/department'
 import { deleteApprovalFlow, getApprovalFlows, saveApprovalFlow } from '@/server/actions/approvalFlow'
 import { getStaffJobAssignments } from '@/server/actions/user'
-import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS } from '@/lib/approval-constants'
+import { APPLICATION_TYPES, APPLICATION_TYPE_LABELS, type ApplicationType } from '@/lib/approval-constants'
 import { normalizeApprovalFlowSteps } from '@/lib/approval-workflow'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useAsyncAction } from '@/lib/use-async-action'

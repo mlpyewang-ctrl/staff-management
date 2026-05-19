@@ -51,16 +51,16 @@ async function getHolidayDateBuckets(startDate: Date, endDate: Date) {
     },
     select: {
       date: true,
-      type: true,
+      isOffDay: true,
     },
   })
 
   return {
     legalHolidayDates: holidays
-      .filter((holiday) => holiday.type === 'LEGAL_HOLIDAY')
+      .filter((holiday) => holiday.isOffDay)
       .map((holiday) => formatDateKey(new Date(holiday.date))),
     compensatoryWorkDates: holidays
-      .filter((holiday) => holiday.type === 'COMPENSATORY')
+      .filter((holiday) => !holiday.isOffDay)
       .map((holiday) => formatDateKey(new Date(holiday.date))),
   }
 }
@@ -652,15 +652,15 @@ export async function batchImportLeave(rows: ParsedLeaveRow[]) {
           },
           select: {
             date: true,
-            type: true,
+            isOffDay: true,
           },
         })
 
         const legalHolidayDates = holidays
-          .filter((h) => h.type === 'LEGAL_HOLIDAY')
+          .filter((h) => h.isOffDay)
           .map((h) => formatDateKey(new Date(h.date)))
         const compensatoryWorkDates = holidays
-          .filter((h) => h.type === 'COMPENSATORY')
+          .filter((h) => !h.isOffDay)
           .map((h) => formatDateKey(new Date(h.date)))
 
         const days = calculateLeaveDaysExcludingNonWorkingDays(startDateTime, endDateTime, {

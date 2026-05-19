@@ -146,6 +146,8 @@ model Holiday {
   date      DateTime
   year      Int
   type      String
+  rat       Float    @default(1.5)
+  isOffDay  Boolean  @default(true)
   createdAt DateTime @default(now())
 
   @@index([year])

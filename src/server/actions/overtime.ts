@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateHours } from '@/lib/utils'
 import { overtimeSchema } from '@/lib/validations'
 import type { ParsedOvertimeRow } from '@/lib/excel-parser'
+import { getHolidayByDate } from './holiday'
 
 async function requireOvertimeOwnerOrAdmin(id: string) {
   const sessionUser = await requireSessionUser()
@@ -38,6 +39,24 @@ async function requireOvertimeOwnerOrAdmin(id: string) {
   }
 }
 
+export async function getOvertimeTypeByDate(date: Date): Promise<'WORKDAY' | 'WEEKEND' | 'HOLIDAY'> {
+  const holiday = await getHolidayByDate(date)
+
+  if (holiday) {
+    if (holiday.rat === 3) {
+      return 'HOLIDAY'
+    }
+    if (holiday.rat === 2) {
+      return 'WEEKEND'
+    }
+    return 'WORKDAY'
+  }
+
+  // 无 Holiday 记录时，按星期判断
+  const day = date.getDay()
+  return day === 0 || day === 6 ? 'WEEKEND' : 'WORKDAY'
+}
+
 export async function createOvertimeApplication(formData: FormData) {
   try {
     const sessionUser = await requireSessionUser()
@@ -58,6 +77,9 @@ export async function createOvertimeApplication(formData: FormData) {
       return { error: '结束时间必须晚于开始时间' }
     }
 
+    // 根据加班日期自动判断类型（rat 关联薪资系数）
+    const autoType = await getOvertimeTypeByDate(startDateTime)
+
     const action = formData.get('action') === 'submit' ? 'submit' : 'save'
     const created = await prisma.overtimeApplication.create({
       data: {
@@ -66,7 +88,7 @@ export async function createOvertimeApplication(formData: FormData) {
         startTime: startDateTime,
         endTime: endDateTime,
         hours,
-        type: validatedData.type,
+        type: autoType,
         reason: validatedData.reason,
         status: action === 'submit' ? 'PENDING' : 'DRAFT',
       },
@@ -181,6 +203,9 @@ export async function updateOvertimeApplication(formData: FormData) {
 
     const nextStatus = formData.get('action') === 'submit' ? 'PENDING' : 'DRAFT'
 
+    // 根据加班日期自动判断类型（rat 关联薪资系数）
+    const autoType = await getOvertimeTypeByDate(startDateTime)
+
     await prisma.$transaction([
       prisma.approval.deleteMany({
         where: {
@@ -195,7 +220,7 @@ export async function updateOvertimeApplication(formData: FormData) {
           startTime: startDateTime,
           endTime: endDateTime,
           hours,
-          type: validatedData.type,
+          type: autoType,
           reason: validatedData.reason,
           status: nextStatus,
           approverId: null,
@@ -460,6 +485,9 @@ export async function batchImportOvertime(rows: ParsedOvertimeRow[]) {
           throw new Error(`第 ${row.rowIndex} 行：结束时间必须晚于开始时间`)
         }
 
+        // 根据加班日期自动判断类型（rat 关联薪资系数）
+        const autoType = await getOvertimeTypeByDate(startDateTime)
+
         await tx.overtimeApplication.create({
           data: {
             userId: user.id,
@@ -470,7 +498,7 @@ export async function batchImportOvertime(rows: ParsedOvertimeRow[]) {
             actualStartTime: startDateTime,
             actualEndTime: endDateTime,
             actualHours: hours,
-            type: row.type,
+            type: autoType,
             reason: row.reason,
             status: 'COMPLETED',
             currentPhase: 'CONFIRM',
