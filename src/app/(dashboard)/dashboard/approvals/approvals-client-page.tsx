@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -57,6 +58,7 @@ export function ApprovalsClientPage({
   initialPendingApps,
   viewerRole,
 }: ApprovalsClientPageProps) {
+  const router = useRouter()
   const [pendingApps, setPendingApps] = useState(initialPendingApps)
   const [history, setHistory] = useState(initialHistory)
   const [message, setMessage] = useState({ type: '', text: '' })
@@ -201,6 +203,7 @@ export function ApprovalsClientPage({
       setSelectedApp(null)
       setRemark('')
       await refreshApprovals()
+      router.refresh()
     }
   }
 

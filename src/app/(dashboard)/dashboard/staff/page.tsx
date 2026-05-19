@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 import { useAsyncAction } from '@/lib/use-async-action'
 import {
   calculateAnnualLeaveEntitlement,
@@ -93,6 +94,9 @@ export default function StaffDashboardPage() {
   const [keyword, setKeyword] = useState('')
   const [message, setMessage] = useState<{ type: 'error' | 'success' | ''; text: string }>({ type: '', text: '' })
   const [pageLoading, setPageLoading] = useState(true)
+
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm] = useState({ username: '', name: '', role: 'EMPLOYEE' as EditableRole })
@@ -180,6 +184,12 @@ export default function StaffDashboardPage() {
         .some((value) => value!.toLowerCase().includes(search))
     )
   }, [keyword, staff])
+
+  const totalPages = Math.max(1, Math.ceil(filteredStaff.length / pageSize))
+  const paginatedStaff = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filteredStaff.slice(start, start + pageSize)
+  }, [filteredStaff, currentPage, pageSize])
 
   const employmentYears = calculateCompletedYears(formState.startDate || selectedUser?.startDate)
   const baseSalaryPreview = (selectedPosition?.baseSalary ?? selectedUser?.salary ?? 0) + (Number(formState.educationSalary) || selectedUser?.educationSalary || 0)
@@ -381,22 +391,48 @@ export default function StaffDashboardPage() {
                     />
                     <p className="text-xs text-gray-500">用于计算年假天数</p>
                   </div>
+                </div>
 
-                  <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                    <div>入职满 {employmentYears} 年</div>
-                    <div className="mt-1">年假标准：{annualLeaveEntitlement} 天</div>
-                    <div className="mt-1">工龄工资：{seniorityPayPreview.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })}</div>
-                    <div className="mt-1 border-t border-emerald-200 pt-2">
-                      <div>时薪：{formatCurrency(hourlyRatePreview)}/小时</div>
-                      <div className="mt-1 text-xs text-emerald-700">
-                        工作日加班 {formatCurrency(hourlyRatePreview * 1.5)}/小时 ·
-                        周末 {formatCurrency(hourlyRatePreview * 2)}/小时 ·
-                        节假日 {formatCurrency(hourlyRatePreview * 3)}/小时
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-emerald-900">薪酬与假期预览</span>
+                    {selectedPosition && !selectedPosition.hasSeniorityPay && (
+                      <span className="text-xs font-medium text-amber-600">当前岗位无工龄工资</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-lg bg-white/80 px-3 py-2.5 shadow-sm">
+                      <div className="text-xs text-emerald-600">入职年限</div>
+                      <div className="mt-0.5 text-lg font-bold text-emerald-900">{employmentYears} 年</div>
+                    </div>
+                    <div className="rounded-lg bg-white/80 px-3 py-2.5 shadow-sm">
+                      <div className="text-xs text-emerald-600">年假标准</div>
+                      <div className="mt-0.5 text-lg font-bold text-emerald-900">{annualLeaveEntitlement} 天</div>
+                    </div>
+                    <div className="rounded-lg bg-white/80 px-3 py-2.5 shadow-sm">
+                      <div className="text-xs text-emerald-600">工龄工资</div>
+                      <div className="mt-0.5 text-lg font-bold text-emerald-900">
+                        {seniorityPayPreview.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 0 })}
                       </div>
                     </div>
-                    {selectedPosition && !selectedPosition.hasSeniorityPay && (
-                      <div className="mt-1 text-amber-600">当前岗位无工龄工资</div>
-                    )}
+                    <div className="rounded-lg bg-white/80 px-3 py-2.5 shadow-sm">
+                      <div className="text-xs text-emerald-600">时薪</div>
+                      <div className="mt-0.5 text-lg font-bold text-emerald-900">{formatCurrency(hourlyRatePreview)}/时</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 rounded-lg bg-white/60 px-3 py-2 text-xs text-emerald-700 sm:grid-cols-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      工作日加班 {formatCurrency(hourlyRatePreview * 1.5)}/时
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      周末 {formatCurrency(hourlyRatePreview * 2)}/时
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      节假日 {formatCurrency(hourlyRatePreview * 3)}/时
+                    </div>
                   </div>
                 </div>
 
@@ -536,7 +572,10 @@ export default function StaffDashboardPage() {
             <Input
               value={keyword}
               placeholder="搜索姓名、账户名、部门、岗位或角色"
-              onChange={(event) => setKeyword(event.target.value)}
+              onChange={(event) => {
+                setKeyword(event.target.value)
+                setCurrentPage(1)
+              }}
             />
 
             {pageLoading ? (
@@ -545,75 +584,91 @@ export default function StaffDashboardPage() {
                 <span>加载中...</span>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>姓名</TableHead>
-                    <TableHead>系统角色</TableHead>
-                    <TableHead>部门</TableHead>
-                    <TableHead>岗位</TableHead>
-                    <TableHead>学历工资</TableHead>
-                    <TableHead>入职日期</TableHead>
-                    <TableHead>初次工作时间</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredStaff.length === 0 ? (
+              <div className="overflow-x-auto -mx-4 px-4">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={10} className="py-8 text-center text-gray-500">
-                        暂无匹配人员
-                      </TableCell>
+                      <TableHead className="whitespace-nowrap">姓名</TableHead>
+                      <TableHead className="whitespace-nowrap">系统角色</TableHead>
+                      <TableHead className="whitespace-nowrap">部门</TableHead>
+                      <TableHead className="whitespace-nowrap">岗位</TableHead>
+                      <TableHead className="whitespace-nowrap">学历工资</TableHead>
+                      <TableHead className="whitespace-nowrap">入职日期</TableHead>
+                      <TableHead className="whitespace-nowrap">初次工作时间</TableHead>
+                      <TableHead className="whitespace-nowrap min-w-[180px]">操作</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredStaff.map((item) => {
-                      const isActive = item.id === selectedUserId
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedStaff.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="py-8 text-center text-gray-500">
+                          暂无匹配人员
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedStaff.map((item) => {
+                        const isActive = item.id === selectedUserId
 
-                      return (
-                        <TableRow key={item.id} className={isActive ? 'bg-blue-50/60' : ''}>
-                          <TableCell>
-                            <div className="font-medium text-gray-900">{item.name}</div>
-                            <div className="text-xs text-gray-500">{item.username}</div>
-                          </TableCell>
-                          <TableCell>{getRoleLabel(item.role)}</TableCell>
-                          <TableCell>{item.department?.name || '-'}</TableCell>
-                          <TableCell>{item.position?.name || '-'}</TableCell>
-                          <TableCell>{item.educationSalary ? item.educationSalary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' }) : '-'}</TableCell>
-                          <TableCell>{item.startDate ? formatDate(new Date(item.startDate)) : '-'}</TableCell>
-                          <TableCell>{item.firstWorkDate ? formatDate(new Date(item.firstWorkDate)) : '-'}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button variant={isActive ? 'default' : 'outline'} size="sm" onClick={() => setSelectedUserId(item.id)}>
-                                {isActive ? '编辑中' : '编辑'}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                onClick={async () => {
-                                  if (!window.confirm(`确定要重置用户 "${item.name}" 的密码吗？重置后将恢复为默认密码。`)) {
-                                    return
-                                  }
-                                  const formData = new FormData()
-                                  formData.append('userId', item.id)
-                                  const result = await resetPassword(formData)
-                                  if (result.error) {
-                                    setMessage({ type: 'error', text: result.error })
-                                  } else {
-                                    setMessage({ type: 'success', text: result.success || '密码重置成功' })
-                                  }
-                                }}
-                              >
-                                重置密码
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                        return (
+                          <TableRow key={item.id} className={isActive ? 'bg-blue-50/60' : ''}>
+                            <TableCell className="whitespace-nowrap">
+                              <div className="font-medium text-gray-900">{item.name}</div>
+                              <div className="text-xs text-gray-500">{item.username}</div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">{getRoleLabel(item.role)}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.department?.name || '-'}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.position?.name || '-'}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.educationSalary ? item.educationSalary.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' }) : '-'}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.startDate ? formatDate(new Date(item.startDate)) : '-'}</TableCell>
+                            <TableCell className="whitespace-nowrap">{item.firstWorkDate ? formatDate(new Date(item.firstWorkDate)) : '-'}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <Button variant={isActive ? 'default' : 'outline'} size="sm" className="whitespace-nowrap" onClick={() => setSelectedUserId(item.id)}>
+                                  {isActive ? '编辑中' : '编辑'}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="whitespace-nowrap border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                  onClick={async () => {
+                                    if (!window.confirm(`确定要重置用户 "${item.name}" 的密码吗？重置后将恢复为默认密码。`)) {
+                                      return
+                                    }
+                                    const formData = new FormData()
+                                    formData.append('userId', item.id)
+                                    const result = await resetPassword(formData)
+                                    if (result.error) {
+                                      setMessage({ type: 'error', text: result.error })
+                                    } else {
+                                      setMessage({ type: 'success', text: result.success || '密码重置成功' })
+                                    }
+                                  }}
+                                >
+                                  重置密码
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {!pageLoading && filteredStaff.length > 0 && (
+              <PaginationControls
+                currentPage={currentPage}
+                pageSize={pageSize}
+                totalItems={filteredStaff.length}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setCurrentPage(1)
+                }}
+              />
             )}
           </CardContent>
         </Card>

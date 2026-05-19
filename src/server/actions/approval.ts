@@ -1011,6 +1011,16 @@ export async function getPendingApprovals(_approverId?: string) {
   }
 }
 
+export async function getPendingApprovalCount(): Promise<number> {
+  try {
+    const pending = await getPendingApprovals()
+    return pending.overtime.length + pending.leave.length + pending.other.length
+  } catch (error) {
+    console.error('获取待审批数量失败:', error)
+    return 0
+  }
+}
+
 export async function getApprovalHistory(_approverId?: string) {
   try {
     const sessionUser = await requireSessionUser()

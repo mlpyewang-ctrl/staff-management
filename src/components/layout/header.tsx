@@ -5,20 +5,18 @@ import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 
-export function Header() {
+export function Header({ pendingCount = 0 }: { pendingCount?: number }) {
   const pathname = usePathname()
   const { data: session } = useSession()
 
   const isAdmin = session?.user?.role === 'ADMIN'
-  const isManager = session?.user?.role === 'MANAGER'
-  const canApprove = isAdmin || isManager
 
   const navigation = [
     { name: '仪表盘', href: '/dashboard' },
     { name: '加班申请', href: '/dashboard/overtime' },
     { name: '请假管理', href: '/dashboard/leave' },
     { name: '绩效管理', href: '/dashboard/performance' },
-    ...(canApprove ? [{ name: '审批中心', href: '/dashboard/approvals' }] : []),
+    { name: '审批中心', href: '/dashboard/approvals', badge: pendingCount },
     ...(isAdmin ? [{ name: '部门管理', href: '/dashboard/departments' }] : []),
     ...(isAdmin ? [{ name: '人员岗位', href: '/dashboard/staff' }] : []),
     ...(isAdmin ? [{ name: '变更记录', href: '/dashboard/profile-history' }] : []),
@@ -47,11 +45,16 @@ export function Header() {
             <Link
               key={item.name}
               href={item.href}
-              className={`rounded-md px-3 py-2 text-sm font-medium ${
+              className={`inline-flex items-center rounded-md px-3 py-2 text-sm font-medium ${
                 pathname === item.href ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'
               }`}
             >
               {item.name}
+              {'badge' in item && item.badge && item.badge > 0 ? (
+                <span className="ml-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {item.badge}
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 interface NavItem {
   name: string
   href: string
+  badge?: number
 }
 
 interface NavGroup {
@@ -38,7 +39,7 @@ function isGroupActive(items: NavItem[], pathname: string, allHrefs: string[]): 
   return items.some((item) => isActivePath(pathname, item.href, allHrefs))
 }
 
-export function Sidebar() {
+export function Sidebar({ pendingCount = 0 }: { pendingCount?: number }) {
   const pathname = usePathname()
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
@@ -68,7 +69,7 @@ export function Sidebar() {
     groups.push({
       title: '审批中心',
       items: [
-        { name: '待办审批', href: '/dashboard/approvals' },
+        { name: '待办审批', href: '/dashboard/approvals', badge: pendingCount },
         ...(canApprove ? [{ name: '查询统计', href: '/dashboard/query' }] : []),
       ],
       defaultOpen: true,
@@ -102,7 +103,7 @@ export function Sidebar() {
     }
 
     return groups
-  }, [canApprove, isAdmin, isAttendanceClerk])
+  }, [canApprove, isAdmin, isAttendanceClerk, pendingCount])
 
   // 常驻项（始终显示在顶部）
   const topItems: NavItem[] = useMemo(
@@ -264,7 +265,12 @@ export function Sidebar() {
                             : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                         )}
                       >
-                        {item.name}
+                        <span className="flex-1">{item.name}</span>
+                        {item.badge && item.badge > 0 ? (
+                          <span className="ml-2 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                            {item.badge}
+                          </span>
+                        ) : null}
                       </Link>
                     ))}
                   </div>

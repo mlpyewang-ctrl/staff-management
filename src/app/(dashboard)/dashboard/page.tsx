@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/utils'
 import { getOvertimeStats } from '@/server/actions/overtime'
 import { getLeaveStats } from '@/server/actions/leave'
 import { getDepartments } from '@/server/actions/department'
+import { getPendingApprovalCount } from '@/server/actions/approval'
 import { AnnouncementBanner } from '@/components/announcement-banner'
 
 type DepartmentItem = Awaited<ReturnType<typeof getDepartments>>[number]
@@ -24,6 +25,7 @@ export default function DashboardPage() {
   const [departments, setDepartments] = useState<DepartmentItem[]>([])
   const [selectedDepartment, setSelectedDepartment] = useState('')
   const [loading, setLoading] = useState(true)
+  const [pendingCount, setPendingCount] = useState(0)
 
   useEffect(() => {
     const loadStats = async () => {
@@ -41,10 +43,11 @@ export default function DashboardPage() {
       const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       const previousMonth = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-      const [currentHours, currentDays, deptList] = await Promise.all([
+      const [currentHours, currentDays, deptList, count] = await Promise.all([
         getOvertimeStats(userId, departmentId, currentMonth),
         getLeaveStats(userId, departmentId, currentMonth),
         isEmployee ? Promise.resolve([]) : getDepartments(),
+        getPendingApprovalCount(),
       ])
 
       if (currentHours === 0 && currentDays === 0) {
@@ -63,6 +66,7 @@ export default function DashboardPage() {
       }
 
       setDepartments(deptList)
+      setPendingCount(count)
       setLoading(false)
     }
 
@@ -119,16 +123,15 @@ export default function DashboardPage() {
           },
         ]
       : []),
-    ...((session?.user?.role === 'MANAGER' || session?.user?.role === 'ADMIN')
-      ? [
-          {
-            title: '处理审批待办',
-            description: '查看当前轮到你的审批事项。',
-            href: '/dashboard/approvals',
-            style: 'bg-violet-50 text-violet-700 hover:bg-violet-100',
-          },
-        ]
-      : []),
+    {
+      title: '处理审批待办',
+      description:
+        pendingCount > 0
+          ? `当前有 ${pendingCount} 条待审批事项需要处理。`
+          : '查看当前轮到你的审批事项。',
+      href: '/dashboard/approvals',
+      style: 'bg-violet-50 text-violet-700 hover:bg-violet-100',
+    },
   ]
 
   const overviewTitle =

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-// 使用 emoji 作为图标
+
 import { Button } from '@/components/ui/button'
 import { getActiveAnnouncement, type Announcement } from '@/server/actions/announcement'
 
@@ -38,8 +38,8 @@ export function AnnouncementBanner() {
     <div className="relative mb-6 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-4 shadow-sm">
       <div className="flex items-start gap-4">
         {/* 图标 */}
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-          📢
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 font-bold text-sm">
+          公
         </div>
 
         {/* 内容区域 */}
@@ -74,18 +74,17 @@ export function AnnouncementBanner() {
               className="h-8 text-amber-700 hover:bg-amber-100 hover:text-amber-900"
             >
               <Link href="/dashboard/announcements">
-                ✏️
                 编辑
               </Link>
             </Button>
           )}
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
             onClick={() => setDismissed(true)}
-            className="h-8 w-8 text-amber-600 hover:bg-amber-100 hover:text-amber-900"
+            className="h-8 text-amber-600 hover:bg-amber-100 hover:text-amber-900"
           >
-            ✕
+            关闭
           </Button>
         </div>
       </div>
