@@ -281,7 +281,7 @@ export function getPreviousMonth(date: Date = new Date()): string {
 
 /**
  * 检查是否可以生成指定月份的薪资
- * 规则：只能生成过去月份（非当前月及未来月）
+ * 规则：允许生成当前月及过去月份，禁止未来月
  * @param month 月份 YYYY-MM
  * @returns 是否可以生成
  */
@@ -289,11 +289,11 @@ export function canGenerateSalary(month: string): { canGenerate: boolean; messag
   const now = new Date()
   const [year, monthNum] = month.split('-').map(Number)
   const targetDate = new Date(year, monthNum - 1, 1)
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
 
-  // 不能生成当前月及未来月的薪资
-  if (targetDate >= currentMonthStart) {
-    return { canGenerate: false, message: '只能生成过去月份的薪资' }
+  // 不能生成未来月的薪资
+  if (targetDate >= nextMonthStart) {
+    return { canGenerate: false, message: '不能生成未来月份的薪资' }
   }
 
   return { canGenerate: true, message: '' }

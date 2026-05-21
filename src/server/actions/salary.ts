@@ -1039,7 +1039,7 @@ export async function getAvailableMonths() {
   const now = new Date()
   const months: string[] = []
 
-  for (let i = 1; i <= 12; i += 1) {
+  for (let i = 0; i < 12; i += 1) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
     months.push(month)
