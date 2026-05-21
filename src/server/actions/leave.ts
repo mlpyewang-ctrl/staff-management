@@ -65,6 +65,11 @@ async function getHolidayDateBuckets(startDate: Date, endDate: Date) {
   }
 }
 
+function getTodayDate() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
 function buildLeavePayload(formData: FormData) {
   const getString = (key: string) => {
     const value = formData.get(key)
@@ -86,6 +91,14 @@ function buildLeavePayload(formData: FormData) {
   const endDateTime = new Date(validatedData.endDate)
   const startSession = validatedData.startSession || 'AM'
   const endSession = validatedData.endSession || 'PM'
+
+  const today = getTodayDate()
+  if (startDateTime < today) {
+    throw new Error('开始日期不能早于今天')
+  }
+  if (endDateTime < today) {
+    throw new Error('结束日期不能早于今天')
+  }
 
   if (
     formatDateKey(startDateTime) === formatDateKey(endDateTime) &&

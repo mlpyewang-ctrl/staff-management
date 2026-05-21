@@ -16,9 +16,20 @@ interface CalendarProps {
   month?: number
   onDateSelect?: (date: Date) => void
   onMonthChange?: (year: number, month: number) => void
+  minDate?: string
+  maxDate?: string
 }
 
-export function Calendar({ year, month, onDateSelect, onMonthChange }: CalendarProps) {
+function isDateDisabled(day: number, year: number, month: number, minDate?: string, maxDate?: string): boolean {
+  if (!minDate && !maxDate) return false
+  const date = new Date(year, month - 1, day)
+  const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  if (minDate && dateStr < minDate) return true
+  if (maxDate && dateStr > maxDate) return true
+  return false
+}
+
+export function Calendar({ year, month, onDateSelect, onMonthChange, minDate, maxDate }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [holidays, setHolidays] = useState<Holiday[]>([])
 
@@ -88,16 +99,22 @@ export function Calendar({ year, month, onDateSelect, onMonthChange }: CalendarP
   for (let day = 1; day <= daysInMonth; day++) {
     const holiday = isHoliday(day)
     const isWorkday = holiday && !holiday.isOffDay
+    const disabled = isDateDisabled(day, displayYear, displayMonth, minDate, maxDate)
     const todayClass = isToday(day) ? 'bg-blue-500 text-white rounded-full' : ''
     const weekendClass = isWeekend(day) && !holiday ? 'text-red-400' : ''
     const holidayClass = holiday && holiday.isOffDay ? 'bg-red-100 text-red-600 font-medium' : ''
     const workdayClass = isWorkday ? 'bg-blue-50 text-blue-600 font-medium' : ''
+    const disabledClass = disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-100'
 
     days.push(
       <div
         key={day}
-        className={`h-10 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 rounded ${todayClass} ${weekendClass} ${holidayClass} ${workdayClass}`}
-        onClick={() => onDateSelect?.(new Date(displayYear, displayMonth - 1, day))}
+        className={`h-10 flex flex-col items-center justify-center rounded ${todayClass} ${weekendClass} ${holidayClass} ${workdayClass} ${disabledClass}`}
+        onClick={() => {
+          if (!disabled) {
+            onDateSelect?.(new Date(displayYear, displayMonth - 1, day))
+          }
+        }}
         title={holiday ? holiday.name : undefined}
       >
         <span className="text-sm">{day}</span>

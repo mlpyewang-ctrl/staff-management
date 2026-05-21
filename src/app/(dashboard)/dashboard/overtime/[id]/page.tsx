@@ -37,6 +37,11 @@ const TYPE_TEXT_MAP: Record<string, string> = {
   HOLIDAY: '节假日',
 }
 
+function getTodayStr() {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+}
+
 export default function OvertimeEditPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
@@ -163,6 +168,7 @@ export default function OvertimeEditPage() {
                   value={startDate}
                   onChange={setStartDate}
                   disabled={isReadonly}
+                  min={getTodayStr()}
                 />
               </div>
               <div className="space-y-2">
@@ -181,6 +187,7 @@ export default function OvertimeEditPage() {
                   value={endDate}
                   onChange={setEndDate}
                   disabled={isReadonly}
+                  min={getTodayStr()}
                 />
               </div>
               <div className="space-y-2">

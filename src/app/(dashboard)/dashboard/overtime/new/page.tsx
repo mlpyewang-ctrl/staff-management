@@ -14,6 +14,11 @@ import { calculateHours } from '@/lib/utils'
 
 type CreateOvertimeApplicationResult = Awaited<ReturnType<typeof createOvertimeApplication>>
 
+function getTodayStr() {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+}
+
 export default function OvertimeNewPage() {
   const router = useRouter()
   const { data: session } = useSession()
@@ -91,7 +96,7 @@ export default function OvertimeNewPage() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="startDate">开始日期</Label>
-                <DatePicker id="startDate" value={startDate} onChange={setStartDate} />
+                <DatePicker id="startDate" value={startDate} onChange={setStartDate} min={getTodayStr()} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="startTime">开始时间</Label>
@@ -99,7 +104,7 @@ export default function OvertimeNewPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endDate">结束日期</Label>
-                <DatePicker id="endDate" value={endDate} onChange={setEndDate} />
+                <DatePicker id="endDate" value={endDate} onChange={setEndDate} min={getTodayStr()} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endTime">结束时间</Label>

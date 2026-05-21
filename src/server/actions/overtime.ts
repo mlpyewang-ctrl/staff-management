@@ -133,6 +133,23 @@ export async function getOvertimeTypePreview(
   }
 }
 
+function getTodayDate() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+function validateOvertimeDateNotBeforeToday(startDateStr: string, endDateStr: string) {
+  const today = getTodayDate()
+  const startDate = new Date(startDateStr)
+  const endDate = new Date(endDateStr)
+  if (startDate < today) {
+    throw new Error('开始日期不能早于今天')
+  }
+  if (endDate < today) {
+    throw new Error('结束日期不能早于今天')
+  }
+}
+
 export async function createOvertimeApplication(formData: FormData) {
   try {
     const sessionUser = await requireSessionUser()
@@ -143,6 +160,8 @@ export async function createOvertimeApplication(formData: FormData) {
       endTime: formData.get('endTime'),
       reason: formData.get('reason'),
     })
+
+    validateOvertimeDateNotBeforeToday(validatedData.startDate, validatedData.endDate)
 
     const startDateTime = new Date(`${validatedData.startDate} ${validatedData.startTime}`)
     const endDateTime = new Date(`${validatedData.endDate} ${validatedData.endTime}`)
@@ -259,6 +278,8 @@ export async function updateOvertimeApplication(formData: FormData) {
       endTime: formData.get('endTime'),
       reason: formData.get('reason'),
     })
+
+    validateOvertimeDateNotBeforeToday(validatedData.startDate, validatedData.endDate)
 
     const { application, error } = await requireOvertimeOwnerOrAdmin(id)
 

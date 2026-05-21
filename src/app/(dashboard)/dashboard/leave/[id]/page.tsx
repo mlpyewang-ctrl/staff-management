@@ -19,6 +19,11 @@ import { getLeaveSessionLabel } from '@/lib/utils'
 
 type LeaveApplicationDetail = Awaited<ReturnType<typeof getLeaveApplication>>
 
+function getTodayStr() {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+}
+
 export default function LeaveEditPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
@@ -184,7 +189,7 @@ export default function LeaveEditPage() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="startDate">开始日期</Label>
-                <DatePicker id="startDate" value={startDate} onChange={setStartDate} disabled={isReadonly} />
+                <DatePicker id="startDate" value={startDate} onChange={setStartDate} disabled={isReadonly} min={getTodayStr()} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="startSession">开始时段</Label>
@@ -201,7 +206,7 @@ export default function LeaveEditPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endDate">结束日期</Label>
-                <DatePicker id="endDate" value={endDate} onChange={setEndDate} disabled={isReadonly} />
+                <DatePicker id="endDate" value={endDate} onChange={setEndDate} disabled={isReadonly} min={getTodayStr()} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endSession">结束时段</Label>

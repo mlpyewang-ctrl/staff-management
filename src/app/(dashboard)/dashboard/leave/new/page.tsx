@@ -14,6 +14,11 @@ import { getLeaveSessionLabel } from '@/lib/utils'
 
 type CreateLeaveApplicationResult = Awaited<ReturnType<typeof createLeaveApplication>>
 
+function getTodayStr() {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+}
+
 export default function LeaveNewPage() {
   const router = useRouter()
   const { data: session } = useSession()
@@ -106,7 +111,7 @@ export default function LeaveNewPage() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="startDate">开始日期</Label>
-                <DatePicker id="startDate" name="startDate" value={startDate} onChange={setStartDate} />
+                <DatePicker id="startDate" name="startDate" value={startDate} onChange={setStartDate} min={getTodayStr()} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="startSession">开始时段</Label>
@@ -122,7 +127,7 @@ export default function LeaveNewPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endDate">结束日期</Label>
-                <DatePicker id="endDate" name="endDate" value={endDate} onChange={setEndDate} />
+                <DatePicker id="endDate" name="endDate" value={endDate} onChange={setEndDate} min={getTodayStr()} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endSession">结束时段</Label>

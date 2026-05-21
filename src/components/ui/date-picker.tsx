@@ -12,6 +12,8 @@ export interface DatePickerProps {
   id?: string
   name?: string
   placeholder?: string
+  min?: string
+  max?: string
 }
 
 export function DatePicker({
@@ -22,6 +24,8 @@ export function DatePicker({
   id,
   name,
   placeholder = '选择日期',
+  min,
+  max,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
   const [viewDate, setViewDate] = React.useState(() =>
@@ -106,6 +110,8 @@ export function DatePicker({
             month={viewDate.getMonth() + 1}
             onDateSelect={handleDateSelect}
             onMonthChange={handleMonthChange}
+            minDate={min}
+            maxDate={max}
           />
         </div>
       )}
