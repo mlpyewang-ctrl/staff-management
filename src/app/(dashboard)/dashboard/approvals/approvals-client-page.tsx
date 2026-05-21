@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { Badge } from '@/components/ui/badge'
@@ -373,6 +374,8 @@ export function ApprovalsClientPage({
                       { label: '进度', value: application.approvalProgress },
                     ]}
                     reason={application.reason}
+                    actionLabel={application.status === 'PRE_APPROVED' ? '去确认' : undefined}
+                    actionHref={application.status === 'PRE_APPROVED' ? `/dashboard/overtime/${application.id}/confirm` : undefined}
                     onApprove={() => setSelectedApp({ ...application, type: 'OVERTIME' })}
                   />
                 ))}
@@ -548,6 +551,8 @@ function PendingApprovalCard({
   onApprove,
   phaseBadge,
   isConfirmPhase,
+  actionLabel,
+  actionHref,
 }: {
   title: string
   meta: Array<{ label: string; value: string }>
@@ -555,6 +560,8 @@ function PendingApprovalCard({
   onApprove: () => void
   phaseBadge?: string
   isConfirmPhase?: boolean
+  actionLabel?: string
+  actionHref?: string
 }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-slate-50/90 p-5">
@@ -583,9 +590,15 @@ function PendingApprovalCard({
         </div>
 
         <div className="xl:pl-4">
-          <Button size="sm" onClick={onApprove}>
-            审批
-          </Button>
+          {actionHref ? (
+            <Button size="sm" asChild>
+              <Link href={actionHref}>{actionLabel || '去处理'}</Link>
+            </Button>
+          ) : (
+            <Button size="sm" onClick={onApprove}>
+              {actionLabel || '审批'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

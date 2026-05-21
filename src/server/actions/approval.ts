@@ -693,17 +693,32 @@ export async function getPendingApprovals(_approverId?: string) {
       return { overtime: [], leave: [], other: [] }
     }
 
-    // 加班申请需要处理 PENDING(事前审批) 和 CONFIRM_PENDING(确认审批) 两种状态
+    // 加班申请需要处理 PENDING(事前审批)、CONFIRM_PENDING(确认审批)
+    // 以及 PRE_APPROVED(申请人自己的确认待办)
     const overtimeWhere: Prisma.OvertimeApplicationWhereInput =
       approver.role === 'MANAGER' && approver.departmentId
         ? {
-            status: { in: ['PENDING', 'CONFIRM_PENDING'] },
-            user: {
-              departmentId: approver.departmentId,
-            },
+            OR: [
+              {
+                status: { in: ['PENDING', 'CONFIRM_PENDING'] },
+                user: { departmentId: approver.departmentId },
+              },
+              {
+                status: 'PRE_APPROVED',
+                userId: approver.id,
+              },
+            ],
           }
         : {
-            status: { in: ['PENDING', 'CONFIRM_PENDING'] },
+            OR: [
+              {
+                status: { in: ['PENDING', 'CONFIRM_PENDING'] },
+              },
+              {
+                status: 'PRE_APPROVED',
+                userId: approver.id,
+              },
+            ],
           }
     const leaveWhere: Prisma.LeaveApplicationWhereInput =
       approver.role === 'MANAGER' && approver.departmentId
@@ -869,6 +884,21 @@ export async function getPendingApprovals(_approverId?: string) {
 
     const overtime = overtimeApplications
       .map((application) => {
+        // PRE_APPROVED 状态：申请人自己的确认待办，不走进度审批流程
+        if (application.status === 'PRE_APPROVED') {
+          if (application.userId !== approver.id) return null
+          return {
+            ...application,
+            userName: application.user.name,
+            departmentName: application.user.department?.name,
+            currentStepName: '提交确认',
+            currentStepRole: 'APPLICANT',
+            approvalProgress: '-',
+            phaseLabel: '待确认',
+            isConfirmPhase: false,
+          }
+        }
+
         // 根据当前状态匹配对应的流程类型
         const flowType = application.status === 'CONFIRM_PENDING' ? 'OVERTIME_CONFIRM' : 'OVERTIME'
         const steps = getStepsForApplication(
