@@ -85,6 +85,10 @@ export const approvalSchema = z.object({
 
 export const userProfileSchema = z.object({
   name: z.string().min(2, '姓名至少需要 2 个字符'),
+  gender: z.enum(['MALE', 'FEMALE']).optional().transform((value) => value || undefined),
+  birthDate: optionalText,
+  ethnicity: optionalText,
+  householdType: optionalText,
   education: optionalEducation,
   idCard: optionalText,
   phone: optionalText,

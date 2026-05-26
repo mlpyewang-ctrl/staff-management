@@ -20,7 +20,7 @@ import {
 import { calculateHourlyRate, formatDate, formatCurrency } from '@/lib/utils'
 import { getDepartments } from '@/server/actions/department'
 import { getPositions } from '@/server/actions/position'
-import { getStaffJobAssignments, updateUserJobAssignment } from '@/server/actions/user'
+import { getStaffJobAssignments, updateUserJobAssignment, updateUserBasicInfo } from '@/server/actions/user'
 import { createUser, resetPassword } from '@/server/actions/auth'
 
 interface DepartmentOption {
@@ -43,6 +43,10 @@ interface StaffUser {
   name: string
   username: string
   role: string
+  gender?: string | null
+  birthDate?: string | Date | null
+  ethnicity?: string | null
+  householdType?: string | null
   salary?: number | null
   educationSalary?: number | null
   startDate?: string | Date | null
@@ -63,6 +67,10 @@ const emptyFormState = {
   versionRemark: '',
   role: 'EMPLOYEE' as EditableRole,
   educationSalary: '',
+  gender: '',
+  birthDate: '',
+  ethnicity: '',
+  householdType: '',
 }
 
 const roleOptions: Array<{ value: EditableRole; label: string }> = [
@@ -168,6 +176,10 @@ export default function StaffDashboardPage() {
       versionRemark: '',
       role: ['MANAGER', 'ATTENDANCE_CLERK'].includes(selectedUser.role) ? (selectedUser.role as EditableRole) : 'EMPLOYEE',
       educationSalary: selectedUser.educationSalary ? String(selectedUser.educationSalary) : '',
+      gender: selectedUser.gender || '',
+      birthDate: formatDateInputValue(selectedUser.birthDate),
+      ethnicity: selectedUser.ethnicity || '',
+      householdType: selectedUser.householdType || '',
     })
   }, [selectedUser])
 
@@ -284,6 +296,95 @@ export default function StaffDashboardPage() {
                   <div>{selectedUser.username}</div>
                   <div className="mt-1">当前系统角色：{getRoleLabel(selectedUser.role)}</div>
                   <div className="mt-1 text-gray-500">{selectedUser.department?.name || '未分配部门'} · {selectedUser.position?.name || '未设置岗位'}</div>
+                </div>
+
+                <div className="space-y-4 border-b pb-4">
+                  <h3 className="text-sm font-semibold text-gray-900">基础信息</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="gender">性别</Label>
+                      <Select
+                        id="gender"
+                        value={formState.gender}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            gender: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">未填写</option>
+                        <option value="MALE">男</option>
+                        <option value="FEMALE">女</option>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="birthDate">出生日期</Label>
+                      <Input
+                        id="birthDate"
+                        type="date"
+                        value={formState.birthDate}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            birthDate: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="ethnicity">民族</Label>
+                      <Input
+                        id="ethnicity"
+                        value={formState.ethnicity}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            ethnicity: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="householdType">户口类型</Label>
+                      <Input
+                        id="householdType"
+                        value={formState.householdType}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            householdType: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={async () => {
+                      if (!selectedUserId || !selectedUser) {
+                        setMessage({ type: 'error', text: '请先选择需要维护的人员' })
+                        return
+                      }
+                      setMessage({ type: '', text: '' })
+                      const submitData = new FormData()
+                      submitData.append('gender', formState.gender)
+                      submitData.append('birthDate', formState.birthDate)
+                      submitData.append('ethnicity', formState.ethnicity)
+                      submitData.append('householdType', formState.householdType)
+                      const result = await updateUserBasicInfo(selectedUserId, submitData)
+                      if (result.error) {
+                        setMessage({ type: 'error', text: result.error })
+                        return
+                      }
+                      await loadData(selectedUserId)
+                      setMessage({ type: 'success', text: result.success || '基础信息已更新' })
+                    }}
+                  >
+                    保存基础信息
+                  </Button>
                 </div>
 
                 <div className="space-y-2">

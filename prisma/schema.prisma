@@ -14,6 +14,10 @@ model User {
   name               String
   password           String
   role               String   @default("EMPLOYEE")
+  gender             String?
+  birthDate          DateTime?
+  ethnicity          String?
+  householdType      String?
   education          String?
   idCard             String?
   phone              String?

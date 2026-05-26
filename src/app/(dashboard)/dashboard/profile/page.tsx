@@ -25,6 +25,10 @@ interface UserProfile {
   id: string
   username: string
   name: string
+  gender?: string | null
+  birthDate?: string | Date | null
+  ethnicity?: string | null
+  householdType?: string | null
   education?: string | null
   idCard?: string | null
   phone?: string | null
@@ -145,6 +149,30 @@ export default function ProfileDashboardPage() {
               <div className="space-y-2">
                 <Label htmlFor="username">账户名</Label>
                 <Input id="username" type="text" value={profile?.username || session.user.username || ''} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gender">性别</Label>
+                <Select id="gender" name="gender" defaultValue={profile?.gender || ''} disabled={session?.user?.role !== 'ADMIN'}>
+                  <option value="">未填写</option>
+                  <option value="MALE">男</option>
+                  <option value="FEMALE">女</option>
+                </Select>
+                {session?.user?.role !== 'ADMIN' && <p className="text-xs text-gray-500">仅管理员可编辑</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="birthDate">出生日期</Label>
+                <Input id="birthDate" name="birthDate" type="date" defaultValue={formatDateInputValue(profile?.birthDate)} disabled={session?.user?.role !== 'ADMIN'} />
+                {session?.user?.role !== 'ADMIN' && <p className="text-xs text-gray-500">仅管理员可编辑</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ethnicity">民族</Label>
+                <Input id="ethnicity" name="ethnicity" defaultValue={profile?.ethnicity || ''} disabled={session?.user?.role !== 'ADMIN'} />
+                {session?.user?.role !== 'ADMIN' && <p className="text-xs text-gray-500">仅管理员可编辑</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="householdType">户口类型</Label>
+                <Input id="householdType" name="householdType" defaultValue={profile?.householdType || ''} disabled={session?.user?.role !== 'ADMIN'} />
+                {session?.user?.role !== 'ADMIN' && <p className="text-xs text-gray-500">仅管理员可编辑</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="idCard">身份证号</Label>

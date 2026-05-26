@@ -114,6 +114,10 @@ export async function updateUserProfile(userId: string, formData: FormData) {
 
     const validated = userProfileSchema.parse({
       name: getString('name'),
+      gender: getString('gender'),
+      birthDate: getString('birthDate'),
+      ethnicity: getString('ethnicity'),
+      householdType: getString('householdType'),
       education: getString('education'),
       idCard: getString('idCard'),
       phone: getString('phone'),
@@ -132,8 +136,14 @@ export async function updateUserProfile(userId: string, formData: FormData) {
       return { error: '未找到对应用户' }
     }
 
+    const birthDate = parseOptionalDate(validated.birthDate, '出生日期')
+
     const nextProfileData = {
       name: validated.name,
+      gender: validated.gender || null,
+      birthDate,
+      ethnicity: validated.ethnicity || null,
+      householdType: validated.householdType || null,
       education: validated.education || null,
       idCard: validated.idCard || null,
       phone: validated.phone || null,
@@ -159,6 +169,10 @@ export async function updateUserProfile(userId: string, formData: FormData) {
         remark: getString('versionRemark'),
         changes: [
           { label: '姓名', before: existingUser.name, after: nextProfileData.name },
+          { label: '性别', before: existingUser.gender, after: nextProfileData.gender },
+          { label: '出生日期', before: existingUser.birthDate, after: nextProfileData.birthDate },
+          { label: '民族', before: existingUser.ethnicity, after: nextProfileData.ethnicity },
+          { label: '户口类型', before: existingUser.householdType, after: nextProfileData.householdType },
           { label: '学历', before: existingUser.education, after: nextProfileData.education },
           { label: '身份证号', before: existingUser.idCard, after: nextProfileData.idCard },
           { label: '手机号', before: existingUser.phone, after: nextProfileData.phone },
@@ -188,6 +202,78 @@ export async function updateUserProfile(userId: string, formData: FormData) {
   }
 }
 
+export async function updateUserBasicInfo(userId: string, formData: FormData) {
+  try {
+    const sessionUser = await ensureAdmin()
+
+    const getString = (key: string) => {
+      const value = formData.get(key)
+      return typeof value === 'string' ? value : undefined
+    }
+
+    const gender = getString('gender')
+    const birthDateStr = getString('birthDate')
+    const ethnicity = getString('ethnicity')
+    const householdType = getString('householdType')
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    })
+
+    if (!existingUser) {
+      return { error: '未找到对应用户' }
+    }
+
+    const birthDate = parseOptionalDate(birthDateStr, '出生日期')
+
+    const nextData = {
+      gender: gender || null,
+      birthDate,
+      ethnicity: ethnicity || null,
+      householdType: householdType || null,
+    }
+
+    let recordedChange = false
+
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: nextData,
+      })
+
+      recordedChange = await recordProfileChangeLogIfChanged({
+        tx,
+        userId,
+        actorId: sessionUser.id,
+        actionType: 'PROFILE_UPDATE',
+        remark: getString('versionRemark'),
+        changes: [
+          { label: '性别', before: existingUser.gender, after: nextData.gender },
+          { label: '出生日期', before: existingUser.birthDate, after: nextData.birthDate },
+          { label: '民族', before: existingUser.ethnicity, after: nextData.ethnicity },
+          { label: '户口类型', before: existingUser.householdType, after: nextData.householdType },
+        ],
+      })
+
+      return updatedUser
+    })
+
+    revalidatePath('/dashboard/profile')
+    revalidatePath('/dashboard/profile-history')
+    revalidatePath('/dashboard/staff')
+
+    return {
+      success: recordedChange ? '基础信息已更新，并已记录变更' : '基础信息已更新',
+      user,
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message }
+    }
+    return { error: '更新失败，请稍后重试' }
+  }
+}
+
 export async function getStaffJobAssignments() {
   await ensureAdmin()
 
@@ -197,6 +283,10 @@ export async function getStaffJobAssignments() {
       name: true,
       username: true,
       role: true,
+      gender: true,
+      birthDate: true,
+      ethnicity: true,
+      householdType: true,
       education: true,
       level: true,
       salary: true,
