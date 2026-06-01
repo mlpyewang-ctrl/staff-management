@@ -6,8 +6,17 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $bundlePath = Join-Path $root $BundleDir
-$timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$target = Join-Path $bundlePath $timestamp
+
+# Read version from version file
+$versionFile = Join-Path $root 'version'
+$version = 'unknown'
+if (Test-Path $versionFile) {
+  $version = (Get-Content $versionFile -Raw).Trim()
+} else {
+  Write-Warning "version file not found, using 'unknown'"
+}
+
+$target = Join-Path $bundlePath $version
 
 # Smart dependency install: skip npm ci if package-lock.json unchanged
 $lockFile = Join-Path $root 'package-lock.json'
@@ -117,6 +126,7 @@ $items = @(
   'next.config.js',
   '.env.prod.example',
   '.env.example',
+  'version',
   'prisma',
   'public',
   'scripts',
@@ -132,7 +142,7 @@ foreach ($item in $items) {
 }
 
 Write-Host "[5/5] create tar.gz archive"
-$archiveName = "staff-management-$timestamp.tar.gz"
+$archiveName = "staff-management-$version.tar.gz"
 $archivePath = Join-Path $bundlePath $archiveName
 
 # use tar.exe (available on Windows 10+) for better Linux compatibility
