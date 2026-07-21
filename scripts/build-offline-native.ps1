@@ -48,7 +48,7 @@ if ($needsInstall) {
   if (Test-Path $nodeModules) {
     Write-Host "[1/5] pruning dev dependencies"
     pushd $root
-    npm prune --omit=dev --silent
+    npm prune --production --silent
     popd
   }
 }
@@ -138,6 +138,18 @@ foreach ($item in $items) {
   $src = Join-Path $root $item
   if (Test-Path $src) {
     Copy-Item -Path $src -Destination $target -Recurse -Force
+  }
+}
+
+# Remove build caches that are not needed at runtime
+$excludeDirs = @(
+  (Join-Path $target '.next/cache'),
+  (Join-Path $target 'node_modules/.cache')
+)
+foreach ($dir in $excludeDirs) {
+  if (Test-Path $dir) {
+    Remove-Item -Path $dir -Recurse -Force
+    Write-Host "  excluded: $dir"
   }
 }
 
